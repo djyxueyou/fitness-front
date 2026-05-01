@@ -1,0 +1,30 @@
+# Uni-app Migration Smoke Checklist
+
+- [ ] App starts with a uni-app entry
+- [ ] pages.json registers all planned pages
+- [ ] tabBar shows Home / Exercises / Profile
+- [ ] Shared exercise data can be imported by list/detail/favorites
+- [ ] Shared template data can be imported by home and template manager
+- [ ] Shared history data can be imported by calendar/history/detail
+- [ ] Route helpers centralize navigateTo/switchTab path strings
+- [ ] Shared header renders back button and right slot
+- [ ] Glass card style is reused across all pages
+- [ ] Primary CTA matches the current orange gradient look
+- [ ] Favorites update detail/list/profile pages consistently
+- [ ] Active workout survives navigation between workout-related pages
+- [ ] Home tab opens select-template page
+- [ ] Select-template opens workout-active with chosen template
+- [ ] Workout finish returns safely
+- [ ] Calendar opens detail and trend pages
+- [ ] Search filters by name and muscle
+- [ ] Category chips filter the list
+- [ ] Favorite toggle updates list and detail
+- [ ] Detail page can add the exercise into the workout store
+- [ ] Profile menu opens all secondary pages
+- [ ] History list opens detail page by date
+- [ ] Favorites page reflects exercise store favorites
+- [ ] Settings toggles mutate profile store state
+- [ ] Template manager edits persist through the template store
+- [ ] No mojibake / garbled Chinese remains
+- [ ] Safe-area spacing is correct on top and bottom
+- [ ] H5 / mp-weixin / app-plus builds all succeed

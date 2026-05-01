@@ -1,0 +1,8 @@
+dist
+node_modules
+coverage
+auto-imports.d.ts
+components.d.ts
+*.lock
+package-lock.json
+project.private.config.json

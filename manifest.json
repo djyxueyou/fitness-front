@@ -1,0 +1,21 @@
+{
+  "name": "FitForge",
+  "appid": "__UNI__FITFORGE",
+  "description": "多端健身训练应用",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "app-plus": {
+    "usingComponents": true,
+    "nvueStyleCompiler": "uni-app"
+  },
+  "h5": {
+    "title": "FitForge"
+  },
+  "mp-weixin": {
+    "appid": "wxe0a862ad4dbc3538",
+    "setting": {
+      "urlCheck": false
+    }
+  }
+}

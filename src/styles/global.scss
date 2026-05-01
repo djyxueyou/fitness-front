@@ -1,0 +1,113 @@
+@import '@/uni.scss';
+
+page {
+  background: $color-bg;
+  color: $color-text;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+view,
+text,
+scroll-view,
+button,
+input {
+  box-sizing: border-box;
+}
+
+.page-shell {
+  min-height: 100vh;
+  padding: calc(var(--status-bar-height, 0px) + env(safe-area-inset-top) + 24rpx) 32rpx
+    calc(env(safe-area-inset-bottom) + 32rpx);
+  background: linear-gradient(180deg, rgba(255, 80, 30, 0.05) 0%, $color-bg 28%);
+}
+
+.page-scroll {
+  height: 100vh;
+  min-height: 100vh;
+  scrollbar-width: none;
+}
+
+.page-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-page {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 148rpx);
+}
+
+.glass-card {
+  background: $color-card;
+  border: 1px solid $color-border;
+  backdrop-filter: blur(18px);
+  border-radius: $radius-lg;
+}
+
+.gradient-fire {
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-soft 100%);
+}
+
+.glow-primary {
+  box-shadow: 0 0 32rpx rgba(255, 80, 30, 0.32);
+}
+
+.text-gradient-fire {
+  color: $color-primary-soft;
+}
+
+.section-label {
+  color: $color-muted;
+  font-size: 22rpx;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  color: rgba(255, 160, 60, 0.9);
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+  text-transform: uppercase;
+}
+
+.muted {
+  color: $color-muted;
+}
+
+.title-xl {
+  font-size: 48rpx;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.title-lg {
+  font-size: 38rpx;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.btn-press {
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.btn-press:active {
+  transform: scale(0.98);
+  opacity: 0.95;
+}
+
+.safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24rpx);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.space-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

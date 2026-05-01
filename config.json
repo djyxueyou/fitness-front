@@ -1,0 +1,25 @@
+{
+  "routes": [
+    {
+      "path": "/",
+      "src": "src/pages/Index.tsx"
+    }
+  ],
+  "components": [
+    {
+      "name": "MobileShell",
+      "src": "src/components/MobileShell.tsx",
+      "route": "/preview/mobile-shell"
+    },
+    {
+      "name": "PageHeader",
+      "src": "src/components/PageHeader.tsx",
+      "route": "/preview/page-header"
+    },
+    {
+      "name": "TabBar",
+      "src": "src/components/TabBar.tsx",
+      "route": "/preview/tab-bar"
+    }
+  ]
+}
