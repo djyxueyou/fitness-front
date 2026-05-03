@@ -57,6 +57,12 @@ export const useTrainingStore = defineStore('training', () => {
     return detail
   }
 
+  function invalidateCache() {
+    history.value = []
+    detailCache.value = {}
+    calendarDays.value = []
+  }
+
   return {
     history,
     loading,
@@ -64,6 +70,7 @@ export const useTrainingStore = defineStore('training', () => {
     calendarDays,
     fetchHistory,
     fetchCalendar,
-    fetchDetail
+    fetchDetail,
+    invalidateCache
   }
 })

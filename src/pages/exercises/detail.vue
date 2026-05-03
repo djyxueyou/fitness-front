@@ -25,6 +25,13 @@ const demoUrl = computed(() =>
   'mediaUrl' in (exercise.value || {}) ? exercise.value?.mediaUrl || '' : ''
 )
 const coverUrl = computed(() => exercise.value?.thumbnailUrl || '')
+const instructionTips = computed(() =>
+  splitContent(exercise.value?.instructionText).length
+    ? splitContent(exercise.value?.instructionText)
+    : exerciseTips
+)
+const mistakeTips = computed(() => splitContent(exercise.value?.commonMistakesText))
+const checklistTips = computed(() => splitContent(exercise.value?.checklistText))
 
 onLoad((query) => {
   const id = Number(query.id)
@@ -50,6 +57,14 @@ async function loadDetail(id: number) {
 
 function goBack() {
   uni.navigateBack()
+}
+
+function splitContent(text?: string) {
+  if (!text) return []
+  return text
+    .split(/\r?\n|；|;/)
+    .map((item) => item.replace(/^[-\d.、\s]+/, '').trim())
+    .filter(Boolean)
 }
 
 async function toggleFavorite() {
@@ -123,8 +138,26 @@ async function addToWorkout() {
 
       <view class="glass-card exercise-detail__section">
         <view class="exercise-detail__section-title">动作要点</view>
-        <view v-for="(tip, index) in exerciseTips" :key="tip" class="exercise-detail__tip">
+        <view v-for="(tip, index) in instructionTips" :key="tip" class="exercise-detail__tip">
           <view class="exercise-detail__tip-index">{{ index + 1 }}</view>
+          <view class="exercise-detail__tip-text">{{ tip }}</view>
+        </view>
+      </view>
+
+      <view v-if="mistakeTips.length" class="glass-card exercise-detail__section">
+        <view class="exercise-detail__section-title">常见错误</view>
+        <view v-for="(tip, index) in mistakeTips" :key="tip" class="exercise-detail__tip">
+          <view class="exercise-detail__tip-index exercise-detail__tip-index--warn">
+            {{ index + 1 }}
+          </view>
+          <view class="exercise-detail__tip-text">{{ tip }}</view>
+        </view>
+      </view>
+
+      <view v-if="checklistTips.length" class="glass-card exercise-detail__section">
+        <view class="exercise-detail__section-title">训练前检查</view>
+        <view v-for="tip in checklistTips" :key="tip" class="exercise-detail__check">
+          <view class="exercise-detail__check-dot">✓</view>
           <view class="exercise-detail__tip-text">{{ tip }}</view>
         </view>
       </view>
@@ -261,12 +294,37 @@ async function addToWorkout() {
     justify-content: center;
     font-size: 20rpx;
     font-weight: 700;
+
+    &--warn {
+      background: rgba(255, 107, 74, 0.18);
+      color: #ff6b4a;
+    }
   }
 
   &__tip-text {
     flex: 1;
     font-size: 24rpx;
     line-height: 1.6;
+  }
+
+  &__check {
+    display: flex;
+    align-items: flex-start;
+    gap: 16rpx;
+    margin-top: 16rpx;
+  }
+
+  &__check-dot {
+    width: 40rpx;
+    height: 40rpx;
+    border-radius: 14rpx;
+    background: rgba(61, 217, 162, 0.16);
+    color: #3dd9a2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20rpx;
+    font-weight: 800;
   }
 
   &__records {

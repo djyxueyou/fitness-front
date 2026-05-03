@@ -26,9 +26,11 @@ import { formatSeconds } from '@/utils/format'
 const profileStore = useProfileStore()
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
+const HOME_CACHE_MS = 30000
 const summary = ref<TrainingStatsSummaryResponse | null>(null)
 const weekHistory = ref<TrainingHistoryItemResponse[]>([])
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
+let homeLoadedAt = 0
 
 const weightUnit = computed(() => profileStore.unit)
 const weekSessions = computed(() => (summary.value ? `${weekHistory.value.length} 次` : '--'))
@@ -111,6 +113,11 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
     summary.value = null
     weekHistory.value = []
     recentHistory.value = []
+    homeLoadedAt = 0
+    return
+  }
+
+  if (!options?.forceTemplates && summary.value && Date.now() - homeLoadedAt < HOME_CACHE_MS) {
     return
   }
 
@@ -124,6 +131,7 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
   fetchTrainingSummary()
     .then((nextSummary) => {
       summary.value = nextSummary
+      homeLoadedAt = Date.now()
     })
     .catch((err) => {
       summary.value = null
@@ -200,7 +208,7 @@ async function startWorkout(templateId: number) {
   const canStart = await prepareNewWorkout()
   if (!canStart) return
   templateStore.markUsed(templateId)
-  await workoutStore.startWorkout(templateId)
+  workoutStore.queueStartWorkout(templateId)
   uni.navigateTo({ url: routes.workoutActive })
 }
 

@@ -16,6 +16,7 @@ const detail = ref<TemplateDetailResponse | null>(null)
 const loading = ref(false)
 const starting = ref(false)
 const copying = ref(false)
+const saving = ref(false)
 
 const isSystemTemplate = computed(() => detail.value?.templateType === 'SYSTEM')
 const totalSets = computed(
@@ -41,10 +42,13 @@ function goBack() {
   uni.navigateBack()
 }
 
-async function loadDetail() {
+async function loadDetail(force = false) {
   if (!templateId.value || loading.value) return
   loading.value = true
   try {
+    if (force) {
+      await templateStore.fetchTemplates({ includeDetails: false })
+    }
     detail.value = await templateStore.getDetail(templateId.value)
   } catch (err) {
     uni.showToast({ title: '模板加载失败', icon: 'none' })
@@ -77,6 +81,60 @@ async function startWorkout() {
 function editTemplate() {
   if (!templateId.value || isSystemTemplate.value) return
   uni.navigateTo({ url: `${routes.templateEdit}?id=${templateId.value}` })
+}
+
+async function renameTemplate() {
+  if (!templateId.value || !detail.value || isSystemTemplate.value || saving.value) return
+  const nextName = await new Promise<string | null>((resolve) => {
+    uni.showModal({
+      title: '重命名模板',
+      editable: true,
+      placeholderText: '请输入模板名称',
+      content: detail.value?.name || '',
+      success: (res) => resolve(res.confirm ? (res.content || '').trim() : null),
+      fail: () => resolve(null)
+    } as UniApp.ShowModalOptions & { editable: boolean; placeholderText: string })
+  })
+  if (!nextName) return
+
+  saving.value = true
+  try {
+    await templateStore.rename(templateId.value, nextName)
+    await loadDetail(true)
+    uni.showToast({ title: '已重命名', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: '重命名失败', icon: 'none' })
+    console.error('[template] rename failed', err)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function removeTemplate() {
+  if (!templateId.value || isSystemTemplate.value || saving.value) return
+  const confirmed = await new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '删除模板',
+      content: '删除后不可恢复，确认删除这个自定义模板吗？',
+      confirmText: '删除',
+      confirmColor: '#ff501e',
+      success: (res) => resolve(!!res.confirm),
+      fail: () => resolve(false)
+    })
+  })
+  if (!confirmed) return
+
+  saving.value = true
+  try {
+    await templateStore.remove(templateId.value)
+    uni.showToast({ title: '已删除', icon: 'none' })
+    uni.navigateBack()
+  } catch (err) {
+    uni.showToast({ title: '删除失败', icon: 'none' })
+    console.error('[template] remove failed', err)
+  } finally {
+    saving.value = false
+  }
 }
 
 async function prepareNewWorkout() {
@@ -161,6 +219,20 @@ async function copyTemplate() {
             @tap="editTemplate"
           >
             编辑模板
+          </view>
+          <view
+            v-if="!isSystemTemplate"
+            class="glass-card template-detail__action btn-press"
+            @tap="renameTemplate"
+          >
+            改名
+          </view>
+          <view
+            v-if="!isSystemTemplate"
+            class="template-detail__action template-detail__action--danger btn-press"
+            @tap="removeTemplate"
+          >
+            删除
           </view>
         </view>
 
@@ -267,6 +339,13 @@ async function copyTemplate() {
     color: #f5f5fa;
     font-size: 24rpx;
     font-weight: 700;
+
+    &--danger {
+      border-radius: 26rpx;
+      color: #ff6b4a;
+      background: rgba(255, 107, 74, 0.12);
+      border: 1px solid rgba(255, 107, 74, 0.18);
+    }
   }
 
   &__section-title {

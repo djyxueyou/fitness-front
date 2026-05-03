@@ -3,11 +3,19 @@ import { ref, watch } from 'vue'
 import {
   fetchExerciseCategories,
   fetchExerciseList,
+  fetchFavoriteExercises,
   type ExerciseCategory,
   type ExerciseSummary
 } from '@/api/exercise'
+import { getToken } from '@/api/http'
 
 const PAGE_SIZE = 10
+const RECENT_EXERCISES_KEY = 'LIFTLOG_RECENT_EXERCISES'
+const QUICK_FILTERS = [
+  { code: 'all', name: '全部' },
+  { code: 'recent', name: '最近使用' },
+  { code: 'favorite', name: '收藏' }
+]
 
 const props = defineProps<{
   visible: boolean
@@ -22,6 +30,7 @@ const emit = defineEmits<{
 }>()
 
 const categoryOptions = ref<Array<{ code: string; name: string }>>([{ code: '', name: '全部' }])
+const quickFilter = ref('all')
 const activeCategoryCode = ref('')
 const keyword = ref('')
 const exerciseItems = ref<ExerciseSummary[]>([])
@@ -29,6 +38,23 @@ const exercisePageNo = ref(0)
 const exerciseTotal = ref(0)
 const exerciseLoading = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+function readRecentExercises() {
+  try {
+    const value = uni.getStorageSync(RECENT_EXERCISES_KEY) as ExerciseSummary[] | undefined
+    return Array.isArray(value) ? value : []
+  } catch {
+    return []
+  }
+}
+
+function writeRecentExercise(exercise: ExerciseSummary) {
+  const next = [exercise, ...readRecentExercises().filter((item) => item.id !== exercise.id)].slice(
+    0,
+    20
+  )
+  uni.setStorageSync(RECENT_EXERCISES_KEY, next)
+}
 
 watch(
   () => props.visible,
@@ -66,6 +92,17 @@ async function loadCategories() {
 
 async function loadExercises(reset = false) {
   if (exerciseLoading.value) return
+  if (quickFilter.value === 'recent') {
+    const recentItems = filterLocalExercises(readRecentExercises())
+    exerciseItems.value = recentItems
+    exercisePageNo.value = 1
+    exerciseTotal.value = recentItems.length
+    return
+  }
+  if (quickFilter.value === 'favorite') {
+    await loadFavoriteExercises()
+    return
+  }
   if (!reset && exerciseItems.value.length >= exerciseTotal.value && exerciseTotal.value > 0) {
     return
   }
@@ -89,12 +126,53 @@ async function loadExercises(reset = false) {
   }
 }
 
+async function loadFavoriteExercises() {
+  exerciseLoading.value = true
+  try {
+    if (!getToken()) {
+      exerciseItems.value = []
+      exerciseTotal.value = 0
+      return
+    }
+    const favorites = await fetchFavoriteExercises()
+    const items = filterLocalExercises(favorites)
+    exerciseItems.value = items
+    exercisePageNo.value = 1
+    exerciseTotal.value = items.length
+  } catch (err) {
+    uni.showToast({ title: '收藏动作加载失败', icon: 'none' })
+    console.error('[exercise-picker] favorite exercises fetch failed', err)
+  } finally {
+    exerciseLoading.value = false
+  }
+}
+
+function filterLocalExercises(list: ExerciseSummary[]) {
+  const word = keyword.value.trim().toLowerCase()
+  return list.filter((item) => {
+    const matchedKeyword =
+      !word ||
+      item.name.toLowerCase().includes(word) ||
+      (item.primaryMuscle || '').toLowerCase().includes(word) ||
+      (item.equipment || '').toLowerCase().includes(word)
+    const matchedCategory =
+      !activeCategoryCode.value || item.categoryCode === activeCategoryCode.value
+    return matchedKeyword && matchedCategory
+  })
+}
+
+function switchQuickFilter(code: string) {
+  quickFilter.value = code
+  loadExercises(true)
+}
+
 function switchCategory(categoryCode: string) {
   activeCategoryCode.value = categoryCode
   loadExercises(true)
 }
 
 function selectExercise(exercise: ExerciseSummary) {
+  writeRecentExercise(exercise)
   emit('select', exercise)
 }
 
@@ -121,6 +199,18 @@ function isSelected(exerciseId: number) {
           placeholder="搜索动作、肌群或器械"
           placeholder-class="exercise-picker__placeholder"
         />
+      </view>
+
+      <view class="exercise-picker__quick">
+        <view
+          v-for="item in QUICK_FILTERS"
+          :key="item.code"
+          class="exercise-picker__quick-item btn-press"
+          :class="{ 'exercise-picker__quick-item--active': quickFilter === item.code }"
+          @tap="switchQuickFilter(item.code)"
+        >
+          {{ item.name }}
+        </view>
       </view>
 
       <scroll-view scroll-x class="exercise-picker__categories">
@@ -247,6 +337,26 @@ function isSelected(exerciseId: number) {
     color: #828296;
   }
 
+  &__quick {
+    display: flex;
+    gap: 12rpx;
+    margin-top: 18rpx;
+  }
+
+  &__quick-item {
+    padding: 14rpx 22rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.06);
+    color: #b8b8c8;
+    font-size: 22rpx;
+
+    &--active {
+      background: rgba(255, 80, 30, 0.16);
+      color: #ff7a32;
+      font-weight: 800;
+    }
+  }
+
   &__categories {
     margin: 20rpx -28rpx;
     white-space: nowrap;
@@ -273,7 +383,7 @@ function isSelected(exerciseId: number) {
   }
 
   &__list {
-    height: calc(100vh - 430rpx);
+    height: calc(100vh - 500rpx);
   }
 
   &__item {

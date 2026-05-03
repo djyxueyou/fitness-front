@@ -9,6 +9,7 @@ import { routes } from '@/utils/navigation'
 import { formatSeconds } from '@/utils/format'
 import { emitTrainingChanged } from '@/utils/training-events'
 import { useProfileStore } from '@/stores/profile'
+import { useTrainingStore } from '@/stores/training'
 import { convertUnitToKg, formatWeight, type WeightUnit } from '@/utils/unit'
 import { useWorkoutStore, type WorkoutExercise } from '@/stores/workout'
 
@@ -18,6 +19,7 @@ const LB_STEP = 5
 
 const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
+const trainingStore = useTrainingStore()
 const showFinish = ref(false)
 const submitting = ref(false)
 const currentExerciseIndex = ref(0)
@@ -26,6 +28,7 @@ const restRemaining = ref(0)
 const restTitle = ref('')
 const restNextExerciseIndex = ref<number | null>(null)
 const pickerVisible = ref(false)
+const startupLoading = ref(false)
 const unit = computed<WeightUnit>(() => profileStore.unit)
 let timer: ReturnType<typeof setInterval> | null = null
 let restTimer: ReturnType<typeof setInterval> | null = null
@@ -118,6 +121,31 @@ function addRestSeconds(seconds: number) {
   restRemaining.value += seconds
 }
 
+async function initializeWorkout() {
+  if (!workoutStore.hasPendingStart) {
+    if (!workoutStore.activeExercises.length) {
+      workoutStore.restoreDraft()
+    }
+    return
+  }
+
+  const templateId = workoutStore.pendingStartTemplateId
+  startupLoading.value = true
+  try {
+    await workoutStore.startWorkout(templateId)
+    workoutStore.clearPendingStart()
+  } catch (err) {
+    workoutStore.clearPendingStart()
+    uni.showToast({ title: '训练加载失败，请重试', icon: 'none' })
+    console.error('[workout] start failed', err)
+    if (!workoutStore.activeExercises.length) {
+      setTimeout(() => uni.navigateBack(), 600)
+    }
+  } finally {
+    startupLoading.value = false
+  }
+}
+
 function switchExercise(delta: number) {
   const nextIndex = findAdjacentActiveExerciseIndex(currentExerciseIndex.value, delta)
   if (nextIndex === null) return
@@ -185,8 +213,7 @@ function toggleSetDone(setIndex: number) {
   const afterExercise = workoutStore.activeExercises[currentExerciseIndex.value]
   if (afterExercise.sets.every((set) => set.done)) {
     workoutStore.endExercise(currentExerciseIndex.value)
-    const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
-    startRest(`${afterExercise.name} 已完成`, nextIndex)
+    startRest(`${afterExercise.name} 已完成`)
     return
   }
   startRest(`第 ${setIndex + 1} 组已完成`)
@@ -242,9 +269,9 @@ function finishExerciseEarly() {
     return
   }
 
-  workoutStore.endExercise(currentExerciseIndex.value)
   const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
   if (nextIndex !== null) {
+    workoutStore.endExercise(currentExerciseIndex.value)
     startRest(`${exercise.name} 已完成`, nextIndex)
     return
   }
@@ -361,14 +388,13 @@ async function confirmFinish() {
     endedAt
   })
   workoutStore.finishWorkout()
+  trainingStore.invalidateCache()
   emitTrainingChanged()
   uni.redirectTo({ url: routes.workoutSummary })
 }
 
 onMounted(() => {
-  if (!workoutStore.activeExercises.length) {
-    workoutStore.restoreDraft()
-  }
+  void initializeWorkout()
 
   timer = setInterval(() => {
     workoutStore.elapsedSeconds += 1
@@ -542,13 +568,13 @@ onUnmounted(() => {
           <view v-if="!exercise.ended" class="workout-active__actions">
             <view
               class="glass-card workout-active__action btn-press"
-              @tap="addSet(currentExerciseIndex)"
+              @tap.stop="addSet(currentExerciseIndex)"
             >
               + 添加一组
             </view>
             <view
               class="glass-card workout-active__action btn-press"
-              @tap="deleteLastSet(currentExerciseIndex)"
+              @tap.stop="deleteLastSet(currentExerciseIndex)"
             >
               删除最后一组
             </view>
@@ -567,6 +593,11 @@ onUnmounted(() => {
         + 添加动作
       </view>
     </scroll-view>
+
+    <view v-else-if="startupLoading" class="workout-active__empty">
+      <view class="workout-active__empty-title">正在准备训练</view>
+      <view class="workout-active__empty-sub">正在加载模板和上次训练记录...</view>
+    </view>
 
     <view v-else class="workout-active__empty">
       <view class="workout-active__empty-title">还没有训练动作</view>
@@ -796,7 +827,7 @@ onUnmounted(() => {
     }
 
     &--menu-open {
-      z-index: 10;
+      z-index: 50;
     }
   }
 
@@ -853,7 +884,8 @@ onUnmounted(() => {
     border-radius: 24rpx;
     background: #20202a;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    z-index: 11;
+    z-index: 60;
+    box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.36);
   }
 
   &__menu-item {

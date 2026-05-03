@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
@@ -10,6 +11,7 @@ import { routes } from '@/utils/navigation'
 
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
+const recentTemplates = computed(() => templateStore.recentItems.slice(0, 5))
 
 onShow(async () => {
   const ok = await ensureFeatureAuth('训练模板')
@@ -17,7 +19,10 @@ onShow(async () => {
     uni.switchTab({ url: routes.home })
     return
   }
-  templateStore.fetchTemplates({ includeDetails: false })
+  workoutStore.refreshDraftState()
+  if (!templateStore.loadedFromServer) {
+    templateStore.fetchTemplates({ includeDetails: false })
+  }
 })
 
 function goBack() {
@@ -30,6 +35,16 @@ async function openManager() {
   uni.navigateTo({ url: routes.templateManager })
 }
 
+async function continueWorkout() {
+  const ok = await ensureFeatureAuth('训练功能')
+  if (!ok) return
+  if (!workoutStore.restoreDraft()) {
+    uni.showToast({ title: '没有可恢复的训练', icon: 'none' })
+    return
+  }
+  uni.navigateTo({ url: routes.workoutActive })
+}
+
 async function startWorkout(templateId: number | null) {
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok) return
@@ -38,7 +53,7 @@ async function startWorkout(templateId: number | null) {
   if (templateId) {
     templateStore.markUsed(templateId)
   }
-  await workoutStore.startWorkout(templateId)
+  workoutStore.queueStartWorkout(templateId)
   uni.navigateTo({ url: routes.workoutActive })
 }
 
@@ -96,16 +111,38 @@ async function prepareNewWorkout() {
         </template>
       </AppHeader>
 
-      <PrimaryButton @tap="startWorkout(null)">
-        <view class="select-template__free">
-          <view class="select-template__free-icon">+</view>
-          <view class="select-template__free-copy">
-            <view class="select-template__free-title">自由训练</view>
-            <view class="select-template__free-sub">按你的节奏自由添加动作和组数</view>
+      <view
+        v-if="workoutStore.hasRecoverableWorkout"
+        class="glass-card select-template__resume btn-press"
+        @tap="continueWorkout"
+      >
+        <view class="select-template__resume-icon">▶</view>
+        <view class="select-template__resume-copy">
+          <view class="select-template__resume-title">继续上次训练</view>
+          <view class="select-template__resume-sub">
+            {{ workoutStore.activeTemplateName || '自由训练' }} · {{ workoutStore.doneSets }}/{{
+              workoutStore.totalSets
+            }}
+            组已完成
           </view>
-          <view class="select-template__free-arrow">›</view>
         </view>
-      </PrimaryButton>
+        <view class="select-template__free-arrow">›</view>
+      </view>
+
+      <view v-if="recentTemplates.length" class="select-template__section-label section-label">
+        最近使用
+      </view>
+      <view v-if="recentTemplates.length" class="select-template__list">
+        <TemplateItem
+          v-for="item in recentTemplates"
+          :key="`recent-${item.id}`"
+          :template="item"
+          :editable="item.templateType !== 'SYSTEM'"
+          @start="startWorkout"
+          @detail="goTemplateDetail"
+          @edit="goTemplateEdit"
+        />
+      </view>
 
       <view class="select-template__section-label section-label">我的模板</view>
       <view class="select-template__list">
@@ -133,6 +170,18 @@ async function prepareNewWorkout() {
           @detail="goTemplateDetail"
         />
       </view>
+
+      <view class="select-template__section-label section-label">自由训练</view>
+      <PrimaryButton @tap="startWorkout(null)">
+        <view class="select-template__free">
+          <view class="select-template__free-icon">+</view>
+          <view class="select-template__free-copy">
+            <view class="select-template__free-title">自由训练</view>
+            <view class="select-template__free-sub">按你的节奏自由添加动作和组数</view>
+          </view>
+          <view class="select-template__free-arrow">›</view>
+        </view>
+      </PrimaryButton>
     </view>
   </scroll-view>
 </template>
@@ -150,6 +199,41 @@ async function prepareNewWorkout() {
     display: flex;
     align-items: center;
     gap: 18rpx;
+  }
+
+  &__resume {
+    display: flex;
+    align-items: center;
+    gap: 18rpx;
+    padding: 24rpx;
+  }
+
+  &__resume-icon {
+    width: 76rpx;
+    height: 76rpx;
+    border-radius: 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
+    color: #fff;
+    font-size: 26rpx;
+  }
+
+  &__resume-copy {
+    flex: 1;
+  }
+
+  &__resume-title {
+    color: #f5f5fa;
+    font-size: 30rpx;
+    font-weight: 800;
+  }
+
+  &__resume-sub {
+    margin-top: 8rpx;
+    color: #828296;
+    font-size: 22rpx;
   }
 
   &__free-icon {

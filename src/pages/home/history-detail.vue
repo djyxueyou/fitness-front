@@ -50,11 +50,29 @@ function formatDate(dateText?: string) {
 }
 
 function itemVolume(exercise: NonNullable<typeof detail.value>['items'][number]) {
+  if (exercise.totalVolumeKg !== undefined && exercise.totalVolumeKg !== null) {
+    return Number(exercise.totalVolumeKg || 0)
+  }
   return exercise.sets.reduce((total, set) => total + Number(set.volumeKg || 0), 0)
 }
 
 function itemMaxWeight(exercise: NonNullable<typeof detail.value>['items'][number]) {
+  if (exercise.maxWeightKg !== undefined && exercise.maxWeightKg !== null) {
+    return Number(exercise.maxWeightKg || 0)
+  }
   return exercise.sets.reduce((max, set) => Math.max(max, Number(set.weightKg || 0)), 0)
+}
+
+function comparisonText(value?: number | null, unitText = 'kg') {
+  if (value === undefined || value === null) return '首次记录'
+  if (value === 0) return '持平'
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${formatWeight(value, unit.value, 1)} ${unitText}`
+}
+
+function comparisonClass(value?: number | null) {
+  if (value === undefined || value === null || value === 0) return ''
+  return value > 0 ? 'history-detail__compare-value--up' : 'history-detail__compare-value--down'
 }
 </script>
 
@@ -116,6 +134,27 @@ function itemMaxWeight(exercise: NonNullable<typeof detail.value>['items'][numbe
                   {{ formatWeight(itemMaxWeight(exercise), unit, 1) }} {{ unit }}
                 </view>
                 <view class="history-detail__summary-label">最高重量</view>
+              </view>
+            </view>
+
+            <view class="history-detail__compare">
+              <view class="history-detail__compare-item">
+                <view class="history-detail__compare-label">容量 vs 上次</view>
+                <view
+                  class="history-detail__compare-value"
+                  :class="comparisonClass(exercise.volumeDeltaKg)"
+                >
+                  {{ comparisonText(exercise.volumeDeltaKg, unit) }}
+                </view>
+              </view>
+              <view class="history-detail__compare-item">
+                <view class="history-detail__compare-label">最大重量 vs 上次</view>
+                <view
+                  class="history-detail__compare-value"
+                  :class="comparisonClass(exercise.maxWeightDeltaKg)"
+                >
+                  {{ comparisonText(exercise.maxWeightDeltaKg, unit) }}
+                </view>
               </view>
             </view>
 
@@ -200,6 +239,39 @@ function itemMaxWeight(exercise: NonNullable<typeof detail.value>['items'][numbe
     margin-top: 6rpx;
     color: #828296;
     font-size: 20rpx;
+  }
+
+  &__compare {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14rpx;
+    margin-top: 18rpx;
+  }
+
+  &__compare-item {
+    padding: 18rpx;
+    border-radius: 22rpx;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &__compare-label {
+    color: #828296;
+    font-size: 20rpx;
+  }
+
+  &__compare-value {
+    margin-top: 8rpx;
+    color: #b8b8c8;
+    font-size: 24rpx;
+    font-weight: 800;
+
+    &--up {
+      color: #3dd9a2;
+    }
+
+    &--down {
+      color: #ff6b4a;
+    }
   }
 
   &__set {

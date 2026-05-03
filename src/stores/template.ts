@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import {
   copyTemplate,
   createTemplate,
+  createTemplateFromTraining,
   deleteTemplate,
   fetchTemplateDetail,
   fetchTemplateList,
@@ -160,6 +161,13 @@ export const useTemplateStore = defineStore('template', () => {
     await fetchTemplates()
   }
 
+  async function saveFromTraining(trainingId: number, name?: string) {
+    const result = await createTemplateFromTraining(trainingId, name)
+    detailCache.value = {}
+    await fetchTemplates()
+    return result
+  }
+
   async function createDefaultTemplate() {
     const page = await fetchExerciseList({ pageNo: 1, pageSize: 3 })
     const sourceItems = page.list.slice(0, 3)
@@ -190,6 +198,7 @@ export const useTemplateStore = defineStore('template', () => {
     rename,
     remove,
     duplicate,
+    saveFromTraining,
     createDefaultTemplate
   }
 })

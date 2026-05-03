@@ -1,7 +1,9 @@
 @import '@/uni.scss';
 
 page {
+  min-height: 100vh;
   background: $color-bg;
+  background-color: $color-bg;
   color: $color-text;
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
@@ -24,6 +26,8 @@ input {
 .page-scroll {
   height: 100vh;
   min-height: 100vh;
+  background: $color-bg;
+  background-color: $color-bg;
   scrollbar-width: none;
 }
 
@@ -99,6 +103,10 @@ input {
 
 .safe-bottom {
   padding-bottom: calc(env(safe-area-inset-bottom) + 24rpx);
+}
+
+.tab-page.safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 148rpx);
 }
 
 .row {

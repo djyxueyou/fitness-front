@@ -3,109 +3,162 @@
     {
       "path": "pages/home/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/exercises/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/profile/index",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/select-template",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/template-detail",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/template-edit",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/workout-active",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/workout-summary",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/workout-calendar",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/volume-trend",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/home/history-detail",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/exercises/detail",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/profile/history",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/profile/template-manager",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/profile/favorites",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/profile/settings",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     },
     {
       "path": "pages/profile/about",
       "style": {
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
       }
     }
   ],
   "globalStyle": {
     "navigationStyle": "custom",
-    "backgroundColor": "#0A0A0E"
+    "backgroundColor": "#0A0A0E",
+    "backgroundColorTop": "#0A0A0E",
+    "backgroundColorBottom": "#0A0A0E"
   },
   "tabBar": {
     "color": "#828296",

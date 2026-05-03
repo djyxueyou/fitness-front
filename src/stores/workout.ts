@@ -1,8 +1,10 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  fetchExerciseLastPerformances,
   fetchExerciseLastPerformance,
   type ExerciseLastPerformanceResponse,
+  type ExerciseLastPerformanceSetResponse,
   type SaveTrainingResponse
 } from '@/api/training'
 import { useTemplateStore } from '@/stores/template'
@@ -37,6 +39,24 @@ function createEmptyWorkout() {
   return [] as WorkoutExercise[]
 }
 
+function createDefaultSet(performanceSet?: ExerciseLastPerformanceSetResponse): WorkoutSet {
+  return {
+    reps: performanceSet?.reps ?? 10,
+    weight: Number(performanceSet?.weightKg ?? 20),
+    done: false
+  }
+}
+
+function createSetsFromPerformance(
+  targetSets: number,
+  performance?: ExerciseLastPerformanceResponse
+) {
+  const sourceSets = performance?.sets || []
+  return Array.from({ length: targetSets }, (_, index) =>
+    createDefaultSet(sourceSets[index] || sourceSets[sourceSets.length - 1])
+  )
+}
+
 function readWorkoutDraft() {
   try {
     const draft = uni.getStorageSync(WORKOUT_DRAFT_KEY) as WorkoutDraft | undefined
@@ -61,6 +81,8 @@ export const useWorkoutStore = defineStore('workout', () => {
   const activeExercises = ref<WorkoutExercise[]>(createEmptyWorkout())
   const completedSummary = ref<CompletedWorkoutSummary | null>(null)
   const lastPerformanceMap = ref<Record<number, ExerciseLastPerformanceResponse>>({})
+  const hasPendingStart = ref(false)
+  const pendingStartTemplateId = ref<number | null>(null)
   const hasDraft = ref(Boolean(readWorkoutDraft()))
   const draftSavedAt = ref(readWorkoutDraft()?.savedAt || '')
 
@@ -102,32 +124,43 @@ export const useWorkoutStore = defineStore('workout', () => {
 
     const detail = await templateStore.getDetail(templateId)
     activeTemplateName.value = detail.name
+    const exerciseIds = detail.items.map((item) => item.exerciseId)
+    await loadLastPerformances(exerciseIds)
     activeExercises.value = detail.items.map((item) => ({
       id: item.exerciseId,
       name: item.exerciseName,
       muscle: '',
       ended: false,
-      sets: Array.from({ length: item.targetSets }, () => ({ reps: 10, weight: 20, done: false }))
+      sets: createSetsFromPerformance(item.targetSets, lastPerformanceMap.value[item.exerciseId])
     }))
     persistDraft()
-    loadLastPerformances()
   }
 
-  async function loadLastPerformances() {
-    const exerciseIds = Array.from(new Set(activeExercises.value.map((item) => item.id)))
-    await Promise.all(
-      exerciseIds.map(async (exerciseId) => {
-        try {
-          const performance = await fetchExerciseLastPerformance(exerciseId)
-          lastPerformanceMap.value = {
-            ...lastPerformanceMap.value,
-            [exerciseId]: performance
-          }
-        } catch (err) {
-          console.error('[workout] last performance fetch failed', { exerciseId, err })
-        }
-      })
-    )
+  function queueStartWorkout(templateId: number | null) {
+    hasPendingStart.value = true
+    pendingStartTemplateId.value = templateId
+  }
+
+  function clearPendingStart() {
+    hasPendingStart.value = false
+    pendingStartTemplateId.value = null
+  }
+
+  async function loadLastPerformances(exerciseIds?: number[]) {
+    const ids = Array.from(new Set(exerciseIds || activeExercises.value.map((item) => item.id)))
+    if (!ids.length) return
+    try {
+      const performances = await fetchExerciseLastPerformances(ids)
+      lastPerformanceMap.value = performances.reduce(
+        (map, performance) => ({
+          ...map,
+          [performance.exerciseId]: performance
+        }),
+        { ...lastPerformanceMap.value }
+      )
+    } catch (err) {
+      console.error('[workout] last performances fetch failed', { exerciseIds: ids, err })
+    }
   }
 
   function getLastPerformance(exerciseId: number) {
@@ -220,12 +253,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     if (activeExercises.value.some((item) => item.id === id)) {
       return
     }
+    const performance = lastPerformanceMap.value[id]
     activeExercises.value.push({
       id,
       name,
       muscle,
       ended: false,
-      sets: [{ reps: 12, weight: 20, done: false }]
+      sets: createSetsFromPerformance(1, performance)
     })
     persistDraft()
     fetchExerciseLastPerformance(id)
@@ -234,6 +268,12 @@ export const useWorkoutStore = defineStore('workout', () => {
           ...lastPerformanceMap.value,
           [id]: performance
         }
+        activeExercises.value = activeExercises.value.map((exercise) =>
+          exercise.id === id && exercise.sets.length === 1 && !exercise.sets[0].done
+            ? { ...exercise, sets: createSetsFromPerformance(1, performance) }
+            : exercise
+        )
+        persistDraft()
       })
       .catch((err) => {
         console.error('[workout] last performance fetch failed', { exerciseId: id, err })
@@ -340,6 +380,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeExercises,
     completedSummary,
     lastPerformanceMap,
+    hasPendingStart,
+    pendingStartTemplateId,
     hasDraft,
     draftSavedAt,
     totalSets,
@@ -348,6 +390,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     totalVolume,
     hasActiveWorkout,
     hasRecoverableWorkout,
+    queueStartWorkout,
+    clearPendingStart,
     startWorkout,
     loadLastPerformances,
     getLastPerformance,

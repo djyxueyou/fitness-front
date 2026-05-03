@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AppHeader from '@/components/app-header/index.vue'
 import { routes } from '@/utils/navigation'
 import { formatSeconds } from '@/utils/format'
 import { formatWeight } from '@/utils/unit'
 import { useProfileStore } from '@/stores/profile'
+import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 
 const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
+const templateStore = useTemplateStore()
+const savingTemplate = ref(false)
 
 const summary = computed(() => workoutStore.completedSummary)
 const weightUnit = computed(() => profileStore.unit)
@@ -18,6 +21,7 @@ const volumeText = computed(() =>
     ? `${formatWeight(summary.value.totalVolumeKg, weightUnit.value, 1)} ${weightUnit.value}`
     : '--'
 )
+const prs = computed(() => summary.value?.prs || [])
 
 function goHome() {
   workoutStore.setCompletedSummary(null)
@@ -32,6 +36,40 @@ function goDetail() {
   }
 
   uni.redirectTo({ url: `${routes.historyDetail}?id=${trainingId}` })
+}
+
+async function saveAsTemplate() {
+  const current = summary.value
+  if (!current?.trainingId || savingTemplate.value) return
+
+  savingTemplate.value = true
+  try {
+    await templateStore.saveFromTraining(current.trainingId, `${current.trainingName} 模板`)
+    uni.showToast({ title: '已保存到我的模板', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: '保存模板失败', icon: 'none' })
+    console.error('[template] save from training failed', err)
+  } finally {
+    savingTemplate.value = false
+  }
+}
+
+function prTypeLabel(type: string) {
+  switch (type) {
+    case 'MAX_WEIGHT':
+      return '最大重量'
+    case 'MAX_REPS':
+      return '最多次数'
+    case 'MAX_VOLUME':
+      return '最大容量'
+    default:
+      return '个人最佳'
+  }
+}
+
+function prValueText(type: string, value: number) {
+  if (type === 'MAX_REPS') return `${value} 次`
+  return `${formatWeight(value, weightUnit.value, 1)} ${weightUnit.value}`
 }
 </script>
 
@@ -72,9 +110,29 @@ function goDetail() {
         </view>
       </view>
 
+      <view v-if="prs.length" class="glass-card workout-summary__prs">
+        <view class="workout-summary__note-title">本次新增 PR · {{ prs.length }}</view>
+        <view
+          v-for="item in prs.slice(0, 4)"
+          :key="`${item.exerciseId}-${item.prType}`"
+          class="workout-summary__pr"
+        >
+          <view>
+            <view class="workout-summary__pr-name">{{ item.exerciseName }}</view>
+            <view class="workout-summary__pr-type">{{ prTypeLabel(item.prType) }}</view>
+          </view>
+          <view class="workout-summary__pr-value">{{
+            prValueText(item.prType, Number(item.value || 0))
+          }}</view>
+        </view>
+      </view>
+
       <view class="workout-summary__actions">
         <view class="gradient-fire workout-summary__button btn-press" @tap="goHome">返回首页</view>
         <view class="glass-card workout-summary__button btn-press" @tap="goDetail">查看详情</view>
+        <view class="glass-card workout-summary__button btn-press" @tap="saveAsTemplate">
+          {{ savingTemplate ? '正在保存模板...' : '保存为我的模板' }}
+        </view>
       </view>
     </view>
   </scroll-view>
@@ -141,6 +199,40 @@ function goDetail() {
   &__note {
     margin-top: 24rpx;
     padding: 28rpx;
+  }
+
+  &__prs {
+    margin-top: 24rpx;
+    padding: 28rpx;
+  }
+
+  &__pr {
+    margin-top: 18rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    padding: 18rpx;
+    border-radius: 22rpx;
+    background: rgba(255, 80, 30, 0.08);
+  }
+
+  &__pr-name {
+    color: #f5f5fa;
+    font-size: 24rpx;
+    font-weight: 800;
+  }
+
+  &__pr-type {
+    margin-top: 6rpx;
+    color: #828296;
+    font-size: 20rpx;
+  }
+
+  &__pr-value {
+    color: #ff7a32;
+    font-size: 26rpx;
+    font-weight: 900;
   }
 
   &__note-title {

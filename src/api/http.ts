@@ -10,7 +10,7 @@ const DEFAULT_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT_MS || 20000)
 const TOKEN_KEY = 'LIFTLOG_TOKEN'
 const USER_PROFILE_KEY = 'LIFTLOG_USER_PROFILE'
 const WORKOUT_DRAFT_KEY = 'LIFTLOG_WORKOUT_DRAFT'
-const API_DEBUG = String(import.meta.env.VITE_API_DEBUG || 'true').toLowerCase() === 'true'
+const API_DEBUG = String(import.meta.env.VITE_API_DEBUG || 'false').toLowerCase() === 'true'
 const UNAUTHORIZED_CODE = 40100
 
 export const API_BASE_URL =

@@ -35,6 +35,13 @@ export interface TrainingItemDetailResponse {
   sortOrder: number
   targetSets: number
   completedSets: number
+  totalVolumeKg?: number
+  maxWeightKg?: number
+  previousVolumeKg?: number | null
+  volumeDeltaKg?: number | null
+  previousMaxWeightKg?: number | null
+  maxWeightDeltaKg?: number | null
+  firstRecord?: boolean
   sets: TrainingSetResponse[]
 }
 
@@ -109,6 +116,17 @@ export interface SaveTrainingResponse {
   totalExerciseCount: number
   totalSetCount: number
   totalVolumeKg: number
+  prCount?: number
+  prs?: TrainingPrResponse[]
+}
+
+export interface TrainingPrResponse {
+  exerciseId: number
+  exerciseName: string
+  prType: 'MAX_WEIGHT' | 'MAX_REPS' | 'MAX_VOLUME' | string
+  value: number
+  previousValue?: number | null
+  delta?: number | null
 }
 
 export function fetchTrainingHistory(params?: {
@@ -176,5 +194,19 @@ export function fetchExerciseLastPerformance(exerciseId: number) {
   return request<ExerciseLastPerformanceResponse>({
     url: `/api/trainings/exercises/${exerciseId}/last-performance`,
     method: 'GET'
+  })
+}
+
+export function fetchExerciseLastPerformances(exerciseIds: number[]) {
+  const ids = Array.from(new Set(exerciseIds.filter((id) => Number.isFinite(id) && id > 0)))
+  if (!ids.length) {
+    return Promise.resolve([])
+  }
+  return request<ExerciseLastPerformanceResponse[]>({
+    url: '/api/trainings/exercises/last-performances',
+    method: 'GET',
+    data: {
+      exerciseIds: ids.join(',')
+    }
   })
 }
