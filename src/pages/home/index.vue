@@ -19,8 +19,7 @@ import { routes } from '@/utils/navigation'
 import { useProfileStore } from '@/stores/profile'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
-import type { Template } from '@/types/template'
-import { formatWeight } from '@/utils/unit'
+import { formatCompactWeight } from '@/utils/unit'
 import { formatSeconds } from '@/utils/format'
 
 const profileStore = useProfileStore()
@@ -32,11 +31,12 @@ const weekHistory = ref<TrainingHistoryItemResponse[]>([])
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
 let homeLoadedAt = 0
 
+const isLoggedIn = ref(Boolean(getToken()))
 const weightUnit = computed(() => profileStore.unit)
 const weekSessions = computed(() => (summary.value ? `${weekHistory.value.length} 次` : '--'))
 const totalVolume = computed(() =>
   summary.value
-    ? `${formatWeight(summary.value.totalVolumeKg, weightUnit.value, 0)} ${weightUnit.value}`
+    ? `${formatCompactWeight(summary.value.totalVolumeKg, weightUnit.value)} ${weightUnit.value}`
     : '--'
 )
 const totalDuration = computed(() =>
@@ -68,18 +68,7 @@ const weekStats = computed(() => {
   })
 })
 const recentTemplates = computed(() => {
-  const localItems = templateStore.recentItems
-  const localIdSet = new Set(localItems.map((item) => item.id))
-  const historyIdSet = new Set<number>()
-  const historyItems = recentHistory.value
-    .map((record) => (record.templateId ? templateStore.getById(record.templateId) : undefined))
-    .filter((item): item is Template => {
-      if (!item || localIdSet.has(item.id) || historyIdSet.has(item.id)) return false
-      historyIdSet.add(item.id)
-      return true
-    })
-
-  return [...localItems, ...historyItems].slice(0, 3)
+  return templateStore.getRecentItemsFromHistory(recentHistory.value, 3)
 })
 
 onLoad(() => {
@@ -93,6 +82,7 @@ onUnload(() => {
 })
 
 onShow(() => {
+  isLoggedIn.value = Boolean(getToken())
   workoutStore.refreshDraftState()
   if (!workoutStore.hasActiveWorkout) {
     workoutStore.restoreDraft()
@@ -101,6 +91,7 @@ onShow(() => {
 })
 
 async function refreshAfterAuthChanged() {
+  isLoggedIn.value = Boolean(getToken())
   await loadHomeData({ forceTemplates: true })
 }
 
@@ -110,25 +101,30 @@ async function refreshAfterTrainingChanged() {
 
 async function loadHomeData(options?: { forceTemplates?: boolean }) {
   if (!getToken()) {
+    isLoggedIn.value = false
     summary.value = null
     weekHistory.value = []
     recentHistory.value = []
     homeLoadedAt = 0
     return
   }
+  isLoggedIn.value = true
 
   if (!options?.forceTemplates && summary.value && Date.now() - homeLoadedAt < HOME_CACHE_MS) {
     return
   }
 
   if (options?.forceTemplates || !templateStore.loadedFromServer) {
-    await templateStore.fetchTemplates({ includeDetails: false }).catch((err) => {
+    await templateStore.fetchTemplates({ includeDetails: false, force: options?.forceTemplates }).catch((err) => {
       console.error('[home] template fetch failed', err)
     })
   }
 
   const range = getCurrentWeekRange()
-  fetchTrainingSummary()
+  fetchTrainingSummary({
+    startedFrom: range.startedFrom,
+    startedTo: range.startedTo
+  })
     .then((nextSummary) => {
       summary.value = nextSummary
       homeLoadedAt = Date.now()
@@ -254,6 +250,10 @@ async function prepareNewWorkout() {
     return false
   }
 }
+
+async function loginForStats() {
+  await ensureFeatureAuth('训练数据')
+}
 </script>
 
 <template>
@@ -267,9 +267,17 @@ async function prepareNewWorkout() {
       </view>
 
       <view class="home-page__stats">
-        <StatCard icon="🔥" label="本周" :value="weekSessions" />
-        <StatCard icon="⚡" label="总量" :value="totalVolume" />
-        <StatCard icon="🕒" label="时长" :value="totalDuration" />
+        <StatCard icon="🔥" label="本周次数" :value="weekSessions" />
+        <StatCard icon="⚡" label="本周总量" :value="totalVolume" />
+        <StatCard icon="🕒" label="本周时长" :value="totalDuration" />
+      </view>
+
+      <view v-if="!isLoggedIn" class="glass-card home-page__login-hint">
+        <view>
+          <view class="home-page__login-title">登录后记录训练进度</view>
+          <view class="home-page__login-sub">本周次数、容量和时长会自动同步到首页。</view>
+        </view>
+        <view class="home-page__login-btn btn-press" @tap="loginForStats">登录</view>
       </view>
 
       <GlassCard>
@@ -299,7 +307,7 @@ async function prepareNewWorkout() {
         <GlassCard v-if="workoutStore.hasRecoverableWorkout" class="home-page__resume-card">
           <view class="home-page__resume-content">
             <view>
-              <view class="home-page__resume-title">有一场训练未完成</view>
+              <view class="home-page__resume-title">继续上次训练</view>
               <view class="home-page__resume-sub">
                 {{ workoutStore.activeTemplateName || '自由训练' }} ·
                 {{ formatSeconds(workoutStore.elapsedSeconds) }} · {{ workoutStore.doneSets }}/{{
@@ -386,6 +394,40 @@ async function prepareNewWorkout() {
     margin-bottom: 24rpx;
   }
 
+  &__login-hint {
+    margin-bottom: 24rpx;
+    padding: 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+  }
+
+  &__login-title {
+    color: #f5f5fa;
+    font-size: 26rpx;
+    font-weight: 800;
+  }
+
+  &__login-sub {
+    margin-top: 8rpx;
+    color: #828296;
+    font-size: 22rpx;
+  }
+
+  &__login-btn {
+    min-width: 112rpx;
+    min-height: 56rpx;
+    border-radius: 999rpx;
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24rpx;
+    font-weight: 800;
+  }
+
   &__week-card {
     padding: 30rpx;
   }
@@ -419,22 +461,26 @@ async function prepareNewWorkout() {
     width: 44rpx;
     height: 44rpx;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 0 0 1rpx rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.3s ease;
 
     &--trained {
-      background: linear-gradient(135deg, #ff501e, #ffa03c);
-      box-shadow: 0 0 24rpx rgba(255, 80, 30, 0.35);
+      background: linear-gradient(135deg, #ff501e, #ff8c00);
+      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 24rpx rgba(255, 80, 30, 0.6);
     }
   }
 
   &__week-label {
     color: #828296;
     font-size: 22rpx;
+    font-weight: 500;
 
     &--today {
       color: #ff501e;
-      font-weight: 700;
+      font-weight: 800;
+      text-shadow: 0 0 10rpx rgba(255, 80, 30, 0.3);
     }
   }
 

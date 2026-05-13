@@ -1,11 +1,16 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  createCustomExercise,
+  type CreateCustomExerciseRequest,
+  deleteCustomExercise,
   favoriteExercise,
   fetchExerciseCategories,
   fetchExerciseDetail,
   fetchExerciseList,
   fetchFavoriteExercises,
+  type UpdateCustomExerciseRequest,
+  updateCustomExercise,
   unfavoriteExercise
 } from '@/api/exercise'
 import { getToken } from '@/api/http'
@@ -41,6 +46,7 @@ function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exerc
     muscle: item.primaryMuscle || '-',
     equipment: item.equipment || '-',
     level: toLevelText(item.difficultyLevel),
+    exerciseType: item.exerciseType || 'SYSTEM',
     thumbnailUrl: item.thumbnailUrl || item.thumbnailPath
   }
 }
@@ -74,18 +80,24 @@ export const useExerciseStore = defineStore('exercise', () => {
   const listCache = ref<Record<string, ListCacheEntry>>({})
   const activeCategoryCode = ref('')
   const activeKeyword = ref('')
+  const activeScope = ref<'ALL' | 'SYSTEM' | 'CUSTOM'>('ALL')
   const pageNo = ref(0)
   const total = ref(0)
   const hasMore = ref(true)
   const loading = ref(false)
+  const listError = ref('')
   const loadedFromServer = ref(false)
   const favoriteIds = ref<Set<number>>(new Set())
   const favoriteItems = ref<Exercise[]>([])
 
   const favorites = computed(() => favoriteItems.value)
 
-  function queryKey(categoryCode = activeCategoryCode.value, keyword = activeKeyword.value) {
-    return `${categoryCode || 'all'}::${keyword.trim()}`
+  function queryKey(
+    categoryCode = activeCategoryCode.value,
+    keyword = activeKeyword.value,
+    scope = activeScope.value
+  ) {
+    return `${scope}::${categoryCode || 'all'}::${keyword.trim()}`
   }
 
   async function fetchCategories() {
@@ -111,15 +123,18 @@ export const useExerciseStore = defineStore('exercise', () => {
     force?: boolean
     categoryCode?: string
     keyword?: string
+    scope?: 'ALL' | 'SYSTEM' | 'CUSTOM'
   }) {
     const reset = options?.reset ?? false
     const force = options?.force ?? false
     const categoryCode = options?.categoryCode ?? activeCategoryCode.value
     const keyword = options?.keyword ?? activeKeyword.value
-    const key = queryKey(categoryCode, keyword)
+    const scope = options?.scope ?? activeScope.value
+    const key = queryKey(categoryCode, keyword, scope)
 
     activeCategoryCode.value = categoryCode
     activeKeyword.value = keyword
+    activeScope.value = scope
 
     if (reset && !force && listCache.value[key]) {
       const cached = listCache.value[key]
@@ -136,13 +151,15 @@ export const useExerciseStore = defineStore('exercise', () => {
     }
 
     loading.value = true
+    listError.value = ''
     try {
       const nextPageNo = reset ? 1 : pageNo.value + 1
       const page = await fetchExerciseList({
         pageNo: nextPageNo,
         pageSize: PAGE_SIZE,
         categoryCode: categoryCode || undefined,
-        keyword: keyword.trim() || undefined
+        keyword: keyword.trim() || undefined,
+        scope
       })
       await fetchFavoriteIdSet()
       const nextItems = page.list.map(normalizeSummary)
@@ -162,6 +179,7 @@ export const useExerciseStore = defineStore('exercise', () => {
       }
     } catch (err) {
       console.error('[exercise] fetch failed', err)
+      listError.value = '动作加载失败，请稍后重试'
       loadedFromServer.value = false
       if (reset) {
         items.value = []
@@ -316,10 +334,40 @@ export const useExerciseStore = defineStore('exercise', () => {
 
   function clearListCache() {
     listCache.value = {}
+    listError.value = ''
   }
 
   function getById(id: number) {
     return findCachedExercise(id)
+  }
+
+  async function createCustom(payload: CreateCustomExerciseRequest) {
+    const result = await createCustomExercise(payload)
+    clearListCache()
+    detailCache.value = {}
+    await fetchExercises({ reset: true, force: true, scope: 'CUSTOM' })
+    return result
+  }
+
+  async function updateCustom(id: number, payload: UpdateCustomExerciseRequest) {
+    await updateCustomExercise(id, payload)
+    clearListCache()
+    detailCache.value = {}
+    await fetchExercises({ reset: true, force: true, scope: 'CUSTOM' })
+  }
+
+  async function deleteCustom(id: number) {
+    await deleteCustomExercise(id)
+    clearListCache()
+    detailCache.value = Object.fromEntries(
+      Object.entries(detailCache.value).filter(([key]) => Number(key) !== id)
+    )
+    items.value = items.value.filter((item) => item.id !== id)
+    favoriteItems.value = favoriteItems.value.filter((item) => item.id !== id)
+    const nextFavoriteIds = new Set(favoriteIds.value)
+    nextFavoriteIds.delete(id)
+    favoriteIds.value = nextFavoriteIds
+    await fetchExercises({ reset: true, force: true, scope: 'CUSTOM' })
   }
 
   function findCachedExercise(id: number) {
@@ -366,6 +414,7 @@ export const useExerciseStore = defineStore('exercise', () => {
     total,
     hasMore,
     loading,
+    listError,
     loadedFromServer,
     fetchCategories,
     fetchExercises,
@@ -374,6 +423,9 @@ export const useExerciseStore = defineStore('exercise', () => {
     clearListCache,
     setFavorite,
     toggleFavorite,
+    createCustom,
+    updateCustom,
+    deleteCustom,
     getById
   }
 })

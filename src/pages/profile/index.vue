@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { clearToken } from '@/api/http'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { emitAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
 import { useProfileStore } from '@/stores/profile'
-import { formatWeight } from '@/utils/unit'
+import { formatCompactWeight } from '@/utils/unit'
 
 const profileStore = useProfileStore()
 const avatarText = computed(() => (profileStore.nickname || 'U').slice(0, 1).toUpperCase())
@@ -14,7 +16,7 @@ const profileStats = computed(() => [
   { icon: '🏋', value: `${profileStore.totalSessions} 次`, label: '累计训练' },
   {
     icon: '⚡',
-    value: `${formatWeight(profileStore.totalVolumeKg, weightUnit.value, 0)} ${weightUnit.value}`,
+    value: `${formatCompactWeight(profileStore.totalVolumeKg, weightUnit.value)} ${weightUnit.value}`,
     label: '累计容量'
   }
 ])
@@ -44,10 +46,7 @@ const menuItems = [
   { label: '我的收藏', sub: '常用动作收藏', path: routes.favorites, icon: '⭐', tone: 'gold' }
 ]
 
-const otherItems = [
-  { label: '设置', path: routes.settings, icon: '⚿' },
-  { label: '关于', path: routes.about, icon: '⚸' }
-]
+const otherItems = [{ label: '关于', path: routes.about, icon: '⚸' }]
 
 onShow(async () => {
   const ok = await ensureFeatureAuth('个人信息')
@@ -60,6 +59,23 @@ onShow(async () => {
 
 function openPage(path: string) {
   uni.navigateTo({ url: path })
+}
+
+function logout() {
+  uni.showModal({
+    title: '退出登录？',
+    content: '退出后将清除当前登录状态，训练记录和收藏需要重新登录后查看。',
+    confirmText: '退出',
+    confirmColor: '#ff6b4a',
+    success: (res) => {
+      if (!res.confirm) return
+      clearToken()
+      profileStore.resetProfile()
+      emitAuthChanged()
+      uni.showToast({ title: '已退出登录', icon: 'none' })
+      uni.switchTab({ url: routes.home })
+    }
+  })
 }
 
 function getToneBg(tone?: string) {
@@ -89,9 +105,6 @@ function getToneBg(tone?: string) {
               >单位 {{ profileStore.unit }} · 休息 {{ profileStore.restSeconds }}s</view
             >
           </view>
-          <view class="glass-card profile__settings btn-press" @tap="openPage(routes.settings)"
-            >⚿</view
-          >
         </view>
 
         <view class="profile__stats">
@@ -137,6 +150,8 @@ function getToneBg(tone?: string) {
           <view class="profile__menu-arrow">›</view>
         </view>
       </view>
+
+      <view class="profile__logout glass-card btn-press" @tap="logout">退出登录</view>
     </view>
   </scroll-view>
 </template>
@@ -249,6 +264,16 @@ function getToneBg(tone?: string) {
   &__menu-arrow {
     color: #828296;
     font-size: 28rpx;
+  }
+
+  &__logout {
+    margin-top: 28rpx;
+    padding: 26rpx 24rpx;
+    color: #ff6b4a;
+    text-align: center;
+    font-size: 28rpx;
+    font-weight: 800;
+    border-color: rgba(255, 107, 74, 0.22);
   }
 }
 </style>

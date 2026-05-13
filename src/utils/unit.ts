@@ -27,3 +27,17 @@ export function formatWeight(valueKg: number, unit: WeightUnit, digits = 1): str
   const converted = convertKgToUnit(Number(valueKg || 0), unit)
   return converted.toFixed(digits)
 }
+
+export function formatCompactWeight(valueKg: number, unit: WeightUnit, digits = 1): string {
+  const converted = convertKgToUnit(Number(valueKg || 0), unit)
+  const absValue = Math.abs(converted)
+  if (absValue < 10000) {
+    return converted.toLocaleString('zh-CN', {
+      maximumFractionDigits: 0
+    })
+  }
+  return `${(converted / 10000).toLocaleString('zh-CN', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  })}万`
+}

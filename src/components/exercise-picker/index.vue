@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
+  createCustomExercise,
   fetchExerciseCategories,
   fetchExerciseList,
   fetchFavoriteExercises,
@@ -8,13 +9,15 @@ import {
   type ExerciseSummary
 } from '@/api/exercise'
 import { getToken } from '@/api/http'
+import { useExerciseStore } from '@/stores/exercise'
 
 const PAGE_SIZE = 10
 const RECENT_EXERCISES_KEY = 'LIFTLOG_RECENT_EXERCISES'
 const QUICK_FILTERS = [
   { code: 'all', name: '全部' },
   { code: 'recent', name: '最近使用' },
-  { code: 'favorite', name: '收藏' }
+  { code: 'favorite', name: '收藏' },
+  { code: 'custom', name: '自定义' }
 ]
 
 const props = defineProps<{
@@ -29,6 +32,7 @@ const emit = defineEmits<{
   select: [exercise: ExerciseSummary]
 }>()
 
+const exerciseStore = useExerciseStore()
 const categoryOptions = ref<Array<{ code: string; name: string }>>([{ code: '', name: '全部' }])
 const quickFilter = ref('all')
 const activeCategoryCode = ref('')
@@ -37,7 +41,16 @@ const exerciseItems = ref<ExerciseSummary[]>([])
 const exercisePageNo = ref(0)
 const exerciseTotal = ref(0)
 const exerciseLoading = ref(false)
+const customSaving = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+const trimmedKeyword = computed(() => keyword.value.trim())
+const customExists = computed(() =>
+  exerciseItems.value.some((item) => item.name === trimmedKeyword.value)
+)
+const customCreateTitle = computed(() =>
+  trimmedKeyword.value ? `新建自定义动作「${trimmedKeyword.value}」` : '新建自定义动作'
+)
 
 function readRecentExercises() {
   try {
@@ -113,7 +126,8 @@ async function loadExercises(reset = false) {
       pageNo: reset ? 1 : exercisePageNo.value + 1,
       pageSize: PAGE_SIZE,
       categoryCode: activeCategoryCode.value || undefined,
-      keyword: keyword.value.trim() || undefined
+      keyword: trimmedKeyword.value || undefined,
+      scope: quickFilter.value === 'custom' ? 'CUSTOM' : 'ALL'
     })
     exercisePageNo.value = page.pageNo
     exerciseTotal.value = page.total
@@ -148,7 +162,7 @@ async function loadFavoriteExercises() {
 }
 
 function filterLocalExercises(list: ExerciseSummary[]) {
-  const word = keyword.value.trim().toLowerCase()
+  const word = trimmedKeyword.value.toLowerCase()
   return list.filter((item) => {
     const matchedKeyword =
       !word ||
@@ -163,6 +177,7 @@ function filterLocalExercises(list: ExerciseSummary[]) {
 
 function switchQuickFilter(code: string) {
   quickFilter.value = code
+  activeCategoryCode.value = ''
   loadExercises(true)
 }
 
@@ -174,6 +189,57 @@ function switchCategory(categoryCode: string) {
 function selectExercise(exercise: ExerciseSummary) {
   writeRecentExercise(exercise)
   emit('select', exercise)
+}
+
+async function createCustomFromKeyword() {
+  const name = trimmedKeyword.value || (await promptCustomName())
+  if (!name || customSaving.value) return
+  if (customExists.value && name === trimmedKeyword.value) {
+    uni.showToast({ title: '已存在同名动作', icon: 'none' })
+    return
+  }
+
+  customSaving.value = true
+  try {
+    const created = await createCustomExercise({ name })
+    exerciseStore.clearListCache()
+    const exercise: ExerciseSummary = {
+      id: created.id,
+      name,
+      categoryCode: 'custom',
+      categoryName: '自定义',
+      primaryMuscle: '',
+      equipment: '',
+      difficultyLevel: 'BEGINNER',
+      exerciseType: 'USER'
+    }
+    selectExercise(exercise)
+    uni.showToast({ title: '已创建并添加', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: '新建动作失败', icon: 'none' })
+    console.error('[exercise-picker] create custom exercise failed', err)
+  } finally {
+    customSaving.value = false
+  }
+}
+
+function promptCustomName() {
+  return new Promise<string | null>((resolve) => {
+    uni.showModal({
+      title: '新建自定义动作',
+      editable: true,
+      placeholderText: '例如：弹力带肩外旋',
+      success: (res) => {
+        if (!res.confirm) {
+          resolve(null)
+          return
+        }
+        const content = ((res as UniApp.ShowModalRes & { content?: string }).content || '').trim()
+        resolve(content || null)
+      },
+      fail: () => resolve(null)
+    } as UniApp.ShowModalOptions)
+  })
 }
 
 function isSelected(exerciseId: number) {
@@ -213,7 +279,7 @@ function isSelected(exerciseId: number) {
         </view>
       </view>
 
-      <scroll-view scroll-x class="exercise-picker__categories">
+      <scroll-view v-if="quickFilter !== 'custom'" scroll-x class="exercise-picker__categories">
         <view class="exercise-picker__categories-inner">
           <view
             v-for="category in categoryOptions"
@@ -228,6 +294,20 @@ function isSelected(exerciseId: number) {
       </scroll-view>
 
       <scroll-view scroll-y class="exercise-picker__list" @scrolltolower="loadExercises()">
+        <view
+          v-if="quickFilter === 'custom'"
+          class="glass-card exercise-picker__custom-create btn-press"
+          @tap="createCustomFromKeyword"
+        >
+          <view>
+            <view class="exercise-picker__custom-title">{{ customCreateTitle }}</view>
+            <view class="exercise-picker__custom-sub">仅当前账号可见，创建后会加入本次训练</view>
+          </view>
+          <view class="exercise-picker__custom-action">
+            {{ customSaving ? '创建中' : '创建' }}
+          </view>
+        </view>
+
         <view
           v-for="exercise in exerciseItems"
           :key="exercise.id"
@@ -246,7 +326,7 @@ function isSelected(exerciseId: number) {
           <view class="exercise-picker__body">
             <view class="exercise-picker__name">{{ exercise.name }}</view>
             <view class="exercise-picker__meta">
-              {{ exercise.categoryName }} · {{ exercise.equipment || '-' }}
+              {{ exercise.categoryName || '自定义' }} · {{ exercise.equipment || '-' }}
             </view>
           </view>
           <view
@@ -384,14 +464,40 @@ function isSelected(exerciseId: number) {
 
   &__list {
     height: calc(100vh - 500rpx);
+    margin-top: 20rpx;
   }
 
+  &__custom-create,
   &__item {
     display: flex;
     align-items: center;
     gap: 18rpx;
     padding: 18rpx;
     margin-bottom: 14rpx;
+  }
+
+  &__custom-create {
+    justify-content: space-between;
+    border-color: rgba(255, 80, 30, 0.35);
+  }
+
+  &__custom-title {
+    color: #f5f5fa;
+    font-size: 26rpx;
+    font-weight: 800;
+  }
+
+  &__custom-sub {
+    margin-top: 8rpx;
+    color: #828296;
+    font-size: 22rpx;
+  }
+
+  &__custom-action {
+    flex-shrink: 0;
+    color: #ff7a32;
+    font-size: 24rpx;
+    font-weight: 800;
   }
 
   &__thumb,

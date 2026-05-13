@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  clearCachedUserProfile,
   fetchUserProfile,
   fetchUserSummary,
   getCachedUserProfile,
@@ -59,6 +60,18 @@ export const useProfileStore = defineStore('profile', () => {
     })
   }
 
+  function resetProfile() {
+    userId.value = null
+    nickname.value = 'LiftLog User'
+    avatarUrl.value = ''
+    unit.value = 'kg'
+    restSeconds.value = 90
+    totalSessions.value = 0
+    totalVolumeKg.value = 0
+    currentStreakDays.value = 0
+    clearCachedUserProfile()
+  }
+
   return {
     userId,
     nickname,
@@ -72,6 +85,7 @@ export const useProfileStore = defineStore('profile', () => {
     currentStreakDays,
     refreshProfile,
     refreshSummary,
-    saveSettings
+    saveSettings,
+    resetProfile
   }
 })

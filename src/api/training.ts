@@ -57,6 +57,7 @@ export interface TrainingDetailResponse {
   totalSetCount: number
   totalVolumeKg: number
   note?: string
+  prs?: TrainingPrResponse[]
   items: TrainingItemDetailResponse[]
 }
 
@@ -103,6 +104,7 @@ export interface SaveTrainingItemRequest {
 
 export interface SaveTrainingRequest {
   templateId?: number | null
+  clientRequestId?: string
   trainingName: string
   startedAt: string
   endedAt: string
@@ -183,10 +185,11 @@ export function fetchTrainingCalendar(params: { year: number; month: number }) {
   })
 }
 
-export function fetchTrainingSummary() {
+export function fetchTrainingSummary(params?: { startedFrom?: string; startedTo?: string }) {
   return request<TrainingStatsSummaryResponse>({
     url: '/api/trainings/stats/summary',
-    method: 'GET'
+    method: 'GET',
+    data: params || {}
   })
 }
 

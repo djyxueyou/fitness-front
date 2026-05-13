@@ -10,10 +10,15 @@ import {
 } from '@/api/training'
 
 export const useTrainingStore = defineStore('training', () => {
+  const HISTORY_PAGE_SIZE = 20
   const history = ref<TrainingHistoryItemResponse[]>([])
+  const historyTotal = ref(0)
+  const historyPageNo = ref(0)
   const loading = ref(false)
+  const historyError = ref('')
   const detailCache = ref<Record<number, TrainingDetailResponse>>({})
   const calendarDays = ref<TrainingCalendarDayResponse[]>([])
+  const historyHasMore = computed(() => history.value.length < historyTotal.value)
 
   const historyById = computed(() => {
     const map: Record<number, TrainingHistoryItemResponse> = {}
@@ -23,14 +28,33 @@ export const useTrainingStore = defineStore('training', () => {
     return map
   })
 
-  async function fetchHistory() {
+  async function fetchHistory(options?: {
+    reset?: boolean
+    startedFrom?: string
+    startedTo?: string
+  }) {
+    if (loading.value) return
     loading.value = true
+    historyError.value = ''
     try {
-      const page = await fetchTrainingHistory({ pageNo: 1, pageSize: 200 })
-      history.value = page.list
+      const pageNo = options?.reset ? 1 : historyPageNo.value + 1
+      const page = await fetchTrainingHistory({
+        pageNo,
+        pageSize: HISTORY_PAGE_SIZE,
+        startedFrom: options?.startedFrom,
+        startedTo: options?.startedTo
+      })
+      historyTotal.value = page.total
+      historyPageNo.value = page.pageNo
+      history.value = options?.reset ? page.list : [...history.value, ...page.list]
     } catch (err) {
       console.error('[training] fetch history failed', err)
-      history.value = []
+      historyError.value = '训练记录加载失败，请稍后重试'
+      if (options?.reset) {
+        history.value = []
+        historyTotal.value = 0
+        historyPageNo.value = 0
+      }
     } finally {
       loading.value = false
     }
@@ -57,20 +81,35 @@ export const useTrainingStore = defineStore('training', () => {
     return detail
   }
 
+  async function deleteTraining(id: number) {
+    const { deleteTraining: deleteApi } = await import('@/api/training')
+    await deleteApi(id)
+    history.value = history.value.filter((item) => item.id !== id)
+    historyTotal.value = Math.max(0, historyTotal.value - 1)
+    calendarDays.value = [] // Invalidate calendar
+  }
+
   function invalidateCache() {
     history.value = []
+    historyTotal.value = 0
+    historyPageNo.value = 0
+    historyError.value = ''
     detailCache.value = {}
     calendarDays.value = []
   }
 
   return {
     history,
+    historyTotal,
+    historyHasMore,
     loading,
+    historyError,
     historyById,
     calendarDays,
     fetchHistory,
     fetchCalendar,
     fetchDetail,
+    deleteTraining,
     invalidateCache
   }
 })

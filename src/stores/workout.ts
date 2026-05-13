@@ -24,12 +24,26 @@ export type CompletedWorkoutSummary = SaveTrainingResponse & {
   trainingName: string
   startedAt: string
   endedAt: string
+  plannedItems?: Array<{
+    exerciseId: number
+    targetSets: number
+  }>
+  comparisons?: WorkoutComparison[]
+}
+export type WorkoutComparison = {
+  exerciseId: number
+  exerciseName: string
+  currentVolumeKg: number
+  volumeDeltaKg?: number | null
+  currentMaxWeightKg: number
+  maxWeightDeltaKg?: number | null
 }
 type WorkoutDraft = {
   version: number
   savedAt: string
   activeTemplateId: number | null
   activeTemplateName: string
+  clientRequestId?: string
   startedAt: string
   elapsedSeconds: number
   activeExercises: WorkoutExercise[]
@@ -45,6 +59,10 @@ function createDefaultSet(performanceSet?: ExerciseLastPerformanceSetResponse): 
     weight: Number(performanceSet?.weightKg ?? 20),
     done: false
   }
+}
+
+function createClientRequestId() {
+  return `wx-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 function createSetsFromPerformance(
@@ -76,6 +94,7 @@ function readWorkoutDraft() {
 export const useWorkoutStore = defineStore('workout', () => {
   const activeTemplateId = ref<number | null>(null)
   const activeTemplateName = ref('自由训练')
+  const clientRequestId = ref('')
   const startedAt = ref<string | null>(null)
   const elapsedSeconds = ref(0)
   const activeExercises = ref<WorkoutExercise[]>(createEmptyWorkout())
@@ -109,10 +128,30 @@ export const useWorkoutStore = defineStore('workout', () => {
   const hasActiveWorkout = computed(() => Boolean(startedAt.value && activeExercises.value.length))
   const hasRecoverableWorkout = computed(() => hasActiveWorkout.value || hasDraft.value)
 
+  function startFreeWorkout() {
+    activeTemplateId.value = null
+    activeTemplateName.value = '自由训练'
+    clientRequestId.value = createClientRequestId()
+    startedAt.value = new Date().toISOString()
+    elapsedSeconds.value = 0
+    activeExercises.value = createEmptyWorkout()
+  }
+
+  function ensureWorkoutSession() {
+    if (hasActiveWorkout.value) return
+    if (restoreDraft()) return
+    startFreeWorkout()
+  }
+
+  function hasExercise(exerciseId: number) {
+    return activeExercises.value.some((item) => item.id === exerciseId)
+  }
+
   async function startWorkout(templateId: number | null) {
     const templateStore = useTemplateStore()
     activeTemplateId.value = templateId
     activeTemplateName.value = templateStore.getById(templateId)?.name ?? '自由训练'
+    clientRequestId.value = createClientRequestId()
     startedAt.value = new Date().toISOString()
     elapsedSeconds.value = 0
 
@@ -249,9 +288,25 @@ export const useWorkoutStore = defineStore('workout', () => {
     return true
   }
 
+  function removeSet(exerciseIndex: number, setIndex: number) {
+    const exercise = activeExercises.value[exerciseIndex]
+    if (!exercise || exercise.sets.length <= 1) {
+      return false
+    }
+
+    activeExercises.value = activeExercises.value.map((item, index) =>
+      index === exerciseIndex
+        ? { ...item, sets: item.sets.filter((_, idx) => idx !== setIndex) }
+        : item
+    )
+    persistDraft()
+    return true
+  }
+
   function addExercise(id: number, name: string, muscle: string) {
-    if (activeExercises.value.some((item) => item.id === id)) {
-      return
+    ensureWorkoutSession()
+    if (hasExercise(id)) {
+      return false
     }
     const performance = lastPerformanceMap.value[id]
     activeExercises.value.push({
@@ -278,6 +333,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       .catch((err) => {
         console.error('[workout] last performance fetch failed', { exerciseId: id, err })
       })
+    return true
   }
 
   function removeExercise(exerciseIndex: number) {
@@ -302,6 +358,7 @@ export const useWorkoutStore = defineStore('workout', () => {
   function finishWorkout() {
     activeTemplateId.value = null
     activeTemplateName.value = '自由训练'
+    clientRequestId.value = ''
     startedAt.value = null
     elapsedSeconds.value = 0
     activeExercises.value = createEmptyWorkout()
@@ -323,6 +380,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       savedAt: new Date().toISOString(),
       activeTemplateId: activeTemplateId.value,
       activeTemplateName: activeTemplateName.value,
+      clientRequestId: ensureClientRequestId(),
       startedAt: startedAt.value,
       elapsedSeconds: elapsedSeconds.value,
       activeExercises: activeExercises.value
@@ -353,6 +411,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
     activeTemplateId.value = draft.activeTemplateId
     activeTemplateName.value = draft.activeTemplateName || '自由训练'
+    clientRequestId.value = draft.clientRequestId || createClientRequestId()
     startedAt.value = draft.startedAt
     elapsedSeconds.value = draft.elapsedSeconds || 0
     activeExercises.value = draft.activeExercises
@@ -365,6 +424,7 @@ export const useWorkoutStore = defineStore('workout', () => {
   function discardWorkout() {
     activeTemplateId.value = null
     activeTemplateName.value = '自由训练'
+    clientRequestId.value = ''
     startedAt.value = null
     elapsedSeconds.value = 0
     activeExercises.value = createEmptyWorkout()
@@ -372,9 +432,17 @@ export const useWorkoutStore = defineStore('workout', () => {
     clearDraft()
   }
 
+  function ensureClientRequestId() {
+    if (!clientRequestId.value) {
+      clientRequestId.value = createClientRequestId()
+    }
+    return clientRequestId.value
+  }
+
   return {
     activeTemplateId,
     activeTemplateName,
+    clientRequestId,
     startedAt,
     elapsedSeconds,
     activeExercises,
@@ -393,6 +461,9 @@ export const useWorkoutStore = defineStore('workout', () => {
     queueStartWorkout,
     clearPendingStart,
     startWorkout,
+    startFreeWorkout,
+    ensureWorkoutSession,
+    hasExercise,
     loadLastPerformances,
     getLastPerformance,
     toggleSet,
@@ -401,6 +472,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     adjustReps,
     addSet,
     deleteLastSet,
+    removeSet,
     addExercise,
     removeExercise,
     endExercise,
@@ -411,6 +483,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     clearDraft,
     refreshDraftState,
     restoreDraft,
+    ensureClientRequestId,
     discardWorkout
   }
 })

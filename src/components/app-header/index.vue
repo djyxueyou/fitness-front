@@ -53,10 +53,11 @@ const emit = defineEmits<{
   }
 
   &__title {
-    font-size: 38rpx;
-    font-weight: 700;
+    font-size: 42rpx;
+    font-weight: 800;
     color: #f5f5fa;
     line-height: 1.2;
+    text-shadow: 0 0 20rpx rgba(255, 255, 255, 0.1);
   }
 
   &__subtitle {

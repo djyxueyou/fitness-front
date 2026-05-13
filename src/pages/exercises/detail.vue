@@ -32,6 +32,9 @@ const instructionTips = computed(() =>
 )
 const mistakeTips = computed(() => splitContent(exercise.value?.commonMistakesText))
 const checklistTips = computed(() => splitContent(exercise.value?.checklistText))
+const isInCurrentWorkout = computed(() =>
+  exercise.value ? workoutStore.hasExercise(exercise.value.id) : false
+)
 
 onLoad((query) => {
   const id = Number(query.id)
@@ -62,7 +65,7 @@ function goBack() {
 function splitContent(text?: string) {
   if (!text) return []
   return text
-    .split(/\r?\n|；|;/)
+    .split(/\r?\n|；|;|。/)
     .map((item) => item.replace(/^[-\d.、\s]+/, '').trim())
     .filter(Boolean)
 }
@@ -84,7 +87,11 @@ async function toggleFavorite() {
 async function addToWorkout() {
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok || !exercise.value) return
-  workoutStore.addExercise(exercise.value.id, exercise.value.name, exercise.value.muscle)
+  const added = workoutStore.addExercise(exercise.value.id, exercise.value.name, exercise.value.muscle)
+  if (!added) {
+    uni.showToast({ title: '该动作已在当前训练中', icon: 'none' })
+    return
+  }
   isAdded.value = true
   uni.showToast({ title: '已加入今日训练', icon: 'none' })
   setTimeout(() => {
@@ -108,7 +115,7 @@ async function addToWorkout() {
             :class="{ 'exercise-detail__fav--active': exercise.favorited }"
             @tap="toggleFavorite"
           >
-            {{ exercise.favorited ? '★' : '☆' }}
+            {{ exercise.favorited ? '♥' : '♡' }}
           </view>
         </template>
       </AppHeader>
@@ -183,10 +190,10 @@ async function addToWorkout() {
 
       <view
         class="exercise-detail__cta"
-        :class="{ 'glass-card': isAdded, 'gradient-fire glow-primary': !isAdded }"
+        :class="{ 'glass-card': isAdded || isInCurrentWorkout, 'gradient-fire glow-primary': !isAdded && !isInCurrentWorkout }"
         @tap="addToWorkout"
       >
-        {{ isAdded ? '已添加到今日训练' : '添加到今日训练' }}
+        {{ isAdded || isInCurrentWorkout ? '已在今日训练中' : '添加到今日训练' }}
       </view>
     </view>
     <view v-else class="page-shell safe-bottom">
@@ -210,8 +217,8 @@ async function addToWorkout() {
     font-size: 34rpx;
 
     &--active {
-      color: #ffd24d;
-      text-shadow: 0 0 12rpx rgba(255, 210, 77, 0.55);
+      color: #ff4d4f;
+      text-shadow: 0 0 12rpx rgba(255, 77, 79, 0.55);
     }
   }
 

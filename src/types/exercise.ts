@@ -5,6 +5,7 @@ export interface Exercise {
   muscle: string
   equipment: string
   level: string
+  exerciseType?: string
   thumbnailUrl?: string
   favorited?: boolean
 }

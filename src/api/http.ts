@@ -9,7 +9,6 @@ export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 const DEFAULT_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT_MS || 20000)
 const TOKEN_KEY = 'LIFTLOG_TOKEN'
 const USER_PROFILE_KEY = 'LIFTLOG_USER_PROFILE'
-const WORKOUT_DRAFT_KEY = 'LIFTLOG_WORKOUT_DRAFT'
 const API_DEBUG = String(import.meta.env.VITE_API_DEBUG || 'false').toLowerCase() === 'true'
 const UNAUTHORIZED_CODE = 40100
 
@@ -55,8 +54,9 @@ function isUnauthorized(statusCode: number, body: ApiResponse<unknown> | null, r
 function handleUnauthorized(message?: string): never {
   clearToken()
   uni.removeStorageSync(USER_PROFILE_KEY)
-  uni.removeStorageSync(WORKOUT_DRAFT_KEY)
-  throw new AuthExpiredError(message || '登录已失效，请重新登录')
+  const errorMessage = message || '登录已失效，请重新登录'
+  uni.showToast({ title: errorMessage, icon: 'none' })
+  throw new AuthExpiredError(errorMessage)
 }
 
 export async function request<T>(options: RequestOptions): Promise<T> {

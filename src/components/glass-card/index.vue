@@ -1,3 +1,11 @@
+<script setup lang="ts">
+defineProps<{
+  neon?: boolean
+}>()
+</script>
+
 <template>
-  <view class="glass-card"><slot /></view>
+  <view class="glass-card" :class="{ 'glass-card--neon': neon }">
+    <slot />
+  </view>
 </template>

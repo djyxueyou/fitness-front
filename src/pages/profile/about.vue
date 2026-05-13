@@ -49,13 +49,6 @@ function goBack() {
 
       <view class="about__links">
         <view class="glass-card about__link btn-press">
-          <view class="about__link-icon">⌕</view>
-          <view class="about__link-body">
-            <view class="about__feature-title">开源地址</view>
-            <view class="about__feature-desc">github.com/fitforge</view>
-          </view>
-        </view>
-        <view class="glass-card about__link btn-press">
           <view class="about__link-icon">›</view>
           <view class="about__link-body">
             <view class="about__feature-title">用户协议</view>

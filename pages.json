@@ -87,7 +87,9 @@
   ],
   "globalStyle": {
     "navigationStyle": "custom",
-    "backgroundColor": "#0A0A0E"
+    "backgroundColor": "#0A0A0E",
+    "backgroundColorTop": "#0A0A0E",
+    "backgroundColorBottom": "#0A0A0E"
   },
   "tabBar": {
     "color": "#828296",

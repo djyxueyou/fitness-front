@@ -3,18 +3,20 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import GlassCard from '@/components/glass-card/index.vue'
+import { fetchTrainingHistory, type TrainingHistoryItemResponse } from '@/api/training'
 import { routes } from '@/utils/navigation'
 import { useTrainingStore } from '@/stores/training'
 
 const trainingStore = useTrainingStore()
 const currentYear = ref(new Date().getFullYear())
 const currentMonth = ref(new Date().getMonth())
-const selectedDate = ref('')
+const selectedDate = ref(toDateString(new Date()))
+const calendarHistory = ref<TrainingHistoryItemResponse[]>([])
 const daysOfWeek = ['日', '一', '二', '三', '四', '五', '六']
 
 onShow(async () => {
   await Promise.all([
-    trainingStore.fetchHistory(),
+    fetchMonthHistory(),
     trainingStore.fetchCalendar(currentYear.value, currentMonth.value + 1)
   ])
 })
@@ -23,14 +25,14 @@ const firstDay = computed(() => new Date(currentYear.value, currentMonth.value, 
 const daysInMonth = computed(() => new Date(currentYear.value, currentMonth.value + 1, 0).getDate())
 
 const monthRecords = computed(() =>
-  trainingStore.history.filter((record) => {
+  calendarHistory.value.filter((record) => {
     const date = new Date(record.startedAt)
     return date.getFullYear() === currentYear.value && date.getMonth() === currentMonth.value
   })
 )
 
 const recordMap = computed(() => {
-  const map: Record<string, typeof trainingStore.history> = {}
+  const map: Record<string, TrainingHistoryItemResponse[]> = {}
   monthRecords.value.forEach((record) => {
     const date = new Date(record.startedAt)
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
@@ -42,12 +44,12 @@ const recordMap = computed(() => {
 })
 
 const selectedRecords = computed(() => {
-  if (!selectedDate.value) return monthRecords.value
   return recordMap.value[selectedDate.value] || []
 })
 
 const selectedTitle = computed(() => {
-  if (!selectedDate.value) return '本月记录'
+  if (!selectedDate.value) return '请选择日期'
+  if (selectedDate.value === toDateString(new Date())) return '今日记录'
   return `${selectedDate.value.slice(5)} 训练记录`
 })
 
@@ -74,7 +76,10 @@ async function prevMonth() {
     currentMonth.value -= 1
   }
   selectedDate.value = ''
-  await trainingStore.fetchCalendar(currentYear.value, currentMonth.value + 1)
+  await Promise.all([
+    fetchMonthHistory(),
+    trainingStore.fetchCalendar(currentYear.value, currentMonth.value + 1)
+  ])
 }
 
 async function nextMonth() {
@@ -85,7 +90,10 @@ async function nextMonth() {
     currentMonth.value += 1
   }
   selectedDate.value = ''
-  await trainingStore.fetchCalendar(currentYear.value, currentMonth.value + 1)
+  await Promise.all([
+    fetchMonthHistory(),
+    trainingStore.fetchCalendar(currentYear.value, currentMonth.value + 1)
+  ])
 }
 
 function openTrend() {
@@ -98,6 +106,27 @@ function openDetailById(id: number) {
 
 function dayKey(day: number) {
   return `${currentYear.value}-${String(currentMonth.value + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function toDateString(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+async function fetchMonthHistory() {
+  const start = new Date(currentYear.value, currentMonth.value, 1)
+  const end = new Date(currentYear.value, currentMonth.value + 1, 0)
+  try {
+    const page = await fetchTrainingHistory({
+      pageNo: 1,
+      pageSize: 50,
+      startedFrom: toDateString(start),
+      startedTo: toDateString(end)
+    })
+    calendarHistory.value = page.list
+  } catch (err) {
+    calendarHistory.value = []
+    console.error('[calendar] month history fetch failed', err)
+  }
 }
 
 function selectDay(day: number) {

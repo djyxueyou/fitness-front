@@ -1,15 +1,20 @@
-$color-bg: #0a0a0e;
-$color-bg-elevated: #14141c;
-$color-bg-tab: #0e0e14;
+$color-bg: #050508;
+$color-bg-elevated: #0e0e14;
+$color-bg-tab: #08080c;
 $color-primary: #ff501e;
-$color-primary-soft: #ffa03c;
+$color-primary-soft: #ff823c;
 $color-text: #f5f5fa;
 $color-muted: #828296;
-$color-border: rgba(255, 255, 255, 0.08);
-$color-card: rgba(255, 255, 255, 0.04);
-$color-blue: #50c8ff;
-$color-yellow: #ffc850;
-$color-purple: #c850ff;
+$color-border: rgba(255, 80, 30, 0.12);
+$color-card: rgba(255, 255, 255, 0.03);
+$color-blue: #00c2ff;
+$color-yellow: #ffd24d;
+$color-purple: #bd00ff;
+
+$shadow-neon-primary: 0 0 20rpx rgba(255, 80, 30, 0.4);
+$shadow-neon-primary-strong: 0 0 40rpx rgba(255, 80, 30, 0.6);
+$shadow-neon-blue: 0 0 20rpx rgba(0, 194, 255, 0.4);
+
 $radius-md: 20rpx;
 $radius-lg: 28rpx;
 $radius-xl: 36rpx;

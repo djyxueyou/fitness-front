@@ -22,6 +22,12 @@ const volumeText = computed(() =>
     : '--'
 )
 const prs = computed(() => summary.value?.prs || [])
+const comparisons = computed(() => summary.value?.comparisons || [])
+const highlightedComparisons = computed(() =>
+  comparisons.value
+    .filter((item) => item.volumeDeltaKg !== null || item.maxWeightDeltaKg !== null)
+    .slice(0, 4)
+)
 
 function goHome() {
   workoutStore.setCompletedSummary(null)
@@ -41,14 +47,19 @@ function goDetail() {
 async function saveAsTemplate() {
   const current = summary.value
   if (!current?.trainingId || savingTemplate.value) return
+  const plannedItems = current.plannedItems || []
+  if (!plannedItems.length) {
+    uni.showToast({ title: '没有可保存的模板动作', icon: 'none' })
+    return
+  }
 
   savingTemplate.value = true
   try {
-    await templateStore.saveFromTraining(current.trainingId, `${current.trainingName} 模板`)
+    await templateStore.saveFromPlan(`${current.trainingName} 模板`, plannedItems)
     uni.showToast({ title: '已保存到我的模板', icon: 'none' })
   } catch (err) {
     uni.showToast({ title: '保存模板失败', icon: 'none' })
-    console.error('[template] save from training failed', err)
+    console.error('[template] save from plan failed', err)
   } finally {
     savingTemplate.value = false
   }
@@ -70,6 +81,18 @@ function prTypeLabel(type: string) {
 function prValueText(type: string, value: number) {
   if (type === 'MAX_REPS') return `${value} 次`
   return `${formatWeight(value, weightUnit.value, 1)} ${weightUnit.value}`
+}
+
+function deltaText(value?: number | null) {
+  if (value === undefined || value === null) return '首次记录'
+  if (value === 0) return '持平'
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${formatWeight(value, weightUnit.value, 1)} ${weightUnit.value}`
+}
+
+function deltaClass(value?: number | null) {
+  if (value === undefined || value === null || value === 0) return ''
+  return value > 0 ? 'workout-summary__compare-value--up' : 'workout-summary__compare-value--down'
 }
 </script>
 
@@ -107,6 +130,23 @@ function prValueText(type: string, value: number) {
         <view class="workout-summary__note-title">下一步</view>
         <view class="workout-summary__note-copy">
           可以回首页查看本周训练变化，或进入训练详情复盘每个动作。
+        </view>
+      </view>
+
+      <view v-if="highlightedComparisons.length" class="glass-card workout-summary__compare">
+        <view class="workout-summary__note-title">相比上次</view>
+        <view
+          v-for="item in highlightedComparisons"
+          :key="item.exerciseId"
+          class="workout-summary__compare-row"
+        >
+          <view>
+            <view class="workout-summary__compare-name">{{ item.exerciseName }}</view>
+            <view class="workout-summary__compare-sub">容量变化</view>
+          </view>
+          <view class="workout-summary__compare-value" :class="deltaClass(item.volumeDeltaKg)">
+            {{ deltaText(item.volumeDeltaKg) }}
+          </view>
         </view>
       </view>
 
@@ -204,6 +244,48 @@ function prValueText(type: string, value: number) {
   &__prs {
     margin-top: 24rpx;
     padding: 28rpx;
+  }
+
+  &__compare {
+    margin-top: 24rpx;
+    padding: 28rpx;
+  }
+
+  &__compare-row {
+    margin-top: 18rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    padding: 18rpx;
+    border-radius: 22rpx;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &__compare-name {
+    color: #f5f5fa;
+    font-size: 24rpx;
+    font-weight: 800;
+  }
+
+  &__compare-sub {
+    margin-top: 6rpx;
+    color: #828296;
+    font-size: 20rpx;
+  }
+
+  &__compare-value {
+    color: #b8b8c8;
+    font-size: 26rpx;
+    font-weight: 900;
+
+    &--up {
+      color: #3dd9a2;
+    }
+
+    &--down {
+      color: #ff6b4a;
+    }
   }
 
   &__pr {

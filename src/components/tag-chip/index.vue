@@ -18,7 +18,7 @@ withDefaults(
     :class="{ 'tag-chip--active': active }"
     :style="
       active
-        ? { background: 'linear-gradient(135deg, #ff501e, #ffa03c)', color: '#ffffff' }
+        ? { background: 'linear-gradient(135deg, #ff501e, #ff8c00)', color: '#ffffff' }
         : { background: 'rgba(255,255,255,0.06)', color }
     "
   >
@@ -31,10 +31,16 @@ withDefaults(
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 60rpx;
-  padding: 0 24rpx;
-  border-radius: 22rpx;
-  font-size: 22rpx;
-  font-weight: 600;
+  min-height: 64rpx;
+  padding: 0 32rpx;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  transition: all 0.2s ease;
+
+  &--active {
+    box-shadow: 0 4rpx 16rpx rgba(255, 80, 30, 0.4);
+    transform: translateY(-2rpx);
+  }
 }
 </style>
