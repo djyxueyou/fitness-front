@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import AppHeader from '@/components/app-header/index.vue'
 import { routes } from '@/utils/navigation'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { formatSeconds } from '@/utils/format'
 import { formatWeight } from '@/utils/unit'
 import { useProfileStore } from '@/stores/profile'
@@ -45,6 +46,7 @@ function goDetail() {
 }
 
 async function saveAsTemplate() {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   const current = summary.value
   if (!current?.trainingId || savingTemplate.value) return
   const plannedItems = current.plannedItems || []

@@ -5,10 +5,12 @@ import { clearToken } from '@/api/http'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { emitAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
+import { useMembershipStore } from '@/stores/membership'
 import { useProfileStore } from '@/stores/profile'
 import { formatCompactWeight } from '@/utils/unit'
 
 const profileStore = useProfileStore()
+const membershipStore = useMembershipStore()
 const avatarText = computed(() => (profileStore.nickname || 'U').slice(0, 1).toUpperCase())
 const weightUnit = computed(() => profileStore.unit)
 const profileStats = computed(() => [
@@ -54,7 +56,11 @@ onShow(async () => {
     uni.switchTab({ url: routes.home })
     return
   }
-  await Promise.all([profileStore.refreshProfile(), profileStore.refreshSummary()])
+  await Promise.all([
+    profileStore.refreshProfile(),
+    profileStore.refreshSummary(),
+    membershipStore.refreshStatus()
+  ])
 })
 
 function openPage(path: string) {
@@ -71,6 +77,7 @@ function logout() {
       if (!res.confirm) return
       clearToken()
       profileStore.resetProfile()
+      membershipStore.reset()
       emitAuthChanged()
       uni.showToast({ title: '已退出登录', icon: 'none' })
       uni.switchTab({ url: routes.home })
@@ -117,6 +124,14 @@ function getToneBg(tone?: string) {
       </view>
 
       <view class="section-label profile__section-label">功能</view>
+      <view class="glass-card profile__membership btn-press" @tap="openPage(routes.membership)">
+        <view>
+          <view class="profile__membership-title">会员中心</view>
+          <view class="profile__membership-sub">{{ membershipStore.statusText }}</view>
+        </view>
+        <view class="profile__membership-action">查看</view>
+      </view>
+
       <view class="profile__menu">
         <view
           v-for="item in menuItems"
@@ -221,6 +236,36 @@ function getToneBg(tone?: string) {
 
   &__section-label {
     margin: 28rpx 0 16rpx;
+  }
+
+  &__membership {
+    margin-top: 22rpx;
+    padding: 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-color: rgba(255, 80, 30, 0.22);
+  }
+
+  &__membership-title {
+    color: #f5f5fa;
+    font-size: 28rpx;
+    font-weight: 800;
+  }
+
+  &__membership-sub {
+    margin-top: 8rpx;
+    color: #828296;
+    font-size: 22rpx;
+  }
+
+  &__membership-action {
+    padding: 12rpx 20rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 80, 30, 0.16);
+    color: #ff7a32;
+    font-size: 22rpx;
+    font-weight: 800;
   }
 
   &__menu {

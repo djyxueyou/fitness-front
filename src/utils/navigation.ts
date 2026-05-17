@@ -15,7 +15,8 @@ export const routes = {
   templateManager: '/pages/profile/template-manager',
   favorites: '/pages/profile/favorites',
   settings: '/pages/profile/settings',
-  about: '/pages/profile/about'
+  about: '/pages/profile/about',
+  membership: '/pages/profile/membership'
 } as const
 
 export function goBack() {

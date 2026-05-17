@@ -94,7 +94,7 @@ function loadMore() {
 
 function formatDate(dateText: string) {
   const date = new Date(dateText)
-  return `${date.getMonth() + 1}/${date.getDate()}`
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
 }
 
 function getFilterRange(key: HistoryFilterKey) {
@@ -136,7 +136,7 @@ function toDateString(date: Date) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll" @scrolltolower="loadMore">
+  <scroll-view scroll-y class="page-scroll" lower-threshold="120" @scrolltolower="loadMore">
     <view class="page-shell safe-bottom">
       <AppHeader title="历史记录" :subtitle="subtitle" show-back @back="goBack" />
 

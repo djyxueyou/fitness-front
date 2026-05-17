@@ -25,13 +25,20 @@ const demoUrl = computed(() =>
   'mediaUrl' in (exercise.value || {}) ? exercise.value?.mediaUrl || '' : ''
 )
 const coverUrl = computed(() => exercise.value?.thumbnailUrl || '')
+const isCustomExercise = computed(() => exercise.value?.exerciseType === 'USER')
 const instructionTips = computed(() =>
-  splitContent(exercise.value?.instructionText).length
+  isCustomExercise.value
+    ? []
+    : splitContent(exercise.value?.instructionText).length
     ? splitContent(exercise.value?.instructionText)
     : exerciseTips
 )
-const mistakeTips = computed(() => splitContent(exercise.value?.commonMistakesText))
-const checklistTips = computed(() => splitContent(exercise.value?.checklistText))
+const mistakeTips = computed(() =>
+  isCustomExercise.value ? [] : splitContent(exercise.value?.commonMistakesText)
+)
+const checklistTips = computed(() =>
+  isCustomExercise.value ? [] : splitContent(exercise.value?.checklistText)
+)
 const isInCurrentWorkout = computed(() =>
   exercise.value ? workoutStore.hasExercise(exercise.value.id) : false
 )
@@ -143,7 +150,7 @@ async function addToWorkout() {
         <TagChip :text="`分类：${exercise.category}`" />
       </view>
 
-      <view class="glass-card exercise-detail__section">
+      <view v-if="instructionTips.length" class="glass-card exercise-detail__section">
         <view class="exercise-detail__section-title">动作要点</view>
         <view v-for="(tip, index) in instructionTips" :key="tip" class="exercise-detail__tip">
           <view class="exercise-detail__tip-index">{{ index + 1 }}</view>

@@ -16,7 +16,7 @@ import {
 import { getToken } from '@/api/http'
 import type { Exercise, ExerciseDetail } from '@/types/exercise'
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 8
 
 interface ListCacheEntry {
   items: Exercise[]

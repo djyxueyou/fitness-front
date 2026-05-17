@@ -84,27 +84,27 @@ const levelColorMap: Record<string, string> = {
 .exercise-item {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  padding: 24rpx;
+  gap: 24rpx;
+  padding: 30rpx 28rpx;
 
   &__avatar {
-    width: 88rpx;
-    height: 88rpx;
-    border-radius: 24rpx;
+    width: 112rpx;
+    height: 112rpx;
+    border-radius: 28rpx;
     background: rgba(255, 80, 30, 0.15);
     color: #ff501e;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 34rpx;
+    font-size: 40rpx;
     font-weight: 700;
     flex-shrink: 0;
   }
 
   &__thumb {
-    width: 88rpx;
-    height: 88rpx;
-    border-radius: 24rpx;
+    width: 112rpx;
+    height: 112rpx;
+    border-radius: 28rpx;
     background: rgba(255, 80, 30, 0.12);
     flex-shrink: 0;
   }
@@ -119,13 +119,17 @@ const levelColorMap: Record<string, string> = {
   }
 
   &__name {
-    font-size: 28rpx;
-    font-weight: 700;
+    font-size: 32rpx;
+    font-weight: 800;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__meta {
-    margin-top: 8rpx;
-    font-size: 22rpx;
+    margin-top: 12rpx;
+    font-size: 24rpx;
     color: #828296;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -135,7 +139,7 @@ const levelColorMap: Record<string, string> = {
   &__actions {
     display: flex;
     align-items: center;
-    gap: 14rpx;
+    gap: 16rpx;
   }
 
   &__favorite,
@@ -163,9 +167,9 @@ const levelColorMap: Record<string, string> = {
   }
 
   &__level {
-    padding: 8rpx 16rpx;
+    padding: 10rpx 18rpx;
     border-radius: 999rpx;
-    font-size: 20rpx;
+    font-size: 22rpx;
   }
 
   &__custom-action {

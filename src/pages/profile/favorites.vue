@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
+import ExerciseItem from '@/components/exercise-item/index.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { useExerciseStore } from '@/stores/exercise'
@@ -39,29 +40,18 @@ function openDetail(id: number) {
       />
       <EmptyState
         v-if="!favorites.length"
-        icon="♡"
+        icon="♥"
         title="暂无收藏动作"
         description="在动作库中收藏常用动作后，会显示在这里。"
       />
       <view v-else class="favorites__list">
-        <view
+        <ExerciseItem
           v-for="item in favorites"
           :key="item.id"
-          class="glass-card favorites__item"
-          @tap="openDetail(item.id)"
-        >
-          <view class="favorites__avatar">{{ item.name.slice(0, 1) }}</view>
-          <view class="favorites__body">
-            <view class="favorites__name">{{ item.name }}</view>
-            <view class="favorites__meta"
-              >{{ item.muscle }} · {{ item.equipment }} · {{ item.level }}</view
-            >
-          </view>
-          <view class="favorites__heart">♥</view>
-          <view class="favorites__delete btn-press" @tap.stop="exerciseStore.toggleFavorite(item.id)"
-            >删除</view
-          >
-        </view>
+          :exercise="item"
+          @select="openDetail"
+          @favorite="exerciseStore.toggleFavorite"
+        />
       </view>
     </view>
   </scroll-view>
@@ -72,51 +62,7 @@ function openDetail(id: number) {
   &__list {
     display: flex;
     flex-direction: column;
-    gap: 16rpx;
-  }
-
-  &__item {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-    padding: 24rpx;
-  }
-
-  &__avatar {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 22rpx;
-    background: rgba(255, 200, 80, 0.16);
-    color: #ffc850;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-  }
-
-  &__body {
-    flex: 1;
-  }
-
-  &__name {
-    font-size: 28rpx;
-    font-weight: 700;
-  }
-
-  &__meta {
-    margin-top: 8rpx;
-    color: #828296;
-    font-size: 22rpx;
-  }
-
-  &__heart {
-    color: #ff4d4f;
-    text-shadow: 0 0 12rpx rgba(255, 77, 79, 0.5);
-  }
-
-  &__delete {
-    color: #ff501e;
-    font-size: 22rpx;
+    gap: 20rpx;
   }
 }
 </style>

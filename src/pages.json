@@ -152,6 +152,15 @@
         "backgroundColorTop": "#0A0A0E",
         "backgroundColorBottom": "#0A0A0E"
       }
+    },
+    {
+      "path": "pages/profile/membership",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
     }
   ],
   "globalStyle": {

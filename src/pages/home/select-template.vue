@@ -9,6 +9,7 @@ import { fetchTrainingHistory, type TrainingHistoryItemResponse } from '@/api/tr
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 
 const templateStore = useTemplateStore()
@@ -82,6 +83,7 @@ function goBack() {
 }
 
 async function createTemplate() {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   const ok = await ensureFeatureAuth('训练模板管理')
   if (!ok) return
   uni.navigateTo({ url: routes.templateEdit })
@@ -116,6 +118,7 @@ async function goTemplateDetail(templateId: number) {
 }
 
 async function goTemplateEdit(templateId: number) {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   const ok = await ensureFeatureAuth('训练模板管理')
   if (!ok) return
   uni.navigateTo({ url: `${routes.templateEdit}?id=${templateId}` })

@@ -10,6 +10,7 @@ import {
 } from '@/api/exercise'
 import { getToken } from '@/api/http'
 import { useExerciseStore } from '@/stores/exercise'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 
 const PAGE_SIZE = 10
 const RECENT_EXERCISES_KEY = 'LIFTLOG_RECENT_EXERCISES'
@@ -192,6 +193,7 @@ function selectExercise(exercise: ExerciseSummary) {
 }
 
 async function createCustomFromKeyword() {
+  if (!(await ensureMembershipFeature('自定义动作'))) return
   const name = trimmedKeyword.value || (await promptCustomName())
   if (!name || customSaving.value) return
   if (customExists.value && name === trimmedKeyword.value) {

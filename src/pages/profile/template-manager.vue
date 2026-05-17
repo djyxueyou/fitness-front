@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import type { Template } from '@/types/template'
@@ -25,7 +26,8 @@ function goBack() {
   uni.navigateBack()
 }
 
-function createTemplate() {
+async function createTemplate() {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   uni.navigateTo({ url: routes.templateEdit })
 }
 
@@ -33,12 +35,14 @@ function goDetail(id: number) {
   uni.navigateTo({ url: `${routes.templateDetail}?id=${id}` })
 }
 
-function editTemplate(item: Template) {
+async function editTemplate(item: Template) {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   if (item.templateType === 'SYSTEM') return
   uni.navigateTo({ url: `${routes.templateEdit}?id=${item.id}` })
 }
 
-function startRename(item: Template) {
+async function startRename(item: Template) {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   if (item.templateType === 'SYSTEM') return
   editingId.value = item.id
   editName.value = item.name
@@ -50,6 +54,7 @@ function cancelRename() {
 }
 
 async function saveRename() {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   if (editingId.value === null || !editName.value.trim() || saving.value) return
   saving.value = true
   try {
@@ -65,6 +70,7 @@ async function saveRename() {
 }
 
 async function duplicateTemplate(id: number) {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   if (saving.value) return
   saving.value = true
   try {
@@ -79,6 +85,7 @@ async function duplicateTemplate(id: number) {
 }
 
 async function removeTemplate(id: number) {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   if (saving.value) return
   const confirmed = await new Promise<boolean>((resolve) => {
     uni.showModal({

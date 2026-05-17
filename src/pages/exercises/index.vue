@@ -7,6 +7,7 @@ import TagChip from '@/components/tag-chip/index.vue'
 import { getToken } from '@/api/http'
 import { useExerciseStore } from '@/stores/exercise'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { offAuthChanged, onAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
 
@@ -144,6 +145,7 @@ function showNameInput(options: { title: string; placeholder: string; value?: st
 }
 
 async function createCustomExercise() {
+  if (!(await ensureMembershipFeature('自定义动作'))) return
   const ok = await ensureFeatureAuth('自定义动作')
   if (!ok) return
   const name = await showNameInput({
@@ -166,6 +168,7 @@ async function createCustomExercise() {
 }
 
 async function renameCustomExercise(id: number) {
+  if (!(await ensureMembershipFeature('自定义动作'))) return
   const target = exerciseStore.items.find((item) => item.id === id)
   if (!target) return
   const name = await showNameInput({
@@ -185,6 +188,7 @@ async function renameCustomExercise(id: number) {
 }
 
 async function deleteCustomExercise(id: number) {
+  if (!(await ensureMembershipFeature('自定义动作'))) return
   const target = exerciseStore.items.find((item) => item.id === id)
   if (!target) return
   uni.showModal({
@@ -431,7 +435,7 @@ async function deleteCustomExercise(id: number) {
   &__list {
     display: flex;
     flex-direction: column;
-    gap: 16rpx;
+    gap: 20rpx;
   }
 
   &__footer {

@@ -12,6 +12,7 @@ import {
 } from '@/api/template'
 import type { ExerciseSummary } from '@/api/exercise'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 
@@ -82,6 +83,7 @@ async function loadTemplate() {
 }
 
 async function saveTemplate() {
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   if (!canSave.value) {
     uni.showToast({ title: '请填写名称并至少添加一个动作', icon: 'none' })
     return
