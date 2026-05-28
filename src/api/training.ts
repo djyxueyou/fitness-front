@@ -24,6 +24,7 @@ export interface TrainingSetResponse {
   setNumber: number
   weightKg: number
   reps: number
+  durationSeconds?: number
   volumeKg: number
 }
 
@@ -32,6 +33,7 @@ export interface TrainingItemDetailResponse {
   exerciseName: string
   primaryMuscle?: string
   equipment?: string
+  recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
   sortOrder: number
   targetSets: number
   completedSets: number
@@ -79,6 +81,7 @@ export interface ExerciseLastPerformanceSetResponse {
   setNumber: number
   weightKg: number
   reps: number
+  durationSeconds?: number
   volumeKg: number
 }
 
@@ -89,11 +92,13 @@ export interface ExerciseLastPerformanceResponse {
   sets: ExerciseLastPerformanceSetResponse[]
   bestWeightKg: number
   bestVolumeKg: number
+  bestDurationSeconds?: number
 }
 
 export interface SaveTrainingSetRequest {
-  weightKg: number
-  reps: number
+  weightKg?: number
+  reps?: number
+  durationSeconds?: number
 }
 
 export interface SaveTrainingItemRequest {
@@ -125,7 +130,7 @@ export interface SaveTrainingResponse {
 export interface TrainingPrResponse {
   exerciseId: number
   exerciseName: string
-  prType: 'MAX_WEIGHT' | 'MAX_REPS' | 'MAX_VOLUME' | string
+  prType: 'MAX_WEIGHT' | 'MAX_REPS' | 'MAX_VOLUME' | 'MAX_DURATION' | string
   value: number
   previousValue?: number | null
   delta?: number | null

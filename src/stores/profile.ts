@@ -17,7 +17,7 @@ export const useProfileStore = defineStore('profile', () => {
   const notifications = ref(true)
   const darkMode = ref(true)
   const unit = ref<'kg' | 'lb'>(cached?.weightUnit === 'lb' ? 'lb' : 'kg')
-  const restSeconds = ref<number>(cached?.restSeconds ?? 90)
+  const restSeconds = ref<number>(cached?.restSeconds ?? 60)
   const totalSessions = ref(0)
   const totalVolumeKg = ref(0)
   const currentStreakDays = ref(0)
@@ -65,7 +65,7 @@ export const useProfileStore = defineStore('profile', () => {
     nickname.value = 'LiftLog User'
     avatarUrl.value = ''
     unit.value = 'kg'
-    restSeconds.value = 90
+    restSeconds.value = 60
     totalSessions.value = 0
     totalVolumeKg.value = 0
     currentStreakDays.value = 0

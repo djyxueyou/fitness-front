@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import CustomExerciseDialog from '@/components/custom-exercise-dialog/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import {
   createCustomExercise,
   fetchExerciseCategories,
@@ -11,6 +13,8 @@ import {
 import { getToken } from '@/api/http'
 import { useExerciseStore } from '@/stores/exercise'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
+
+type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
 
 const PAGE_SIZE = 10
 const RECENT_EXERCISES_KEY = 'LIFTLOG_RECENT_EXERCISES'
@@ -43,6 +47,9 @@ const exercisePageNo = ref(0)
 const exerciseTotal = ref(0)
 const exerciseLoading = ref(false)
 const customSaving = ref(false)
+const customDialogVisible = ref(false)
+const customDialogName = ref('')
+const customDialogRecordType = ref<ExerciseRecordType>('BODYWEIGHT_REPS')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const trimmedKeyword = computed(() => keyword.value.trim())
@@ -114,6 +121,11 @@ async function loadExercises(reset = false) {
     return
   }
   if (quickFilter.value === 'favorite') {
+    if (!(await ensureMembershipFeature('收藏动作'))) {
+      exerciseItems.value = []
+      exerciseTotal.value = 0
+      return
+    }
     await loadFavoriteExercises()
     return
   }
@@ -194,27 +206,38 @@ function selectExercise(exercise: ExerciseSummary) {
 
 async function createCustomFromKeyword() {
   if (!(await ensureMembershipFeature('自定义动作'))) return
-  const name = trimmedKeyword.value || (await promptCustomName())
-  if (!name || customSaving.value) return
-  if (customExists.value && name === trimmedKeyword.value) {
+  customDialogName.value = trimmedKeyword.value
+  customDialogRecordType.value = 'BODYWEIGHT_REPS'
+  customDialogVisible.value = true
+}
+
+function closeCustomDialog() {
+  customDialogVisible.value = false
+}
+
+async function submitCustomExercise(payload: { name: string; recordType: ExerciseRecordType }) {
+  if (customSaving.value) return
+  if (customExists.value && payload.name === trimmedKeyword.value) {
     uni.showToast({ title: '已存在同名动作', icon: 'none' })
     return
   }
 
   customSaving.value = true
   try {
-    const created = await createCustomExercise({ name })
+    const created = await createCustomExercise(payload)
     exerciseStore.clearListCache()
     const exercise: ExerciseSummary = {
       id: created.id,
-      name,
+      name: payload.name,
       categoryCode: 'custom',
       categoryName: '自定义',
       primaryMuscle: '',
       equipment: '',
       difficultyLevel: 'BEGINNER',
+      recordType: payload.recordType,
       exerciseType: 'USER'
     }
+    closeCustomDialog()
     selectExercise(exercise)
     uni.showToast({ title: '已创建并添加', icon: 'none' })
   } catch (err) {
@@ -223,25 +246,6 @@ async function createCustomFromKeyword() {
   } finally {
     customSaving.value = false
   }
-}
-
-function promptCustomName() {
-  return new Promise<string | null>((resolve) => {
-    uni.showModal({
-      title: '新建自定义动作',
-      editable: true,
-      placeholderText: '例如：弹力带肩外旋',
-      success: (res) => {
-        if (!res.confirm) {
-          resolve(null)
-          return
-        }
-        const content = ((res as UniApp.ShowModalRes & { content?: string }).content || '').trim()
-        resolve(content || null)
-      },
-      fail: () => resolve(null)
-    } as UniApp.ShowModalOptions)
-  })
 }
 
 function isSelected(exerciseId: number) {
@@ -303,7 +307,7 @@ function isSelected(exerciseId: number) {
         >
           <view>
             <view class="exercise-picker__custom-title">{{ customCreateTitle }}</view>
-            <view class="exercise-picker__custom-sub">仅当前账号可见，创建后会加入本次训练</view>
+            <view class="exercise-picker__custom-sub">创建后会加入本次训练</view>
           </view>
           <view class="exercise-picker__custom-action">
             {{ customSaving ? '创建中' : '创建' }}
@@ -350,7 +354,18 @@ function isSelected(exerciseId: number) {
         </view>
       </scroll-view>
     </view>
+
+    <CustomExerciseDialog
+      :visible="customDialogVisible"
+      title="新建自定义动作"
+      confirm-text="创建并添加"
+      :initial-name="customDialogName"
+      :initial-record-type="customDialogRecordType"
+      @close="closeCustomDialog"
+      @submit="submitCustomExercise"
+    />
   </view>
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

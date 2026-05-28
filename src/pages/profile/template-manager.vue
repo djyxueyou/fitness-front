@@ -1,17 +1,32 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import AppHeader from '@/components/app-header/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import type { Template } from '@/types/template'
 
+interface ActionSheetItem {
+  key: string
+  label: string
+  description?: string
+  danger?: boolean
+  primary?: boolean
+}
+
 const templateStore = useTemplateStore()
 const editingId = ref<number | null>(null)
 const editName = ref('')
 const saving = ref(false)
+const actionSheetVisible = ref(false)
+const actionSheetTitle = ref('')
+const actionSheetSubtitle = ref('')
+const actionSheetItems = ref<ActionSheetItem[]>([])
+const actionTarget = ref<Template | null>(null)
 
 onShow(async () => {
   const ok = await ensureFeatureAuth('模板管理')
@@ -85,7 +100,7 @@ async function duplicateTemplate(id: number) {
 }
 
 async function removeTemplate(id: number) {
-  if (!(await ensureMembershipFeature('自定义模板'))) return
+  if (!(await ensureFeatureAuth('模板管理'))) return
   if (saving.value) return
   const confirmed = await new Promise<boolean>((resolve) => {
     uni.showModal({
@@ -110,151 +125,249 @@ async function removeTemplate(id: number) {
     saving.value = false
   }
 }
+
+function openUserTemplateActions(item: Template) {
+  actionTarget.value = item
+  actionSheetTitle.value = '管理我的模板'
+  actionSheetSubtitle.value = item.name
+  actionSheetItems.value = [
+    { key: 'detail', label: '查看详情', description: '查看动作安排和目标组数' },
+    { key: 'edit', label: '编辑内容', description: '调整动作、顺序和组数', primary: true },
+    { key: 'rename', label: '重命名', description: '修改模板名称' },
+    { key: 'duplicate', label: '复制副本', description: '复制一份新的自定义模板' },
+    { key: 'delete', label: '删除模板', description: '删除后不可恢复', danger: true }
+  ]
+  actionSheetVisible.value = true
+}
+
+function openSystemTemplateActions(item: Template) {
+  actionTarget.value = item
+  actionSheetTitle.value = '系统模板'
+  actionSheetSubtitle.value = item.name
+  actionSheetItems.value = [
+    { key: 'detail', label: '查看详情', description: '查看系统模板动作安排' },
+    { key: 'duplicate', label: '复制到我的模板', description: '复制后可自由编辑', primary: true }
+  ]
+  actionSheetVisible.value = true
+}
+
+function closeActionSheet() {
+  actionSheetVisible.value = false
+}
+
+function handleTemplateAction(action: ActionSheetItem) {
+  const item = actionTarget.value
+  closeActionSheet()
+  if (!item) return
+  if (action.key === 'detail') goDetail(item.id)
+  if (action.key === 'edit') editTemplate(item)
+  if (action.key === 'rename') startRename(item)
+  if (action.key === 'duplicate') duplicateTemplate(item.id)
+  if (action.key === 'delete') removeTemplate(item.id)
+}
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell template-manager safe-bottom">
-      <AppHeader
-        title="模板管理"
-        :subtitle="`我的 ${templateStore.userItems.length} 个 · 系统 ${templateStore.systemItems.length} 个`"
-        show-back
-        @back="goBack"
-      />
+  <view class="template-manager-page">
+    <scroll-view scroll-y class="page-scroll">
+      <view class="page-shell template-manager safe-bottom">
+        <AppHeader title="模板管理" subtitle="系统模板可查看和复制，自定义模板可编辑" show-back @back="goBack" />
 
-      <view class="gradient-fire template-manager__create btn-press" @tap="createTemplate">
-        + 新建模板
-      </view>
-
-      <view class="template-manager__section-title">我的模板</view>
-      <view class="template-manager__list">
-        <view v-if="!templateStore.userItems.length" class="glass-card template-manager__empty">
-          还没有自定义模板，点击“新建模板”创建一个。
+        <view class="template-manager__summary glass-card">
+          <view class="template-manager__summary-item">
+            <view class="template-manager__summary-value">{{ templateStore.userItems.length }}</view>
+            <view class="template-manager__summary-label">我的模板</view>
+          </view>
+          <view class="template-manager__summary-item">
+            <view class="template-manager__summary-value">{{ templateStore.systemItems.length }}</view>
+            <view class="template-manager__summary-label">系统模板</view>
+          </view>
+          <view class="template-manager__create btn-press" @tap="createTemplate">新建模板</view>
         </view>
-        <view
-          v-for="item in templateStore.userItems"
-          :key="item.id"
-          class="glass-card template-manager__item"
-        >
-          <template v-if="editingId === item.id">
-            <input v-model="editName" class="template-manager__input" />
-            <view class="gradient-fire template-manager__save btn-press" @tap="saveRename">
-              保存
-            </view>
-            <view class="glass-card template-manager__action btn-press" @tap="cancelRename">
-              取消
-            </view>
-          </template>
-          <template v-else>
-            <view
-              class="template-manager__icon"
-              :style="{ background: item.color, color: item.accent }"
-            >
-              {{ item.tag }}
-            </view>
-            <view class="template-manager__body" @tap="goDetail(item.id)">
-              <view class="template-manager__name">{{ item.name }}</view>
-              <view class="template-manager__meta">
-                {{ item.exercises }} 个动作 · {{ item.duration }} min
+
+        <view class="template-manager__section-title">我的模板</view>
+        <view class="template-manager__list">
+          <view v-if="!templateStore.userItems.length" class="glass-card template-manager__empty">
+            还没有自定义模板。可以从系统模板复制，或点击“新建模板”创建。
+          </view>
+
+          <view
+            v-for="item in templateStore.userItems"
+            :key="item.id"
+            class="glass-card template-manager__item"
+          >
+            <template v-if="editingId === item.id">
+              <input v-model="editName" class="template-manager__input" focus />
+              <view class="template-manager__rename-actions">
+                <view class="template-manager__small-btn template-manager__small-btn--primary" @tap="saveRename">
+                  保存
+                </view>
+                <view class="template-manager__small-btn" @tap="cancelRename">取消</view>
               </view>
-            </view>
-            <view class="template-manager__actions">
-              <view class="glass-card template-manager__action btn-press" @tap="editTemplate(item)">
-                编辑
+            </template>
+
+            <template v-else>
+              <view class="template-manager__row">
+                <view class="template-manager__main" @tap="goDetail(item.id)">
+                  <view
+                    class="template-manager__icon"
+                    :style="{ background: item.color, color: item.accent }"
+                  >
+                    {{ item.tag }}
+                  </view>
+                  <view class="template-manager__body">
+                    <view class="template-manager__name">{{ item.name }}</view>
+                    <view class="template-manager__meta">
+                      {{ item.exercises }} 个动作 · {{ item.duration }} min
+                    </view>
+                    <view v-if="item.description" class="template-manager__desc">
+                      {{ item.description }}
+                    </view>
+                  </view>
+                </view>
+
+                <view class="template-manager__menu btn-press" @tap.stop="openUserTemplateActions(item)">
+                  管理
+                </view>
               </view>
-              <view class="glass-card template-manager__action btn-press" @tap="startRename(item)">
-                改名
+            </template>
+          </view>
+        </view>
+
+        <view class="template-manager__section-title">系统模板</view>
+        <view class="template-manager__list">
+          <view
+            v-for="item in templateStore.systemItems"
+            :key="item.id"
+            class="glass-card template-manager__item template-manager__item--system"
+          >
+            <view class="template-manager__row">
+              <view class="template-manager__main" @tap="goDetail(item.id)">
+                <view
+                  class="template-manager__icon"
+                  :style="{ background: item.color, color: item.accent }"
+                >
+                  SYS
+                </view>
+                <view class="template-manager__body">
+                  <view class="template-manager__name">{{ item.name }}</view>
+                  <view class="template-manager__meta">
+                    {{ item.exercises }} 个动作 · 只读，可复制到我的模板
+                  </view>
+                  <view v-if="item.description" class="template-manager__desc">
+                    {{ item.description }}
+                  </view>
+                </view>
               </view>
-              <view
-                class="glass-card template-manager__action btn-press"
-                @tap="duplicateTemplate(item.id)"
-              >
+
+              <view class="template-manager__menu template-manager__menu--primary btn-press" @tap.stop="openSystemTemplateActions(item)">
                 复制
               </view>
-              <view class="template-manager__danger btn-press" @tap="removeTemplate(item.id)">
-                删除
-              </view>
             </view>
-          </template>
+          </view>
         </view>
       </view>
 
-      <view class="template-manager__section-title">系统模板</view>
-      <view class="template-manager__list">
-        <view
-          v-for="item in templateStore.systemItems"
-          :key="item.id"
-          class="glass-card template-manager__item"
-        >
-          <view
-            class="template-manager__icon"
-            :style="{ background: item.color, color: item.accent }"
-          >
-            {{ item.tag }}
-          </view>
-          <view class="template-manager__body" @tap="goDetail(item.id)">
-            <view class="template-manager__name">{{ item.name }}</view>
-            <view class="template-manager__meta">
-              {{ item.exercises }} 个动作 · 只读，可复制到我的模板
-            </view>
-          </view>
-          <view class="template-manager__actions">
-            <view
-              class="glass-card template-manager__action btn-press"
-              @tap="duplicateTemplate(item.id)"
-            >
-              复制
-            </view>
-          </view>
-        </view>
-      </view>
-    </view>
-  </scroll-view>
+    </scroll-view>
+
+    <AppActionSheet
+      :visible="actionSheetVisible"
+      :title="actionSheetTitle"
+      :subtitle="actionSheetSubtitle"
+      :items="actionSheetItems"
+      @close="closeActionSheet"
+      @select="handleTemplateAction"
+    />
+  </view>
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>
 .template-manager {
+  &__summary {
+    padding: 24rpx;
+    display: grid;
+    grid-template-columns: 1fr 1fr 180rpx;
+    align-items: center;
+    gap: 18rpx;
+    margin-bottom: 30rpx;
+  }
+
+  &__summary-item {
+    min-width: 0;
+  }
+
+  &__summary-value {
+    color: #f5f5fa;
+    font-size: 42rpx;
+    font-weight: 900;
+  }
+
+  &__summary-label {
+    margin-top: 4rpx;
+    color: #828296;
+    font-size: 22rpx;
+  }
+
   &__create {
-    min-height: 92rpx;
-    border-radius: 28rpx;
+    height: 72rpx;
+    border-radius: 24rpx;
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
-    font-size: 28rpx;
-    font-weight: 700;
-    margin-bottom: 28rpx;
+    font-size: 24rpx;
+    font-weight: 900;
   }
 
   &__section-title {
     margin: 28rpx 0 16rpx;
     color: #f5f5fa;
     font-size: 30rpx;
-    font-weight: 800;
+    font-weight: 900;
   }
 
   &__list {
     display: flex;
     flex-direction: column;
-    gap: 16rpx;
+    gap: 18rpx;
   }
 
   &__item {
     padding: 24rpx;
+    border-color: rgba(255, 255, 255, 0.08);
+
+    &--system {
+      background: rgba(255, 255, 255, 0.035);
+    }
+  }
+
+  &__row,
+  &__main {
     display: flex;
     align-items: center;
     gap: 18rpx;
   }
 
+  &__row {
+    justify-content: space-between;
+  }
+
+  &__main {
+    flex: 1;
+    min-width: 0;
+  }
+
   &__icon {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 22rpx;
+    width: 76rpx;
+    height: 76rpx;
+    border-radius: 24rpx;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 22rpx;
-    font-weight: 700;
+    font-weight: 900;
     flex-shrink: 0;
   }
 
@@ -264,55 +377,76 @@ async function removeTemplate(id: number) {
   }
 
   &__name {
-    font-size: 28rpx;
-    font-weight: 700;
+    color: #f5f5fa;
+    font-size: 30rpx;
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  &__meta {
+  &__meta,
+  &__desc {
     margin-top: 8rpx;
     color: #828296;
     font-size: 22rpx;
+    line-height: 1.45;
   }
 
-  &__actions {
+  &__desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  &__menu,
+  &__small-btn {
+    min-width: 92rpx;
+    min-height: 56rpx;
+    padding: 0 18rpx;
+    border-radius: 18rpx;
+    background: rgba(255, 255, 255, 0.07);
+    color: #f5f5fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22rpx;
+    font-weight: 900;
+    flex-shrink: 0;
+
+    &--primary {
+      background: rgba(255, 80, 30, 0.14);
+      color: #ff7a32;
+      border: 1px solid rgba(255, 80, 30, 0.2);
+    }
+  }
+
+  &__rename-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 10rpx;
-    max-width: 280rpx;
+    gap: 12rpx;
+    margin-top: 22rpx;
   }
 
-  &__action,
-  &__save {
-    padding: 14rpx 18rpx;
-    border-radius: 18rpx;
-    font-size: 22rpx;
-    color: #828296;
-  }
-
-  &__save {
+  &__small-btn--primary {
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
     color: #fff;
   }
 
-  &__danger {
-    padding: 14rpx 18rpx;
-    border-radius: 18rpx;
-    background: rgba(248, 71, 33, 0.14);
-    color: #ff501e;
-    font-size: 22rpx;
-  }
-
   &__input {
-    flex: 1;
-    min-height: 72rpx;
+    min-height: 78rpx;
     color: #f5f5fa;
-    border-bottom: 1px solid #ff501e;
+    font-size: 30rpx;
+    font-weight: 800;
+    border-bottom: 1px solid rgba(255, 80, 30, 0.6);
   }
 
   &__empty {
-    padding: 24rpx;
+    padding: 28rpx;
     color: #828296;
     font-size: 24rpx;
+    line-height: 1.6;
   }
 }
 </style>

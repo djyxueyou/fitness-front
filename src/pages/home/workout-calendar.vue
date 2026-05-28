@@ -4,21 +4,40 @@ import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import GlassCard from '@/components/glass-card/index.vue'
 import { fetchTrainingHistory, type TrainingHistoryItemResponse } from '@/api/training'
+import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { useTrainingStore } from '@/stores/training'
 
 const trainingStore = useTrainingStore()
+const authChecking = ref(true)
 const currentYear = ref(new Date().getFullYear())
 const currentMonth = ref(new Date().getMonth())
 const selectedDate = ref(toDateString(new Date()))
 const calendarHistory = ref<TrainingHistoryItemResponse[]>([])
 const daysOfWeek = ['日', '一', '二', '三', '四', '五', '六']
+let authFlowRunning = false
+let suppressNextAuthUntil = 0
 
 onShow(async () => {
+  if (Date.now() < suppressNextAuthUntil) return
+  if (authFlowRunning) return
+  authFlowRunning = true
+  authChecking.value = true
+  const ok = await ensureFeatureAuth('训练日历')
+  if (!ok) {
+    // Closing the login page briefly re-triggers this tab's onShow before switchTab finishes.
+    suppressNextAuthUntil = Date.now() + 1200
+    authChecking.value = false
+    authFlowRunning = false
+    uni.switchTab({ url: routes.home })
+    return
+  }
   await Promise.all([
     fetchMonthHistory(),
     trainingStore.fetchCalendar(currentYear.value, currentMonth.value + 1)
   ])
+  authChecking.value = false
+  authFlowRunning = false
 })
 
 const firstDay = computed(() => new Date(currentYear.value, currentMonth.value, 1).getDay())
@@ -63,10 +82,6 @@ const calendarMap = computed(() => {
   })
   return map
 })
-
-function goBack() {
-  uni.navigateBack()
-}
 
 async function prevMonth() {
   if (currentMonth.value === 0) {
@@ -139,7 +154,9 @@ function selectDay(day: number) {
 <template>
   <scroll-view scroll-y class="page-scroll">
     <view class="page-shell safe-bottom">
-      <AppHeader title="训练日历" subtitle="按月份浏览训练记录" show-back @back="goBack">
+      <view v-if="authChecking" class="calendar__auth-state muted">正在打开登录授权...</view>
+      <template v-else>
+      <AppHeader title="训练日历" subtitle="按月份浏览训练记录">
         <template #right>
           <view class="glass-card calendar__trend btn-press" @tap="openTrend">趋势</view>
         </template>
@@ -199,12 +216,21 @@ function selectDay(day: number) {
           当前日期没有训练记录。
         </view>
       </view>
+      </template>
     </view>
   </scroll-view>
 </template>
 
 <style lang="scss" scoped>
 .calendar {
+  &__auth-state {
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26rpx;
+  }
+
   &__trend,
   &__month-btn {
     min-width: 72rpx;

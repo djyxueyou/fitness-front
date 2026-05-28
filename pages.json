@@ -25,7 +25,25 @@
       }
     },
     {
+      "path": "pages/home/template-detail",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/home/template-edit",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/home/workout-active",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/home/workout-summary",
       "style": {
         "navigationStyle": "custom"
       }
@@ -73,6 +91,12 @@
       }
     },
     {
+      "path": "pages/auth/login",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/profile/settings",
       "style": {
         "navigationStyle": "custom"
@@ -86,6 +110,12 @@
     },
     {
       "path": "pages/profile/membership",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/agreement/user",
       "style": {
         "navigationStyle": "custom"
       }
@@ -106,6 +136,10 @@
       {
         "pagePath": "pages/home/index",
         "text": "首页"
+      },
+      {
+        "pagePath": "pages/home/workout-calendar",
+        "text": "日历"
       },
       {
         "pagePath": "pages/exercises/index",

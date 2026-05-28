@@ -2,12 +2,15 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import TagChip from '@/components/tag-chip/index.vue'
 import { getToken } from '@/api/http'
-import { exerciseRecords, exerciseTips } from '@/mock/exercises'
+import { fetchExerciseLastPerformance, type ExerciseLastPerformanceResponse } from '@/api/training'
 import { useExerciseStore } from '@/stores/exercise'
 import { useWorkoutStore } from '@/stores/workout'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { formatSeconds } from '@/utils/format'
 
 const exerciseStore = useExerciseStore()
 const workoutStore = useWorkoutStore()
@@ -16,22 +19,35 @@ const loading = ref(true)
 const isAdded = ref(false)
 
 const exercise = computed(() => exerciseStore.getById(exerciseId.value))
-const record = computed(() =>
-  exercise.value
-    ? (exerciseRecords[exercise.value.id] ?? { maxWeight: '--', bestSet: '--' })
-    : { maxWeight: '--', bestSet: '--' }
-)
+const lastPerformance = ref<ExerciseLastPerformanceResponse | null>(null)
+
+const record = computed(() => {
+  const p = lastPerformance.value
+  if (!p) return { maxWeight: '--', bestSet: '--' }
+  if (exercise.value?.recordType === 'DURATION') {
+    return {
+      maxWeight: p.bestDurationSeconds ? formatSeconds(p.bestDurationSeconds) : '--',
+      bestSet: p.sets.length ? formatSeconds(p.sets[0].durationSeconds || 0) : '--'
+    }
+  }
+  if (exercise.value?.recordType === 'BODYWEIGHT_REPS') {
+    return {
+      maxWeight: p.sets.length ? `${Math.max(...p.sets.map((set) => set.reps || 0))} 次` : '--',
+      bestSet: p.sets.length ? `自重 x ${p.sets[0].reps}` : '--'
+    }
+  }
+  return {
+    maxWeight: `${p.bestWeightKg} kg`,
+    bestSet: p.sets.length ? `${p.sets[0].weightKg} kg x ${p.sets[0].reps}` : '--'
+  }
+})
 const demoUrl = computed(() =>
   'mediaUrl' in (exercise.value || {}) ? exercise.value?.mediaUrl || '' : ''
 )
 const coverUrl = computed(() => exercise.value?.thumbnailUrl || '')
 const isCustomExercise = computed(() => exercise.value?.exerciseType === 'USER')
 const instructionTips = computed(() =>
-  isCustomExercise.value
-    ? []
-    : splitContent(exercise.value?.instructionText).length
-    ? splitContent(exercise.value?.instructionText)
-    : exerciseTips
+  isCustomExercise.value ? [] : splitContent(exercise.value?.instructionText)
 )
 const mistakeTips = computed(() =>
   isCustomExercise.value ? [] : splitContent(exercise.value?.commonMistakesText)
@@ -42,21 +58,38 @@ const checklistTips = computed(() =>
 const isInCurrentWorkout = computed(() =>
   exercise.value ? workoutStore.hasExercise(exercise.value.id) : false
 )
+const bestMetricLabel = computed(() =>
+  exercise.value?.recordType === 'DURATION'
+    ? '最长计时'
+    : exercise.value?.recordType === 'BODYWEIGHT_REPS'
+      ? '最多次数'
+      : '最大重量'
+)
+const bestMetricSubLabel = computed(() =>
+  exercise.value?.recordType === 'WEIGHT_REPS' ? '1RM' : '历史表现'
+)
 
-onLoad((query) => {
+onLoad(async (query) => {
   const id = Number(query.id)
-  if (!Number.isNaN(id) && id > 0) {
-    exerciseId.value = id
-    loadDetail(id)
+  if (Number.isNaN(id) || id <= 0) {
+    loading.value = false
     return
   }
-  loading.value = false
+  const ok = await ensureFeatureAuth('查看动作详情')
+  if (!ok) {
+    uni.navigateBack()
+    return
+  }
+  exerciseId.value = id
+  loadDetail(id)
 })
 
 async function loadDetail(id: number) {
   loading.value = true
   try {
     await exerciseStore.fetchDetail(id)
+    // Also fetch last performance for this exercise
+    fetchExerciseLastPerformance(id).then(p => { lastPerformance.value = p }).catch(() => {})
   } catch (err) {
     console.error('[exercise-detail] fetch failed', err)
     uni.showToast({ title: '动作详情加载失败', icon: 'none' })
@@ -88,6 +121,7 @@ async function toggleFavorite() {
     return
   }
 
+  if (!(await ensureMembershipFeature('收藏动作'))) return
   await exerciseStore.toggleFavorite(exercise.value.id)
 }
 
@@ -129,7 +163,7 @@ async function addToWorkout() {
 
       <view class="exercise-detail__preview">
         <view class="exercise-detail__preview-card">
-          <image v-if="demoUrl" class="exercise-detail__demo" :src="demoUrl" mode="aspectFit" />
+          <image v-if="demoUrl" class="exercise-detail__demo" :src="demoUrl" mode="aspectFit" lazy-load />
           <image
             v-else-if="coverUrl"
             class="exercise-detail__demo"
@@ -157,6 +191,10 @@ async function addToWorkout() {
           <view class="exercise-detail__tip-text">{{ tip }}</view>
         </view>
       </view>
+      <view v-else-if="!isCustomExercise" class="glass-card exercise-detail__section">
+        <view class="exercise-detail__section-title">动作要点</view>
+        <view class="muted">暂无详细说明</view>
+      </view>
 
       <view v-if="mistakeTips.length" class="glass-card exercise-detail__section">
         <view class="exercise-detail__section-title">常见错误</view>
@@ -183,9 +221,9 @@ async function addToWorkout() {
         </view>
         <view class="exercise-detail__records">
           <view class="exercise-detail__record">
-            <view class="muted">最大重量</view>
+            <view class="muted">{{ bestMetricLabel }}</view>
             <view class="exercise-detail__record-value">{{ record.maxWeight }}</view>
-            <view class="muted">1RM</view>
+            <view class="muted">{{ bestMetricSubLabel }}</view>
           </view>
           <view class="exercise-detail__record">
             <view class="muted">最佳工作组</view>
@@ -209,6 +247,7 @@ async function addToWorkout() {
       </view>
     </view>
   </scroll-view>
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

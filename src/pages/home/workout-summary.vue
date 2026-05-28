@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import AppHeader from '@/components/app-header/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import { routes } from '@/utils/navigation'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { formatSeconds } from '@/utils/format'
@@ -178,6 +179,7 @@ function deltaClass(value?: number | null) {
       </view>
     </view>
   </scroll-view>
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

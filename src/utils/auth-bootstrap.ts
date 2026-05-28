@@ -6,8 +6,18 @@ const LOGIN_TIMEOUT_MS = 2500
 let loginInFlight: Promise<void> | null = null
 let authRunSeq = 0
 
+const PERSISTENT_MOCK_KEY = 'LIFTLOG_MOCK_OPENID'
+
+function getPersistentMockCode() {
+  const stored = uni.getStorageSync(PERSISTENT_MOCK_KEY)
+  if (stored) return String(stored)
+  const code = `mock-${Date.now()}`
+  uni.setStorageSync(PERSISTENT_MOCK_KEY, code)
+  return code
+}
+
 function mockCode() {
-  return `mock-${Date.now()}`
+  return getPersistentMockCode()
 }
 
 function isMockWechatCode(code: string) {
@@ -101,6 +111,10 @@ async function runLogin(runId: number) {
     return
   }
   setCachedUserProfile(profile)
+}
+
+export async function validateStoredToken() {
+  await ensureTokenValid()
 }
 
 export async function bootstrapAuth() {

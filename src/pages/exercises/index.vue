@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
+import CustomExerciseDialog from '@/components/custom-exercise-dialog/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import ExerciseItem from '@/components/exercise-item/index.vue'
-import TagChip from '@/components/tag-chip/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import { getToken } from '@/api/http'
 import { useExerciseStore } from '@/stores/exercise'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
@@ -11,10 +12,17 @@ import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { offAuthChanged, onAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
 
+type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
+
 const exerciseStore = useExerciseStore()
 const activeCategoryCode = ref('')
 const activeScope = ref<'ALL' | 'CUSTOM'>('ALL')
 const searchText = ref('')
+const customDialogVisible = ref(false)
+const customDialogMode = ref<'create' | 'edit'>('create')
+const customDialogName = ref('')
+const customDialogRecordType = ref<ExerciseRecordType>('BODYWEIGHT_REPS')
+const editingCustomId = ref<number | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const initialLoading = computed(() => exerciseStore.loading && !exerciseStore.items.length)
@@ -29,8 +37,8 @@ const emptyTitle = computed(() =>
 )
 const emptyDescription = computed(() =>
   activeScope.value === 'CUSTOM'
-    ? '训练中添加动作时，可以直接新建只属于你的自定义动作。'
-    : '可以换个分类，或者清空搜索关键词再试。'
+    ? '可以新建只属于你的动作，用于训练记录和模板编排。'
+    : '可以切换分类，或清空搜索关键词后再试。'
 )
 
 onLoad(async () => {
@@ -95,17 +103,19 @@ async function refreshAfterAuthChanged() {
   await exerciseStore.refreshFavoriteStates()
 }
 
-function openDetail(id: number) {
+async function openDetail(id: number) {
   if (!Number.isFinite(id) || id <= 0) {
     console.error('[exercise] invalid detail id', id)
     uni.showToast({ title: '动作参数错误', icon: 'none' })
     return
   }
+  const ok = await ensureFeatureAuth('查看动作详情')
+  if (!ok) return
   uni.navigateTo({ url: `${routes.exerciseDetail}?id=${id}` })
 }
 
 async function openFavorites() {
-  const ok = await ensureFeatureAuth('我的收藏')
+  const ok = await ensureMembershipFeature('我的收藏')
   if (!ok) return
   uni.navigateTo({ url: routes.favorites })
 }
@@ -121,74 +131,61 @@ async function onFavorite(id: number) {
     return
   }
 
+  if (!(await ensureMembershipFeature('收藏动作'))) return
   await exerciseStore.toggleFavorite(id)
-}
-
-function showNameInput(options: { title: string; placeholder: string; value?: string }) {
-  return new Promise<string | null>((resolve) => {
-    uni.showModal({
-      title: options.title,
-      editable: true,
-      placeholderText: options.placeholder,
-      content: options.value || '',
-      success: (res) => {
-        if (!res.confirm) {
-          resolve(null)
-          return
-        }
-        const content = ((res as UniApp.ShowModalRes & { content?: string }).content || '').trim()
-        resolve(content || null)
-      },
-      fail: () => resolve(null)
-    } as UniApp.ShowModalOptions)
-  })
 }
 
 async function createCustomExercise() {
   if (!(await ensureMembershipFeature('自定义动作'))) return
   const ok = await ensureFeatureAuth('自定义动作')
   if (!ok) return
-  const name = await showNameInput({
-    title: '新建自定义动作',
-    placeholder: '例如：弹力带肩外旋',
-    value: searchText.value
-  })
-  if (!name) return
-
-  try {
-    await exerciseStore.createCustom({ name })
-    activeScope.value = 'CUSTOM'
-    activeCategoryCode.value = ''
-    searchText.value = ''
-    uni.showToast({ title: '已创建自定义动作', icon: 'none' })
-  } catch (err) {
-    uni.showToast({ title: '新建动作失败', icon: 'none' })
-    console.error('[exercise] create custom failed', err)
-  }
+  editingCustomId.value = null
+  customDialogMode.value = 'create'
+  customDialogName.value = searchText.value.trim()
+  customDialogRecordType.value = 'BODYWEIGHT_REPS'
+  customDialogVisible.value = true
 }
 
 async function renameCustomExercise(id: number) {
   if (!(await ensureMembershipFeature('自定义动作'))) return
   const target = exerciseStore.items.find((item) => item.id === id)
   if (!target) return
-  const name = await showNameInput({
-    title: '重命名动作',
-    placeholder: '输入新的动作名称',
-    value: target.name
-  })
-  if (!name || name === target.name) return
+  editingCustomId.value = id
+  customDialogMode.value = 'edit'
+  customDialogName.value = target.name
+  customDialogRecordType.value = (target.recordType as ExerciseRecordType) || 'BODYWEIGHT_REPS'
+  customDialogVisible.value = true
+}
 
+function closeCustomDialog() {
+  customDialogVisible.value = false
+  editingCustomId.value = null
+}
+
+async function submitCustomExercise(payload: { name: string; recordType: ExerciseRecordType }) {
   try {
-    await exerciseStore.updateCustom(id, { name })
-    uni.showToast({ title: '已重命名', icon: 'none' })
+    if (customDialogMode.value === 'edit' && editingCustomId.value) {
+      await exerciseStore.updateCustom(editingCustomId.value, payload)
+      uni.showToast({ title: '已更新自定义动作', icon: 'none' })
+    } else {
+      await exerciseStore.createCustom(payload)
+      activeScope.value = 'CUSTOM'
+      activeCategoryCode.value = ''
+      searchText.value = ''
+      uni.showToast({ title: '已创建自定义动作', icon: 'none' })
+    }
+    closeCustomDialog()
   } catch (err) {
-    uni.showToast({ title: '重命名失败', icon: 'none' })
-    console.error('[exercise] rename custom failed', err)
+    uni.showToast({
+      title: customDialogMode.value === 'edit' ? '更新动作失败' : '新建动作失败',
+      icon: 'none'
+    })
+    console.error('[exercise] save custom failed', err)
   }
 }
 
 async function deleteCustomExercise(id: number) {
-  if (!(await ensureMembershipFeature('自定义动作'))) return
+  if (!(await ensureFeatureAuth('自定义动作'))) return
   const target = exerciseStore.items.find((item) => item.id === id)
   if (!target) return
   uni.showModal({
@@ -211,10 +208,11 @@ async function deleteCustomExercise(id: number) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll" @scrolltolower="loadMore">
-    <view class="page-shell tab-page safe-bottom">
+  <view class="exercises-page">
+    <scroll-view scroll-y class="page-scroll">
+      <view class="page-shell tab-page safe-bottom">
       <view class="exercises__header">
-        <view>
+        <view class="exercises__header-copy">
           <view class="eyebrow">Exercise Library</view>
           <view class="title-xl">动作库</view>
           <view class="muted exercises__count">
@@ -238,70 +236,91 @@ async function deleteCustomExercise(id: number) {
         <text v-if="searchText" class="exercises__search-clear" @tap="searchText = ''">×</text>
       </view>
 
-      <scroll-view scroll-x class="exercises__tabs">
-        <view class="exercises__tabs-inner">
-          <TagChip
-            text="自定义"
-            :active="activeScope === 'CUSTOM'"
+      <view class="exercises__body">
+        <scroll-view scroll-y class="exercises__sidebar">
+          <view
+            class="exercises__sidebar-item"
+            :class="{ 'exercises__sidebar-item--active': activeScope === 'CUSTOM' }"
             @tap="switchCategory('__custom')"
-          />
-          <TagChip
+          >
+            <text>自定义</text>
+          </view>
+          <view
             v-for="category in exerciseStore.categoryOptions"
             :key="category.code || 'all'"
-            :text="category.name"
-            :active="activeScope === 'ALL' && activeCategoryCode === category.code"
+            class="exercises__sidebar-item"
+            :class="{
+              'exercises__sidebar-item--active':
+                activeScope === 'ALL' && activeCategoryCode === category.code
+            }"
             @tap="switchCategory(category.code)"
-          />
-        </view>
-      </scroll-view>
+          >
+            <text>{{ category.name }}</text>
+          </view>
+        </scroll-view>
 
-      <view
-        v-if="activeScope === 'CUSTOM'"
-        class="glass-card exercises__custom-create btn-press"
-        @tap="createCustomExercise"
-      >
-        <view>
-          <view class="exercises__custom-title">新建自定义动作</view>
-          <view class="exercises__custom-sub">只属于当前账号，可用于自由训练和模板。</view>
-        </view>
-        <view class="exercises__custom-plus">+</view>
+        <scroll-view scroll-y class="exercises__content" @scrolltolower="loadMore">
+          <view
+            v-if="activeScope === 'CUSTOM'"
+            class="glass-card exercises__custom-create btn-press"
+            @tap="createCustomExercise"
+          >
+            <view class="exercises__custom-plus">+</view>
+            <view>
+              <view class="exercises__custom-title">新建自定义动作</view>
+              <view class="exercises__custom-sub">名称和记录类型一次设置</view>
+            </view>
+          </view>
+
+          <view v-if="initialLoading" class="exercises__state muted">加载中...</view>
+
+          <view v-else-if="exerciseStore.listError" class="exercises__state">
+            <EmptyState
+              icon="⚠"
+              title="动作加载失败"
+              description="网络或服务暂时异常，可以稍后重试。"
+            />
+            <view class="gradient-fire exercises__retry btn-press" @tap="reloadExercises">
+              重新加载
+            </view>
+          </view>
+
+          <view v-else-if="!exerciseStore.items.length" class="exercises__state">
+            <EmptyState icon="🏋️" :title="emptyTitle" :description="emptyDescription" />
+          </view>
+
+          <view v-else class="exercises__list">
+            <ExerciseItem
+              v-for="item in exerciseStore.items"
+              :key="item.id"
+              :exercise="item"
+              :custom-actions="activeScope === 'CUSTOM'"
+              @select="openDetail"
+              @favorite="onFavorite"
+              @rename="renameCustomExercise"
+              @delete="deleteCustomExercise"
+            />
+          </view>
+
+          <view v-if="footerText" class="exercises__footer muted">
+            {{ footerText }}
+          </view>
+        </scroll-view>
       </view>
-
-      <view v-if="initialLoading" class="exercises__state muted">加载中...</view>
-
-      <view v-else-if="exerciseStore.listError" class="exercises__state">
-        <EmptyState
-          icon="⚠"
-          title="动作加载失败"
-          description="网络或服务暂时异常，可以稍后重试。"
-        />
-        <view class="gradient-fire exercises__retry btn-press" @tap="reloadExercises">
-          重新加载
-        </view>
       </view>
+    </scroll-view>
 
-      <view v-else-if="!exerciseStore.items.length" class="exercises__state">
-        <EmptyState icon="🏋" :title="emptyTitle" :description="emptyDescription" />
-      </view>
-
-      <view v-else class="exercises__list">
-        <ExerciseItem
-          v-for="item in exerciseStore.items"
-          :key="item.id"
-          :exercise="item"
-          :custom-actions="activeScope === 'CUSTOM'"
-          @select="openDetail"
-          @favorite="onFavorite"
-          @rename="renameCustomExercise"
-          @delete="deleteCustomExercise"
-        />
-      </view>
-
-      <view v-if="footerText" class="exercises__footer muted">
-        {{ footerText }}
-      </view>
-    </view>
-  </scroll-view>
+    <CustomExerciseDialog
+      :visible="customDialogVisible"
+      :title="customDialogMode === 'edit' ? '编辑自定义动作' : '新建自定义动作'"
+      :confirm-text="customDialogMode === 'edit' ? '保存' : '创建'"
+      :initial-name="customDialogName"
+      :initial-record-type="customDialogRecordType"
+      @close="closeCustomDialog"
+      @submit="submitCustomExercise"
+    />
+    <MembershipRequiredModal />
+  </view>
 </template>
 
 <style lang="scss" scoped>
@@ -310,7 +329,11 @@ async function deleteCustomExercise(id: number) {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 20rpx;
+    gap: 18rpx;
+  }
+
+  &__header-copy {
+    min-width: 0;
   }
 
   &__count {
@@ -318,9 +341,9 @@ async function deleteCustomExercise(id: number) {
   }
 
   &__favorites {
-    min-width: 156rpx;
-    min-height: 72rpx;
-    padding: 0 20rpx;
+    min-width: 142rpx;
+    min-height: 68rpx;
+    padding: 0 18rpx;
     border-radius: 24rpx;
     display: flex;
     align-items: center;
@@ -345,16 +368,11 @@ async function deleteCustomExercise(id: number) {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 80, 30, 0.15);
     border-radius: 32rpx;
-    transition: all 0.3s ease;
-
-    &:focus-within {
-      border-color: rgba(255, 80, 30, 0.5);
-      box-shadow: 0 0 20rpx rgba(255, 80, 30, 0.15);
-    }
   }
 
   &__search-input {
     flex: 1;
+    min-width: 0;
     color: #f5f5fa;
     font-size: 26rpx;
   }
@@ -369,54 +387,85 @@ async function deleteCustomExercise(id: number) {
     font-size: 28rpx;
   }
 
-  &__tabs {
-    margin: 24rpx -32rpx 20rpx;
-    white-space: nowrap;
+  &__body {
+    display: flex;
+    gap: 12rpx;
+    margin-top: 24rpx;
+    flex: 1;
+    min-height: 0;
   }
 
-  &__tabs-inner {
-    display: inline-flex;
-    gap: 12rpx;
-    padding: 0 32rpx;
+  &__sidebar {
+    width: 124rpx;
+    flex-shrink: 0;
+  }
+
+  &__sidebar-item {
+    min-height: 92rpx;
+    padding: 28rpx 6rpx;
+    margin-bottom: 10rpx;
+    border-radius: 22rpx;
+    font-size: 22rpx;
+    color: #b8b8c8;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid transparent;
+    word-break: keep-all;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--active {
+      background: rgba(255, 80, 30, 0.16);
+      border-color: rgba(255, 80, 30, 0.42);
+      color: #ff7a32;
+      font-weight: 900;
+    }
+  }
+
+  &__content {
+    flex: 1;
+    min-width: 0;
+    max-height: calc(100vh - 330rpx);
   }
 
   &__state {
-    padding-top: 80rpx;
+    padding-top: 44rpx;
   }
 
   &__custom-create {
-    margin-bottom: 20rpx;
-    padding: 22rpx 24rpx;
+    margin-bottom: 18rpx;
+    padding: 18rpx 20rpx;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 20rpx;
+    gap: 14rpx;
     border-color: rgba(255, 80, 30, 0.24);
   }
 
   &__custom-title {
     color: #f5f5fa;
-    font-size: 28rpx;
-    font-weight: 800;
+    font-size: 24rpx;
+    font-weight: 900;
   }
 
   &__custom-sub {
-    margin-top: 8rpx;
+    margin-top: 4rpx;
     color: #828296;
-    font-size: 22rpx;
+    font-size: 20rpx;
   }
 
   &__custom-plus {
-    width: 56rpx;
-    height: 56rpx;
-    border-radius: 18rpx;
+    width: 48rpx;
+    height: 48rpx;
+    border-radius: 16rpx;
     background: linear-gradient(135deg, #ff501e, #ffa03c);
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 34rpx;
+    font-size: 28rpx;
     font-weight: 900;
+    flex-shrink: 0;
   }
 
   &__retry {

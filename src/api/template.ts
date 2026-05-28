@@ -15,6 +15,7 @@ export interface TemplateItemResponse {
   exerciseName: string
   sortOrder: number
   targetSets: number
+  recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
 }
 
 export interface TemplateDetailResponse {

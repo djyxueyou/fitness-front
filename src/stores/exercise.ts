@@ -16,7 +16,7 @@ import {
 import { getToken } from '@/api/http'
 import type { Exercise, ExerciseDetail } from '@/types/exercise'
 
-const PAGE_SIZE = 8
+const PAGE_SIZE = 6
 
 interface ListCacheEntry {
   items: Exercise[]
@@ -46,6 +46,7 @@ function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exerc
     muscle: item.primaryMuscle || '-',
     equipment: item.equipment || '-',
     level: toLevelText(item.difficultyLevel),
+    recordType: item.recordType || 'WEIGHT_REPS',
     exerciseType: item.exerciseType || 'SYSTEM',
     thumbnailUrl: item.thumbnailUrl || item.thumbnailPath
   }

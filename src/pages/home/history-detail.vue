@@ -59,6 +59,9 @@ function itemVolume(exercise: NonNullable<typeof detail.value>['items'][number])
 }
 
 function itemMaxWeight(exercise: NonNullable<typeof detail.value>['items'][number]) {
+  if (exercise.recordType !== 'WEIGHT_REPS') {
+    return 0
+  }
   if (exercise.maxWeightKg !== undefined && exercise.maxWeightKg !== null) {
     return Number(exercise.maxWeightKg || 0)
   }
@@ -73,6 +76,8 @@ function prTypeLabel(type: string) {
       return '最多次数'
     case 'MAX_VOLUME':
       return '最大容量'
+    case 'MAX_DURATION':
+      return '最长计时'
     default:
       return '个人最佳'
   }
@@ -81,6 +86,7 @@ function prTypeLabel(type: string) {
 function prValueText(type: string, value?: number | null) {
   const numericValue = Number(value || 0)
   if (type === 'MAX_REPS') return `${numericValue} 次`
+  if (type === 'MAX_DURATION') return formatSeconds(numericValue)
   return `${formatWeight(numericValue, unit.value, 1)} ${unit.value}`
 }
 
@@ -89,6 +95,19 @@ function comparisonText(value?: number | null, unitText = 'kg') {
   if (value === 0) return '持平'
   const sign = value > 0 ? '+' : ''
   return `${sign}${formatWeight(value, unit.value, 1)} ${unitText}`
+}
+
+function setValueText(
+  exercise: NonNullable<typeof detail.value>['items'][number],
+  set: NonNullable<typeof detail.value>['items'][number]['sets'][number]
+) {
+  if (exercise.recordType === 'DURATION') {
+    return formatSeconds(Number(set.durationSeconds || 0))
+  }
+  if (exercise.recordType === 'BODYWEIGHT_REPS') {
+    return `自重 x ${set.reps}`
+  }
+  return `${formatWeight(Number(set.weightKg || 0), unit.value, 1)} ${unit.value} x ${set.reps}`
 }
 
 function comparisonClass(value?: number | null) {
@@ -167,7 +186,11 @@ function comparisonClass(value?: number | null) {
               </view>
               <view>
                 <view class="history-detail__summary-value">
-                  {{ formatWeight(itemMaxWeight(exercise), unit, 1) }} {{ unit }}
+                  {{
+                    exercise.recordType === 'WEIGHT_REPS'
+                      ? `${formatWeight(itemMaxWeight(exercise), unit, 1)} ${unit}`
+                      : '-'
+                  }}
                 </view>
                 <view class="history-detail__summary-label">最高重量</view>
               </view>
@@ -197,7 +220,7 @@ function comparisonClass(value?: number | null) {
             <view v-for="set in exercise.sets" :key="set.setNumber" class="history-detail__set">
               <view class="history-detail__set-label">第 {{ set.setNumber }} 组</view>
               <view class="history-detail__set-value">
-                {{ formatWeight(Number(set.weightKg || 0), unit, 1) }} {{ unit }} x {{ set.reps }}
+                {{ setValueText(exercise, set) }}
               </view>
             </view>
           </view>

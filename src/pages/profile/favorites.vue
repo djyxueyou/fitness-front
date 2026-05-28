@@ -4,7 +4,8 @@ import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import ExerciseItem from '@/components/exercise-item/index.vue'
-import { ensureFeatureAuth } from '@/utils/auth-guard'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useExerciseStore } from '@/stores/exercise'
 
@@ -12,7 +13,7 @@ const exerciseStore = useExerciseStore()
 const favorites = computed(() => exerciseStore.favorites)
 
 onShow(async () => {
-  const ok = await ensureFeatureAuth('个人信息')
+  const ok = await ensureMembershipFeature('我的收藏')
   if (!ok) {
     uni.switchTab({ url: routes.home })
     return
@@ -55,6 +56,7 @@ function openDetail(id: number) {
       </view>
     </view>
   </scroll-view>
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

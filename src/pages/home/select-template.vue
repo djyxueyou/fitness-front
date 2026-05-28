@@ -3,17 +3,21 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import TemplateItem from '@/components/template-item/index.vue'
+import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import type { TemplateListItemResponse } from '@/api/template'
 import { fetchTrainingHistory, type TrainingHistoryItemResponse } from '@/api/training'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
+import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
+const draftPromptStore = useWorkoutDraftPromptStore()
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
 const recentTemplates = computed(() =>
   templateStore.getRecentItemsFromHistory(recentHistory.value, 5)
@@ -133,27 +137,18 @@ async function prepareNewWorkout() {
   workoutStore.refreshDraftState()
   if (!workoutStore.hasRecoverableWorkout) return true
 
-  try {
-    const result = await new Promise<UniApp.ShowActionSheetSuccess>((resolve, reject) => {
-      uni.showActionSheet({
-        itemList: ['继续当前训练', '放弃并重新开始'],
-        success: resolve,
-        fail: reject
-      })
-    })
-
-    if (result.tapIndex === 0) {
-      if (workoutStore.restoreDraft()) {
-        uni.navigateTo({ url: routes.workoutActive })
-      }
-      return false
+  const action = await draftPromptStore.open()
+  if (action === 'continue') {
+    if (workoutStore.restoreDraft()) {
+      uni.navigateTo({ url: routes.workoutActive })
     }
-
-    workoutStore.discardWorkout()
-    return true
-  } catch {
     return false
   }
+  if (action === 'discard') {
+    workoutStore.discardWorkout()
+    return true
+  }
+  return false
 }
 </script>
 
@@ -261,6 +256,8 @@ async function prepareNewWorkout() {
       </view>
     </view>
   </scroll-view>
+  <WorkoutDraftPrompt />
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

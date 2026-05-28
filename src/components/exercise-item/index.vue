@@ -1,13 +1,38 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import type { Exercise } from '@/types/exercise'
 
-defineProps<{
+interface ActionSheetItem {
+  key: string
+  label: string
+  description?: string
+  danger?: boolean
+  primary?: boolean
+}
+
+const props = defineProps<{
   exercise: Exercise
   customActions?: boolean
 }>()
 
 const thumbFailed = ref(false)
+const actionSheetVisible = ref(false)
+
+const customActionItems: ActionSheetItem[] = [
+  {
+    key: 'rename',
+    label: '重命名',
+    description: '修改动作名称和记录类型',
+    primary: true
+  },
+  {
+    key: 'delete',
+    label: '删除动作',
+    description: '仅删除当前账号下的自定义动作',
+    danger: true
+  }
+]
 
 const emit = defineEmits<{
   select: [number]
@@ -21,76 +46,102 @@ const levelColorMap: Record<string, string> = {
   中级: '#ffa03c',
   高级: '#ff501e'
 }
+
+function openCustomActions() {
+  actionSheetVisible.value = true
+}
+
+function handleCustomAction(item: ActionSheetItem) {
+  actionSheetVisible.value = false
+  if (item.key === 'rename') emit('rename', props.exercise.id)
+  if (item.key === 'delete') emit('delete', props.exercise.id)
+}
 </script>
 
 <template>
-  <view class="glass-card exercise-item">
-    <image
-      v-if="exercise.thumbnailUrl && !thumbFailed"
-      class="exercise-item__thumb"
-      :src="exercise.thumbnailUrl"
-      mode="aspectFill"
-      lazy-load
-      @error="thumbFailed = true"
-      @tap="emit('select', exercise.id)"
+  <view class="exercise-item-wrap">
+    <view class="glass-card exercise-item btn-press" @tap="emit('select', exercise.id)">
+      <image
+        v-if="exercise.thumbnailUrl && !thumbFailed"
+        class="exercise-item__thumb"
+        :src="exercise.thumbnailUrl"
+        mode="aspectFill"
+        lazy-load
+        @error="thumbFailed = true"
+      />
+      <view v-else class="exercise-item__avatar">
+        {{ exercise.name.slice(0, 1) }}
+      </view>
+
+      <view class="exercise-item__body">
+        <view class="exercise-item__top">
+          <view class="exercise-item__name">{{ exercise.name }}</view>
+          <view
+            class="exercise-item__favorite"
+            :class="{ 'exercise-item__favorite--active': exercise.favorited }"
+            @tap.stop="emit('favorite', exercise.id)"
+          >
+            {{ exercise.favorited ? '♥' : '♡' }}
+          </view>
+        </view>
+
+        <view class="exercise-item__meta">
+          {{ exercise.category || '未分类' }} · {{ exercise.muscle || '未设置肌群' }} ·
+          {{ exercise.equipment || '未设置器械' }}
+        </view>
+
+        <view class="exercise-item__tags">
+          <view
+            class="exercise-item__level"
+            :style="{
+              color: levelColorMap[exercise.level] || '#ffa03c',
+              background: `${levelColorMap[exercise.level] || '#ffa03c'}22`
+            }"
+          >
+            {{ exercise.level || '未设置' }}
+          </view>
+          <view
+            v-if="customActions && exercise.exerciseType === 'USER'"
+            class="exercise-item__manage btn-press"
+            @tap.stop="openCustomActions"
+          >
+            管理
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <AppActionSheet
+      :visible="actionSheetVisible"
+      title="管理自定义动作"
+      :subtitle="exercise.name"
+      :items="customActionItems"
+      @close="actionSheetVisible = false"
+      @select="handleCustomAction"
     />
-    <view v-else class="exercise-item__avatar" @tap="emit('select', exercise.id)">
-      {{ exercise.name.slice(0, 1) }}
-    </view>
-    <view class="exercise-item__body btn-press" @tap="emit('select', exercise.id)">
-      <view class="exercise-item__name">{{ exercise.name }}</view>
-      <view class="exercise-item__meta">
-        {{ exercise.category || '未分类' }} · {{ exercise.muscle || '未设置肌群' }} ·
-        {{ exercise.equipment || '未设置器械' }}
-      </view>
-    </view>
-    <view class="exercise-item__actions" @tap.stop>
-      <view
-        class="exercise-item__level"
-        :style="{
-          color: levelColorMap[exercise.level] || '#ffa03c',
-          background: `${levelColorMap[exercise.level] || '#ffa03c'}22`
-        }"
-      >
-        {{ exercise.level }}
-      </view>
-      <view
-        class="exercise-item__favorite"
-        :class="{ 'exercise-item__favorite--active': exercise.favorited }"
-        @tap.stop="emit('favorite', exercise.id)"
-      >
-        {{ exercise.favorited ? '♥' : '♡' }}
-      </view>
-      <view
-        v-if="customActions && exercise.exerciseType === 'USER'"
-        class="exercise-item__custom-action"
-        @tap.stop="emit('rename', exercise.id)"
-      >
-        改
-      </view>
-      <view
-        v-if="customActions && exercise.exerciseType === 'USER'"
-        class="exercise-item__custom-action exercise-item__custom-action--danger"
-        @tap.stop="emit('delete', exercise.id)"
-      >
-        删
-      </view>
-      <view class="exercise-item__arrow">›</view>
-    </view>
   </view>
 </template>
 
 <style lang="scss" scoped>
+.exercise-item-wrap {
+  display: block;
+}
+
 .exercise-item {
   display: flex;
   align-items: center;
-  gap: 24rpx;
-  padding: 30rpx 28rpx;
+  gap: 18rpx;
+  padding: 24rpx 22rpx;
+
+  &__avatar,
+  &__thumb {
+    width: 104rpx;
+    height: 104rpx;
+    border-radius: 24rpx;
+    flex-shrink: 0;
+  }
 
   &__avatar {
-    width: 112rpx;
-    height: 112rpx;
-    border-radius: 28rpx;
     background: rgba(255, 80, 30, 0.15);
     color: #ff501e;
     display: flex;
@@ -98,64 +149,64 @@ const levelColorMap: Record<string, string> = {
     justify-content: center;
     font-size: 40rpx;
     font-weight: 700;
-    flex-shrink: 0;
   }
 
   &__thumb {
-    width: 112rpx;
-    height: 112rpx;
-    border-radius: 28rpx;
     background: rgba(255, 80, 30, 0.12);
-    flex-shrink: 0;
   }
 
   &__body {
     flex: 1;
     min-width: 0;
-    align-self: stretch;
+  }
+
+  &__top {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    align-items: flex-start;
+    gap: 12rpx;
   }
 
   &__name {
-    font-size: 32rpx;
-    font-weight: 800;
+    flex: 1;
+    min-width: 0;
+    color: #f5f5fa;
+    font-size: 30rpx;
+    font-weight: 900;
     line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   &__meta {
-    margin-top: 12rpx;
-    font-size: 24rpx;
-    color: #828296;
+    margin-top: 8rpx;
+    color: #8f8fa3;
+    font-size: 22rpx;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  &__actions {
+  &__tags {
+    margin-top: 12rpx;
     display: flex;
     align-items: center;
-    gap: 16rpx;
-  }
-
-  &__favorite,
-  &__arrow,
-  &__custom-action {
-    font-size: 28rpx;
-    color: #828296;
+    justify-content: space-between;
+    gap: 10rpx;
   }
 
   &__favorite {
-    width: 44rpx;
-    height: 44rpx;
+    width: 46rpx;
+    height: 46rpx;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    text-align: center;
+    color: #9a9aab;
+    font-size: 32rpx;
     transition:
       color 0.2s ease,
       text-shadow 0.2s ease;
@@ -166,26 +217,22 @@ const levelColorMap: Record<string, string> = {
     }
   }
 
-  &__level {
-    padding: 10rpx 18rpx;
+  &__level,
+  &__manage {
+    min-height: 44rpx;
+    padding: 0 14rpx;
     border-radius: 999rpx;
-    font-size: 22rpx;
-  }
-
-  &__custom-action {
-    min-width: 44rpx;
-    height: 44rpx;
-    border-radius: 14rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
     font-size: 20rpx;
     font-weight: 800;
+  }
 
-    &--danger {
-      color: #ff6b4a;
-    }
+  &__manage {
+    color: #f5f5fa;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 }
 </style>

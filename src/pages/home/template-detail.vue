@@ -2,15 +2,20 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
+import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import type { TemplateDetailResponse } from '@/api/template'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
+import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
+const draftPromptStore = useWorkoutDraftPromptStore()
 const templateId = ref<number | null>(null)
 const detail = ref<TemplateDetailResponse | null>(null)
 const loading = ref(false)
@@ -78,13 +83,15 @@ async function startWorkout() {
   }
 }
 
-function editTemplate() {
+async function editTemplate() {
   if (!templateId.value || isSystemTemplate.value) return
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   uni.navigateTo({ url: `${routes.templateEdit}?id=${templateId.value}` })
 }
 
 async function renameTemplate() {
   if (!templateId.value || !detail.value || isSystemTemplate.value || saving.value) return
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   const nextName = await new Promise<string | null>((resolve) => {
     uni.showModal({
       title: '重命名模板',
@@ -141,31 +148,23 @@ async function prepareNewWorkout() {
   workoutStore.refreshDraftState()
   if (!workoutStore.hasRecoverableWorkout) return true
 
-  try {
-    const result = await new Promise<UniApp.ShowActionSheetSuccess>((resolve, reject) => {
-      uni.showActionSheet({
-        itemList: ['继续当前训练', '放弃并重新开始'],
-        success: resolve,
-        fail: reject
-      })
-    })
-
-    if (result.tapIndex === 0) {
-      if (workoutStore.restoreDraft()) {
-        uni.navigateTo({ url: routes.workoutActive })
-      }
-      return false
+  const action = await draftPromptStore.open()
+  if (action === 'continue') {
+    if (workoutStore.restoreDraft()) {
+      uni.navigateTo({ url: routes.workoutActive })
     }
-
-    workoutStore.discardWorkout()
-    return true
-  } catch {
     return false
   }
+  if (action === 'discard') {
+    workoutStore.discardWorkout()
+    return true
+  }
+  return false
 }
 
 async function copyTemplate() {
   if (!templateId.value || copying.value) return
+  if (!(await ensureMembershipFeature('自定义模板'))) return
   copying.value = true
   try {
     await templateStore.duplicate(templateId.value)
@@ -263,6 +262,8 @@ async function copyTemplate() {
       </view>
     </view>
   </scroll-view>
+  <WorkoutDraftPrompt />
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

@@ -8,6 +8,7 @@ export interface ExerciseSummary {
   primaryMuscle: string
   equipment: string
   difficultyLevel: string
+  recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
   exerciseType?: 'SYSTEM' | 'USER' | string
   thumbnailSource?: string
   thumbnailPath?: string
@@ -50,6 +51,7 @@ export interface CreateCustomExerciseRequest {
   categoryName?: string
   primaryMuscle?: string
   equipment?: string
+  recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
 }
 
 export interface CreateCustomExerciseResponse {

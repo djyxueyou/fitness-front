@@ -10,16 +10,18 @@ import { formatSeconds } from '@/utils/format'
 import { emitTrainingChanged } from '@/utils/training-events'
 import { useProfileStore } from '@/stores/profile'
 import { useTrainingStore } from '@/stores/training'
+import { useMembershipPromptStore } from '@/stores/membership-prompt'
 import { convertUnitToKg, formatWeight, type WeightUnit } from '@/utils/unit'
 import { useWorkoutStore, type WorkoutComparison, type WorkoutExercise } from '@/stores/workout'
 
-const REST_SECONDS = 60
 const KG_STEP = 2.5
 const LB_STEP = 5
+const DURATION_STEP_SECONDS = 10
 
 const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
 const trainingStore = useTrainingStore()
+const membershipPromptStore = useMembershipPromptStore()
 const showFinish = ref(false)
 const submitting = ref(false)
 const currentExerciseIndex = ref(0)
@@ -80,6 +82,7 @@ function exerciseDoneSets(exercise: WorkoutExercise) {
 }
 
 function exerciseVolume(exercise: WorkoutExercise) {
+  if (isBodyweightExercise(exercise)) return 0
   return exercise.sets
     .filter((set) => set.done)
     .reduce((total, set) => total + set.weight * set.reps, 0)
@@ -89,18 +92,61 @@ function isExerciseCompleted(exercise: WorkoutExercise) {
   return !!exercise.ended
 }
 
+function isBodyweightExercise(exercise?: WorkoutExercise) {
+  return exercise?.recordType === 'BODYWEIGHT_REPS'
+}
+
+function isDurationExercise(exercise?: WorkoutExercise) {
+  return exercise?.recordType === 'DURATION'
+}
+
+function exerciseSummaryText(exercise: WorkoutExercise) {
+  const doneSets = exerciseDoneSets(exercise)
+  if (isDurationExercise(exercise)) {
+    const totalSeconds = exercise.sets
+      .filter((set) => set.done)
+      .reduce((total, set) => total + (set.durationSeconds || 0), 0)
+    return `${doneSets}组 · ${formatSeconds(totalSeconds)} · 计时`
+  }
+  if (isBodyweightExercise(exercise)) {
+    return `${doneSets}组 · 自重次数`
+  }
+  return `${doneSets}组 · ${formatWeight(exerciseVolume(exercise), unit.value, 1)} ${unit.value} · 重量次数`
+}
+
 function lastSetText(exercise: WorkoutExercise, setIndex: number) {
   const performance = workoutStore.getLastPerformance(exercise.id)
   if (!performance?.sets?.length) {
     return '上次：暂无记录'
   }
   const matchedSet = performance.sets[setIndex] || performance.sets[performance.sets.length - 1]
+  if (isDurationExercise(exercise)) {
+    return `上次：${formatSeconds(matchedSet.durationSeconds || 0)}`
+  }
+  if (isBodyweightExercise(exercise)) {
+    return `上次：自重 x ${matchedSet.reps}`
+  }
   return `上次：${formatWeight(matchedSet.weightKg, unit.value, 1)} ${unit.value} x ${matchedSet.reps}`
 }
 
 function closePage() {
-  clearTimers()
-  uni.navigateBack()
+  if (workoutStore.doneSets > 0) {
+    uni.showModal({
+      title: '退出训练？',
+      content: '已完成的训练数据已自动保存为草稿，退出后可以继续训练。',
+      confirmText: '退出',
+      cancelText: '继续训练',
+      success: (res) => {
+        if (res.confirm) {
+          clearTimers()
+          uni.navigateBack()
+        }
+      }
+    })
+  } else {
+    clearTimers()
+    uni.navigateBack()
+  }
 }
 
 function clearTimers() {
@@ -114,7 +160,13 @@ function startRest(title: string, nextExerciseIndex: number | null = null) {
   if (restTimer) clearInterval(restTimer)
   restTitle.value = title
   restNextExerciseIndex.value = nextExerciseIndex
-  restRemaining.value = REST_SECONDS
+  restRemaining.value = profileStore.restSeconds
+
+  if (restRemaining.value <= 0) {
+    skipRest()
+    return
+  }
+
   restTimer = setInterval(() => {
     restRemaining.value -= 1
     if (restRemaining.value <= 0) {
@@ -165,7 +217,10 @@ async function initializeWorkout() {
 }
 
 function switchExercise(delta: number) {
-  const nextIndex = findAdjacentActiveExerciseIndex(currentExerciseIndex.value, delta)
+  const from = currentExerciseIndex.value < 0
+    ? (delta > 0 ? -1 : workoutStore.activeExercises.length)
+    : currentExerciseIndex.value
+  const nextIndex = findAdjacentActiveExerciseIndex(from, delta)
   if (nextIndex === null) return
   currentExerciseIndex.value = nextIndex
   menuExerciseIndex.value = null
@@ -177,6 +232,15 @@ function selectExercise(index: number) {
   menuExerciseIndex.value = null
 }
 
+function handleCardTap(index: number) {
+  if (index === currentExerciseIndex.value) {
+    currentExerciseIndex.value = -1
+    menuExerciseIndex.value = null
+  } else {
+    selectExercise(index)
+  }
+}
+
 function reopenExercise(index: number) {
   workoutStore.reopenExercise(index)
   currentExerciseIndex.value = index
@@ -184,7 +248,13 @@ function reopenExercise(index: number) {
 }
 
 function stepWeight(setIndex: number, direction: 1 | -1) {
-  if (currentExercise.value?.ended) return
+  if (
+    currentExercise.value?.ended ||
+    isBodyweightExercise(currentExercise.value) ||
+    isDurationExercise(currentExercise.value)
+  ) {
+    return
+  }
   const deltaInUnit = displayStep.value * direction
   workoutStore.adjustWeight(
     currentExerciseIndex.value,
@@ -194,12 +264,27 @@ function stepWeight(setIndex: number, direction: 1 | -1) {
 }
 
 function stepReps(setIndex: number, direction: 1 | -1) {
-  if (currentExercise.value?.ended) return
+  if (currentExercise.value?.ended || isDurationExercise(currentExercise.value)) return
   workoutStore.adjustReps(currentExerciseIndex.value, setIndex, direction)
 }
 
+function stepDuration(setIndex: number, direction: 1 | -1) {
+  if (currentExercise.value?.ended || !isDurationExercise(currentExercise.value)) return
+  workoutStore.adjustDuration(
+    currentExerciseIndex.value,
+    setIndex,
+    DURATION_STEP_SECONDS * direction
+  )
+}
+
 function updateWeight(setIndex: number, event: { detail: { value: string } }) {
-  if (currentExercise.value?.ended) return
+  if (
+    currentExercise.value?.ended ||
+    isBodyweightExercise(currentExercise.value) ||
+    isDurationExercise(currentExercise.value)
+  ) {
+    return
+  }
   const value = Number(event.detail.value)
   if (!Number.isFinite(value)) return
   workoutStore.updateSet(currentExerciseIndex.value, setIndex, {
@@ -208,11 +293,20 @@ function updateWeight(setIndex: number, event: { detail: { value: string } }) {
 }
 
 function updateReps(setIndex: number, event: { detail: { value: string } }) {
-  if (currentExercise.value?.ended) return
+  if (currentExercise.value?.ended || isDurationExercise(currentExercise.value)) return
   const value = Number(event.detail.value)
   if (!Number.isFinite(value)) return
   workoutStore.updateSet(currentExerciseIndex.value, setIndex, {
     reps: Math.max(0, Math.round(value))
+  })
+}
+
+function updateDuration(setIndex: number, event: { detail: { value: string } }) {
+  if (currentExercise.value?.ended || !isDurationExercise(currentExercise.value)) return
+  const value = Number(event.detail.value)
+  if (!Number.isFinite(value)) return
+  workoutStore.updateSet(currentExerciseIndex.value, setIndex, {
+    durationSeconds: Math.max(1, Math.round(value))
   })
 }
 
@@ -275,7 +369,12 @@ function closeExercisePicker() {
 }
 
 function addExerciseFromPicker(exercise: ExerciseSummary) {
-  const added = workoutStore.addExercise(exercise.id, exercise.name, exercise.primaryMuscle || '')
+  const added = workoutStore.addExercise(
+    exercise.id,
+    exercise.name,
+    exercise.primaryMuscle || '',
+    exercise.recordType || 'WEIGHT_REPS'
+  )
   if (!added) {
     uni.showToast({ title: '该动作已在本次训练中', icon: 'none' })
     return
@@ -374,8 +473,12 @@ function buildWorkoutComparisons() {
     .map<WorkoutComparison | null>((exercise) => {
       const doneSets = exercise.sets.filter((set) => set.done)
       if (!doneSets.length) return null
-      const currentVolumeKg = doneSets.reduce((total, set) => total + set.weight * set.reps, 0)
-      const currentMaxWeightKg = doneSets.reduce((max, set) => Math.max(max, set.weight), 0)
+      const currentVolumeKg = isBodyweightExercise(exercise)
+        ? 0
+        : doneSets.reduce((total, set) => total + set.weight * set.reps, 0)
+      const currentMaxWeightKg = isBodyweightExercise(exercise)
+        ? 0
+        : doneSets.reduce((max, set) => Math.max(max, set.weight), 0)
       const lastPerformance = workoutStore.getLastPerformance(exercise.id)
       return {
         exerciseId: exercise.id,
@@ -415,8 +518,12 @@ async function confirmFinish() {
       sets: exercise.sets
         .filter((set) => set.done)
         .map((set) => ({
-          weightKg: Number(set.weight.toFixed(2)),
-          reps: set.reps
+          weightKg:
+            isBodyweightExercise(exercise) || isDurationExercise(exercise)
+              ? 0
+              : Number(set.weight.toFixed(2)),
+          reps: isDurationExercise(exercise) ? 1 : set.reps,
+          durationSeconds: isDurationExercise(exercise) ? set.durationSeconds || 60 : undefined
         }))
     }))
     .filter((item) => item.sets.length > 0)
@@ -440,7 +547,12 @@ async function confirmFinish() {
     })
   } catch (err) {
     workoutStore.persistDraft()
-    uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+    const message = err instanceof Error && err.message ? err.message : '保存失败，请重试'
+    if (message.includes('免费训练次数') || message.includes('会员')) {
+      await membershipPromptStore.open('训练记录', message)
+    } else {
+      uni.showToast({ title: message.slice(0, 30), icon: 'none' })
+    }
     console.error('[training] save failed', err)
     submitting.value = false
     return
@@ -555,9 +667,8 @@ onUnmounted(() => {
           'workout-active__card--ended': isExerciseCompleted(exercise),
           'workout-active__card--menu-open': menuExerciseIndex === exerciseIndex
         }"
-        @tap="exerciseIndex !== currentExerciseIndex && selectExercise(exerciseIndex)"
       >
-        <view class="workout-active__card-top">
+        <view class="workout-active__card-top" @tap="handleCardTap(exerciseIndex)">
           <view class="workout-active__card-main">
             <view
               class="workout-active__card-index"
@@ -575,9 +686,7 @@ onUnmounted(() => {
                 <text class="workout-active__card-title-text">{{ exercise.name }}</text>
               </view>
               <view class="workout-active__card-sub">
-                {{ exerciseDoneSets(exercise) }}组 ·
-                {{ formatWeight(exerciseVolume(exercise), unit, 1) }}
-                {{ unit }}
+                {{ exerciseSummaryText(exercise) }}
                 <text v-if="isExerciseCompleted(exercise)"> · 已完成</text>
               </view>
             </view>
@@ -609,7 +718,7 @@ onUnmounted(() => {
           </view>
         </view>
 
-        <view class="workout-active__card-content">
+        <view class="workout-active__card-content" @tap.stop>
           <view class="workout-active__current">
             当前第 {{ currentSetIndex + 1 }} / {{ exercise.sets.length }} 组
           </view>
@@ -617,10 +726,19 @@ onUnmounted(() => {
             {{ lastSetText(exercise, currentSetIndex) }}
           </view>
 
-          <view class="workout-active__set-labels">
+          <view
+            class="workout-active__set-labels"
+            :class="{ 'workout-active__set-labels--duration': isDurationExercise(exercise) }"
+          >
             <text>组</text>
-            <text>重量({{ unit }})</text>
-            <text>次数</text>
+            <text>{{
+              isDurationExercise(exercise)
+                ? '时长(秒)'
+                : isBodyweightExercise(exercise)
+                  ? '自重'
+                  : `重量(${unit})`
+            }}</text>
+            <text v-if="!isDurationExercise(exercise)">次数</text>
             <text>完成</text>
           </view>
 
@@ -634,14 +752,25 @@ onUnmounted(() => {
               class="workout-active__set"
               :class="{
                 'workout-active__set--current': setIndex === currentSetIndex && !set.done,
-                'workout-active__set--done': set.done
+                'workout-active__set--done': set.done,
+                'workout-active__set--duration': isDurationExercise(exercise)
               }"
             >
               <view class="workout-active__set-index">{{ setIndex + 1 }}</view>
-              <view class="workout-active__stepper">
+              <view
+                class="workout-active__stepper"
+                :class="{ 'workout-active__stepper--static': isBodyweightExercise(exercise) }"
+              >
                 <view
+                  v-if="!isBodyweightExercise(exercise)"
                   class="workout-active__stepper-btn btn-press"
-                  @touchstart.stop.prevent="startStepTimer(() => stepWeight(setIndex, -1))"
+                  @touchstart.stop.prevent="
+                    startStepTimer(() =>
+                      isDurationExercise(exercise)
+                        ? stepDuration(setIndex, -1)
+                        : stepWeight(setIndex, -1)
+                    )
+                  "
                   @touchend.stop.prevent="clearStepTimer"
                   @touchcancel.stop.prevent="clearStepTimer"
                 >
@@ -649,22 +778,42 @@ onUnmounted(() => {
                 </view>
                 <input
                   class="workout-active__input"
-                  :class="{ 'workout-active__input--locked': set.done || exercise.ended }"
-                  type="digit"
-                  :disabled="set.done || exercise.ended"
-                  :value="formatWeight(set.weight, unit, 1)"
-                  @blur="updateWeight(setIndex, $event)"
+                  :class="{
+                    'workout-active__input--locked':
+                      set.done || exercise.ended || isBodyweightExercise(exercise)
+                  }"
+                  :type="isBodyweightExercise(exercise) ? 'text' : 'digit'"
+                  :disabled="set.done || exercise.ended || isBodyweightExercise(exercise)"
+                  :value="
+                    isDurationExercise(exercise)
+                      ? set.durationSeconds || 60
+                      : isBodyweightExercise(exercise)
+                        ? '自重'
+                        : formatWeight(set.weight, unit, 1)
+                  "
+                  @blur="
+                    isDurationExercise(exercise)
+                      ? updateDuration(setIndex, $event)
+                      : updateWeight(setIndex, $event)
+                  "
                 />
                 <view
+                  v-if="!isBodyweightExercise(exercise)"
                   class="workout-active__stepper-btn btn-press"
-                  @touchstart.stop.prevent="startStepTimer(() => stepWeight(setIndex, 1))"
+                  @touchstart.stop.prevent="
+                    startStepTimer(() =>
+                      isDurationExercise(exercise)
+                        ? stepDuration(setIndex, 1)
+                        : stepWeight(setIndex, 1)
+                    )
+                  "
                   @touchend.stop.prevent="clearStepTimer"
                   @touchcancel.stop.prevent="clearStepTimer"
                 >
                   +
                 </view>
               </view>
-              <view class="workout-active__stepper">
+              <view v-if="!isDurationExercise(exercise)" class="workout-active__stepper">
                 <view
                   class="workout-active__stepper-btn btn-press"
                   @touchstart.stop.prevent="startStepTimer(() => stepReps(setIndex, -1))"
@@ -717,7 +866,7 @@ onUnmounted(() => {
           <view
             class="gradient-fire workout-active__finish-exercise btn-press"
             :class="{ 'workout-active__finish-exercise--done': exercise.ended }"
-            @tap="finishExerciseEarly"
+            @tap.stop="finishExerciseEarly"
           >
             {{ exercise.ended ? '已完成' : '完成此动作' }}
           </view>
@@ -1136,6 +1285,10 @@ onUnmounted(() => {
     &--done {
       opacity: 0.78;
     }
+
+    &--duration {
+      grid-template-columns: 58rpx 1fr 64rpx;
+    }
   }
 
   &__set-index {
@@ -1154,6 +1307,11 @@ onUnmounted(() => {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
     overflow: hidden;
+
+    &--static {
+      grid-template-columns: 1fr;
+      background: rgba(255, 255, 255, 0.035);
+    }
   }
 
   &__stepper-btn {
@@ -1212,6 +1370,10 @@ onUnmounted(() => {
     font-size: 20rpx;
     text-align: center;
     padding: 0 8rpx 12rpx;
+
+    &--duration {
+      grid-template-columns: 58rpx 1fr 64rpx;
+    }
   }
 
   &__actions {

@@ -5,13 +5,15 @@ import GlassCard from '@/components/glass-card/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
 import SectionTitle from '@/components/section-title/index.vue'
 import StatCard from '@/components/stat-card/index.vue'
-import { getToken } from '@/api/http'
+import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
+import { clearToken, getToken } from '@/api/http'
 import {
   fetchTrainingHistory,
   fetchTrainingSummary,
   type TrainingHistoryItemResponse,
   type TrainingStatsSummaryResponse
 } from '@/api/training'
+import { clearCachedUserProfile, fetchUserProfile } from '@/api/user'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { offAuthChanged, onAuthChanged } from '@/utils/auth-events'
 import { offTrainingChanged, onTrainingChanged } from '@/utils/training-events'
@@ -19,19 +21,22 @@ import { routes } from '@/utils/navigation'
 import { useProfileStore } from '@/stores/profile'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
+import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { formatCompactWeight } from '@/utils/unit'
 import { formatSeconds } from '@/utils/format'
 
 const profileStore = useProfileStore()
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
+const draftPromptStore = useWorkoutDraftPromptStore()
 const HOME_CACHE_MS = 30000
+
 const summary = ref<TrainingStatsSummaryResponse | null>(null)
 const weekHistory = ref<TrainingHistoryItemResponse[]>([])
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
+const isLoggedIn = ref(Boolean(getToken()))
 let homeLoadedAt = 0
 
-const isLoggedIn = ref(Boolean(getToken()))
 const weightUnit = computed(() => profileStore.unit)
 const weekSessions = computed(() => (summary.value ? `${weekHistory.value.length} 次` : '--'))
 const totalVolume = computed(() =>
@@ -67,9 +72,7 @@ const weekStats = computed(() => {
     }
   })
 })
-const recentTemplates = computed(() => {
-  return templateStore.getRecentItemsFromHistory(recentHistory.value, 3)
-})
+const recentTemplates = computed(() => templateStore.getRecentItemsFromHistory(recentHistory.value, 3))
 
 onLoad(() => {
   onAuthChanged(refreshAfterAuthChanged)
@@ -86,6 +89,11 @@ onShow(() => {
   workoutStore.refreshDraftState()
   if (!workoutStore.hasActiveWorkout) {
     workoutStore.restoreDraft()
+  }
+  if (!templateStore.loadedFromServer) {
+    templateStore.fetchTemplates({ includeDetails: false }).catch((err) => {
+      console.error('[home] template fetch failed', err)
+    })
   }
   loadHomeData()
 })
@@ -110,14 +118,29 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
   }
   isLoggedIn.value = true
 
+  try {
+    await fetchUserProfile()
+  } catch {
+    clearToken()
+    clearCachedUserProfile()
+    isLoggedIn.value = false
+    summary.value = null
+    weekHistory.value = []
+    recentHistory.value = []
+    homeLoadedAt = 0
+    return
+  }
+
   if (!options?.forceTemplates && summary.value && Date.now() - homeLoadedAt < HOME_CACHE_MS) {
     return
   }
 
   if (options?.forceTemplates || !templateStore.loadedFromServer) {
-    await templateStore.fetchTemplates({ includeDetails: false, force: options?.forceTemplates }).catch((err) => {
-      console.error('[home] template fetch failed', err)
-    })
+    await templateStore
+      .fetchTemplates({ includeDetails: false, force: options?.forceTemplates })
+      .catch((err) => {
+        console.error('[home] template fetch failed', err)
+      })
   }
 
   const range = getCurrentWeekRange()
@@ -195,7 +218,7 @@ async function goSelectTemplate() {
 async function goCalendar() {
   const ok = await ensureFeatureAuth('训练记录')
   if (!ok) return
-  uni.navigateTo({ url: routes.workoutCalendar })
+  uni.switchTab({ url: routes.workoutCalendar })
 }
 
 async function startWorkout(templateId: number) {
@@ -228,27 +251,18 @@ async function prepareNewWorkout() {
   workoutStore.refreshDraftState()
   if (!workoutStore.hasRecoverableWorkout) return true
 
-  try {
-    const result = await new Promise<UniApp.ShowActionSheetSuccess>((resolve, reject) => {
-      uni.showActionSheet({
-        itemList: ['继续当前训练', '放弃并重新开始'],
-        success: resolve,
-        fail: reject
-      })
-    })
-
-    if (result.tapIndex === 0) {
-      if (workoutStore.restoreDraft()) {
-        uni.navigateTo({ url: routes.workoutActive })
-      }
-      return false
+  const action = await draftPromptStore.open()
+  if (action === 'continue') {
+    if (workoutStore.restoreDraft()) {
+      uni.navigateTo({ url: routes.workoutActive })
     }
-
-    workoutStore.discardWorkout()
-    return true
-  } catch {
     return false
   }
+  if (action === 'discard') {
+    workoutStore.discardWorkout()
+    return true
+  }
+  return false
 }
 
 async function loginForStats() {
@@ -261,9 +275,21 @@ async function loginForStats() {
     <view class="page-shell tab-page home-page safe-bottom">
       <view class="home-page__hero">
         <view class="eyebrow">LiftLog Daily</view>
-        <view class="muted home-page__greeting">今天适合完成一次高质量训练。</view>
-        <view class="title-xl">准备开始 <text class="text-gradient-fire">训练</text> 了吗？</view>
-        <view class="home-page__hero-sub">选择模板快速开始，或者直接开启自由训练。</view>
+        <template v-if="workoutStore.hasRecoverableWorkout">
+          <view class="muted home-page__greeting">你有一场未完成训练</view>
+          <view class="title-xl">继续上次<text class="text-gradient-fire">训练</text></view>
+          <view class="home-page__hero-sub">先恢复训练，避免中途退出后记录丢失。</view>
+        </template>
+        <template v-else-if="isLoggedIn">
+          <view class="muted home-page__greeting">今天练什么？</view>
+          <view class="title-xl">开始一次<text class="text-gradient-fire">高质量训练</text></view>
+          <view class="home-page__hero-sub">选择最近模板快速开始，或进入开始训练页选择系统模板。</view>
+        </template>
+        <template v-else>
+          <view class="muted home-page__greeting">开始记录你的训练</view>
+          <view class="title-xl">建立你的<text class="text-gradient-fire">训练档案</text></view>
+          <view class="home-page__hero-sub">登录后同步训练记录、收藏动作和个人模板。</view>
+        </template>
       </view>
 
       <view class="home-page__stats">
@@ -347,26 +373,18 @@ async function loginForStats() {
                 {{ item.exercises }} 个动作 · {{ item.duration }} min
               </view>
             </view>
-            <view class="home-page__recent-play btn-press" @tap.stop="startWorkout(item.id)"
-              >▶</view
-            >
+            <view class="home-page__recent-play btn-press" @tap.stop="startWorkout(item.id)">
+              ▶
+            </view>
           </view>
         </view>
         <view v-else class="glass-card home-page__recent-empty">
           开始一次模板训练后，会显示最近使用模板。
         </view>
       </view>
-
-      <view class="glass-card home-page__calendar-link btn-press" @tap="goCalendar">
-        <view class="home-page__calendar-icon">📅</view>
-        <view class="home-page__calendar-body">
-          <view class="home-page__recent-name">训练日历</view>
-          <view class="home-page__recent-meta">查看训练历史和容量趋势</view>
-        </view>
-        <view class="home-page__cta-arrow">›</view>
-      </view>
     </view>
   </scroll-view>
+  <WorkoutDraftPrompt />
 </template>
 
 <style lang="scss" scoped>

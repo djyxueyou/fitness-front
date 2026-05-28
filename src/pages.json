@@ -136,6 +136,15 @@
       }
     },
     {
+      "path": "pages/auth/login",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
       "path": "pages/profile/settings",
       "style": {
         "navigationStyle": "custom",
@@ -161,6 +170,15 @@
         "backgroundColorTop": "#0A0A0E",
         "backgroundColorBottom": "#0A0A0E"
       }
+    },
+    {
+      "path": "pages/agreement/user",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
     }
   ],
   "globalStyle": {
@@ -180,6 +198,12 @@
         "text": "首页",
         "iconPath": "static/tabbar/home.png",
         "selectedIconPath": "static/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/home/workout-calendar",
+        "text": "日历",
+        "iconPath": "static/tabbar/calendar.png",
+        "selectedIconPath": "static/tabbar/calendar-active.png"
       },
       {
         "pagePath": "pages/exercises/index",

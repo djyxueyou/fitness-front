@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { clearToken } from '@/api/http'
+import { clearToken, getToken } from '@/api/http'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { emitAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
-import { useMembershipStore } from '@/stores/membership'
 import { useProfileStore } from '@/stores/profile'
 import { formatCompactWeight } from '@/utils/unit'
 
 const profileStore = useProfileStore()
-const membershipStore = useMembershipStore()
+const authChecking = ref(true)
+let authFlowRunning = false
+let suppressNextAuthUntil = 0
 const avatarText = computed(() => (profileStore.nickname || 'U').slice(0, 1).toUpperCase())
 const weightUnit = computed(() => profileStore.unit)
 const profileStats = computed(() => [
@@ -25,13 +26,6 @@ const profileStats = computed(() => [
 
 const menuItems = [
   {
-    label: '训练日历',
-    sub: '查看训练记录',
-    path: routes.workoutCalendar,
-    icon: '📦',
-    tone: 'cyan'
-  },
-  {
     label: '历史记录',
     sub: '浏览训练明细',
     path: routes.profileHistory,
@@ -45,22 +39,41 @@ const menuItems = [
     icon: '🎸',
     tone: 'violet'
   },
+  {
+    label: '会员中心',
+    sub: '查看试用期、套餐和会员权益',
+    path: routes.membership,
+    icon: '👑',
+    tone: 'gold'
+  },
   { label: '我的收藏', sub: '常用动作收藏', path: routes.favorites, icon: '⭐', tone: 'gold' }
 ]
 
-const otherItems = [{ label: '关于', path: routes.about, icon: '⚸' }]
+const otherItems = [
+  { label: '设置', path: routes.settings, icon: '⚙' },
+  { label: '关于', path: routes.about, icon: '⚸' }
+]
 
 onShow(async () => {
+  if (Date.now() < suppressNextAuthUntil) return
+  if (authFlowRunning) return
+  authFlowRunning = true
+  authChecking.value = true
   const ok = await ensureFeatureAuth('个人信息')
   if (!ok) {
+    // Closing the login page briefly re-triggers this tab's onShow before switchTab finishes.
+    suppressNextAuthUntil = Date.now() + 1200
+    authChecking.value = false
+    authFlowRunning = false
     uni.switchTab({ url: routes.home })
     return
   }
   await Promise.all([
     profileStore.refreshProfile(),
-    profileStore.refreshSummary(),
-    membershipStore.refreshStatus()
+    profileStore.refreshSummary()
   ])
+  authChecking.value = false
+  authFlowRunning = false
 })
 
 function openPage(path: string) {
@@ -77,7 +90,6 @@ function logout() {
       if (!res.confirm) return
       clearToken()
       profileStore.resetProfile()
-      membershipStore.reset()
       emitAuthChanged()
       uni.showToast({ title: '已退出登录', icon: 'none' })
       uni.switchTab({ url: routes.home })
@@ -102,9 +114,17 @@ function getToneBg(tone?: string) {
 <template>
   <scroll-view scroll-y class="page-scroll">
     <view class="page-shell tab-page safe-bottom">
+      <view v-if="authChecking && !getToken()" class="profile__auth-state muted">
+        正在打开登录授权...
+      </view>
+      <template v-else>
       <view class="profile__hero">
         <view class="profile__hero-top">
-          <view class="profile__avatar">{{ avatarText }}</view>
+          <image
+            class="profile__avatar"
+            :src="profileStore.avatarUrl || '/static/app-logo.png'"
+            mode="aspectFill"
+          />
           <view class="profile__info">
             <view class="eyebrow">Athlete Profile</view>
             <view class="title-lg">{{ profileStore.nickname }}</view>
@@ -124,13 +144,6 @@ function getToneBg(tone?: string) {
       </view>
 
       <view class="section-label profile__section-label">功能</view>
-      <view class="glass-card profile__membership btn-press" @tap="openPage(routes.membership)">
-        <view>
-          <view class="profile__membership-title">会员中心</view>
-          <view class="profile__membership-sub">{{ membershipStore.statusText }}</view>
-        </view>
-        <view class="profile__membership-action">查看</view>
-      </view>
 
       <view class="profile__menu">
         <view
@@ -167,12 +180,21 @@ function getToneBg(tone?: string) {
       </view>
 
       <view class="profile__logout glass-card btn-press" @tap="logout">退出登录</view>
+      </template>
     </view>
   </scroll-view>
 </template>
 
 <style lang="scss" scoped>
 .profile {
+  &__auth-state {
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26rpx;
+  }
+
   &__hero {
     padding: 12rpx 0 12rpx;
   }
@@ -187,14 +209,9 @@ function getToneBg(tone?: string) {
     width: 112rpx;
     height: 112rpx;
     border-radius: 32rpx;
-    background: linear-gradient(135deg, #ff501e, #ffa03c);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 40rpx;
-    font-weight: 700;
     box-shadow: 0 0 32rpx rgba(255, 80, 30, 0.32);
+    background: rgba(255, 80, 30, 0.12);
+    flex-shrink: 0;
   }
 
   &__info {
@@ -236,36 +253,6 @@ function getToneBg(tone?: string) {
 
   &__section-label {
     margin: 28rpx 0 16rpx;
-  }
-
-  &__membership {
-    margin-top: 22rpx;
-    padding: 24rpx;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-color: rgba(255, 80, 30, 0.22);
-  }
-
-  &__membership-title {
-    color: #f5f5fa;
-    font-size: 28rpx;
-    font-weight: 800;
-  }
-
-  &__membership-sub {
-    margin-top: 8rpx;
-    color: #828296;
-    font-size: 22rpx;
-  }
-
-  &__membership-action {
-    padding: 12rpx 20rpx;
-    border-radius: 999rpx;
-    background: rgba(255, 80, 30, 0.16);
-    color: #ff7a32;
-    font-size: 22rpx;
-    font-weight: 800;
   }
 
   &__menu {

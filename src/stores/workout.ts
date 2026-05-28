@@ -12,11 +12,19 @@ import { useTemplateStore } from '@/stores/template'
 const WORKOUT_DRAFT_KEY = 'LIFTLOG_WORKOUT_DRAFT'
 const WORKOUT_DRAFT_VERSION = 1
 
-export type WorkoutSet = { reps: number; weight: number; done: boolean; completedAt?: string }
+export type WorkoutRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
+export type WorkoutSet = {
+  reps: number
+  weight: number
+  durationSeconds?: number
+  done: boolean
+  completedAt?: string
+}
 export type WorkoutExercise = {
   id: number
   name: string
   muscle: string
+  recordType: WorkoutRecordType
   ended?: boolean
   sets: WorkoutSet[]
 }
@@ -53,10 +61,30 @@ function createEmptyWorkout() {
   return [] as WorkoutExercise[]
 }
 
-function createDefaultSet(performanceSet?: ExerciseLastPerformanceSetResponse): WorkoutSet {
+function isBodyweightRecord(recordType?: WorkoutRecordType) {
+  return recordType === 'BODYWEIGHT_REPS'
+}
+
+function isDurationRecord(recordType?: WorkoutRecordType) {
+  return recordType === 'DURATION'
+}
+
+function createDefaultSet(
+  performanceSet?: ExerciseLastPerformanceSetResponse,
+  recordType: WorkoutRecordType = 'WEIGHT_REPS'
+): WorkoutSet {
+  if (isDurationRecord(recordType)) {
+    return {
+      reps: 1,
+      weight: 0,
+      durationSeconds: performanceSet?.durationSeconds ?? 60,
+      done: false
+    }
+  }
+
   return {
     reps: performanceSet?.reps ?? 10,
-    weight: Number(performanceSet?.weightKg ?? 20),
+    weight: isBodyweightRecord(recordType) ? 0 : Number(performanceSet?.weightKg ?? 20),
     done: false
   }
 }
@@ -67,11 +95,12 @@ function createClientRequestId() {
 
 function createSetsFromPerformance(
   targetSets: number,
-  performance?: ExerciseLastPerformanceResponse
+  performance?: ExerciseLastPerformanceResponse,
+  recordType: WorkoutRecordType = 'WEIGHT_REPS'
 ) {
   const sourceSets = performance?.sets || []
   return Array.from({ length: targetSets }, (_, index) =>
-    createDefaultSet(sourceSets[index] || sourceSets[sourceSets.length - 1])
+    createDefaultSet(sourceSets[index] || sourceSets[sourceSets.length - 1], recordType)
   )
 }
 
@@ -121,7 +150,11 @@ export const useWorkoutStore = defineStore('workout', () => {
         sum +
         exercise.sets
           .filter((set) => set.done)
-          .reduce((setSum, set) => setSum + set.weight * set.reps, 0),
+          .reduce(
+            (setSum, set) =>
+              setSum + (isDurationRecord(exercise.recordType) ? 0 : set.weight * set.reps),
+            0
+          ),
       0
     )
   )
@@ -169,8 +202,13 @@ export const useWorkoutStore = defineStore('workout', () => {
       id: item.exerciseId,
       name: item.exerciseName,
       muscle: '',
+      recordType: item.recordType || 'WEIGHT_REPS',
       ended: false,
-      sets: createSetsFromPerformance(item.targetSets, lastPerformanceMap.value[item.exerciseId])
+      sets: createSetsFromPerformance(
+        item.targetSets,
+        lastPerformanceMap.value[item.exerciseId],
+        item.recordType || 'WEIGHT_REPS'
+      )
     }))
     persistDraft()
   }
@@ -242,6 +280,7 @@ export const useWorkoutStore = defineStore('workout', () => {
   }
 
   function adjustWeight(exerciseIndex: number, setIndex: number, deltaKg: number) {
+    if (isBodyweightRecord(activeExercises.value[exerciseIndex]?.recordType)) return
     const set = activeExercises.value[exerciseIndex]?.sets[setIndex]
     if (!set || set.done) return
     updateSet(exerciseIndex, setIndex, {
@@ -250,6 +289,7 @@ export const useWorkoutStore = defineStore('workout', () => {
   }
 
   function adjustReps(exerciseIndex: number, setIndex: number, delta: number) {
+    if (isDurationRecord(activeExercises.value[exerciseIndex]?.recordType)) return
     const set = activeExercises.value[exerciseIndex]?.sets[setIndex]
     if (!set || set.done) return
     updateSet(exerciseIndex, setIndex, {
@@ -257,18 +297,28 @@ export const useWorkoutStore = defineStore('workout', () => {
     })
   }
 
+  function adjustDuration(exerciseIndex: number, setIndex: number, deltaSeconds: number) {
+    if (!isDurationRecord(activeExercises.value[exerciseIndex]?.recordType)) return
+    const set = activeExercises.value[exerciseIndex]?.sets[setIndex]
+    if (!set || set.done) return
+    updateSet(exerciseIndex, setIndex, {
+      durationSeconds: Math.max(1, (set.durationSeconds || 60) + deltaSeconds)
+    })
+  }
+
   function addSet(exerciseIndex: number) {
     activeExercises.value = activeExercises.value.map((exercise, index) => {
       if (index !== exerciseIndex) return exercise
       const lastSet = exercise.sets[exercise.sets.length - 1] ?? {
-        reps: 12,
-        weight: 20,
+        reps: isDurationRecord(exercise.recordType) ? 1 : 12,
+        weight: isBodyweightRecord(exercise.recordType) || isDurationRecord(exercise.recordType) ? 0 : 20,
+        durationSeconds: isDurationRecord(exercise.recordType) ? 60 : undefined,
         done: false
       }
       return {
         ...exercise,
         ended: false,
-        sets: [...exercise.sets, { ...lastSet, done: false }]
+        sets: [...exercise.sets, { ...lastSet, done: false, completedAt: undefined }]
       }
     })
     persistDraft()
@@ -303,7 +353,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     return true
   }
 
-  function addExercise(id: number, name: string, muscle: string) {
+  function addExercise(id: number, name: string, muscle: string, recordType: WorkoutRecordType = 'WEIGHT_REPS') {
     ensureWorkoutSession()
     if (hasExercise(id)) {
       return false
@@ -313,8 +363,9 @@ export const useWorkoutStore = defineStore('workout', () => {
       id,
       name,
       muscle,
+      recordType,
       ended: false,
-      sets: createSetsFromPerformance(1, performance)
+      sets: createSetsFromPerformance(1, performance, recordType)
     })
     persistDraft()
     fetchExerciseLastPerformance(id)
@@ -325,7 +376,7 @@ export const useWorkoutStore = defineStore('workout', () => {
         }
         activeExercises.value = activeExercises.value.map((exercise) =>
           exercise.id === id && exercise.sets.length === 1 && !exercise.sets[0].done
-            ? { ...exercise, sets: createSetsFromPerformance(1, performance) }
+            ? { ...exercise, sets: createSetsFromPerformance(1, performance, exercise.recordType) }
             : exercise
         )
         persistDraft()
@@ -414,7 +465,19 @@ export const useWorkoutStore = defineStore('workout', () => {
     clientRequestId.value = draft.clientRequestId || createClientRequestId()
     startedAt.value = draft.startedAt
     elapsedSeconds.value = draft.elapsedSeconds || 0
-    activeExercises.value = draft.activeExercises
+    activeExercises.value = draft.activeExercises.map((exercise) => {
+      const recordType = exercise.recordType || 'WEIGHT_REPS'
+      return {
+        ...exercise,
+        recordType,
+        sets: exercise.sets.map((set) => ({
+          ...set,
+          reps: isDurationRecord(recordType) ? 1 : set.reps,
+          weight: isBodyweightRecord(recordType) || isDurationRecord(recordType) ? 0 : set.weight,
+          durationSeconds: isDurationRecord(recordType) ? set.durationSeconds || 60 : undefined
+        }))
+      }
+    })
     hasDraft.value = true
     draftSavedAt.value = draft.savedAt
     loadLastPerformances()
@@ -470,6 +533,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     updateSet,
     adjustWeight,
     adjustReps,
+    adjustDuration,
     addSet,
     deleteLastSet,
     removeSet,
