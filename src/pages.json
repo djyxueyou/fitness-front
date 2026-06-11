@@ -73,6 +73,15 @@
       }
     },
     {
+      "path": "pages/home/cultivation-settlement",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
       "path": "pages/home/workout-calendar",
       "style": {
         "navigationStyle": "custom",
@@ -100,6 +109,60 @@
       }
     },
     {
+      "path": "pages/plan/index",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/plan/create",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/plan/detail",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/plan/active",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/plan/edit",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/plan/day-edit",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
       "path": "pages/exercises/detail",
       "style": {
         "navigationStyle": "custom",
@@ -110,6 +173,42 @@
     },
     {
       "path": "pages/profile/history",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/profile/edit",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/profile/body-metrics",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/profile/body-metric-history",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#0A0A0E",
+        "backgroundColorTop": "#0A0A0E",
+        "backgroundColorBottom": "#0A0A0E"
+      }
+    },
+    {
+      "path": "pages/profile/body-metric-trend",
       "style": {
         "navigationStyle": "custom",
         "backgroundColor": "#0A0A0E",
@@ -200,8 +299,8 @@
         "selectedIconPath": "static/tabbar/home-active.png"
       },
       {
-        "pagePath": "pages/home/workout-calendar",
-        "text": "日历",
+        "pagePath": "pages/plan/index",
+        "text": "计划",
         "iconPath": "static/tabbar/calendar.png",
         "selectedIconPath": "static/tabbar/calendar-active.png"
       },

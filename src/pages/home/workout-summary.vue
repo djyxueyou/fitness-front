@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
+import {
+  fetchTrainingReport,
+  type TrainingPrResponse,
+  type TrainingReportItemResponse,
+  type TrainingReportResponse
+} from '@/api/training'
 import { routes } from '@/utils/navigation'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { formatSeconds } from '@/utils/format'
@@ -14,22 +21,94 @@ const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
 const templateStore = useTemplateStore()
 const savingTemplate = ref(false)
+const report = ref<TrainingReportResponse | null>(null)
+const loadingReport = ref(false)
 
 const summary = computed(() => workoutStore.completedSummary)
 const weightUnit = computed(() => profileStore.unit)
-const durationText = computed(() => formatSeconds(summary.value?.durationSeconds || 0))
+const displaySummary = computed(() => report.value || summary.value)
+const reportItems = computed<TrainingReportItemResponse[]>(() => report.value?.items || [])
+const durationText = computed(() => formatSeconds(displaySummary.value?.durationSeconds || 0))
 const volumeText = computed(() =>
-  summary.value
-    ? `${formatWeight(summary.value.totalVolumeKg, weightUnit.value, 1)} ${weightUnit.value}`
+  displaySummary.value
+    ? `${formatWeight(displaySummary.value.totalVolumeKg, weightUnit.value, 1)} ${weightUnit.value}`
     : '--'
 )
-const prs = computed(() => summary.value?.prs || [])
-const comparisons = computed(() => summary.value?.comparisons || [])
+const prs = computed<TrainingPrResponse[]>(() =>
+  report.value ? reportItems.value.flatMap((item) => item.prs || []) : summary.value?.prs || []
+)
+const comparisons = computed(() =>
+  report.value
+    ? reportItems.value.map((item) => ({
+        exerciseId: item.exerciseId,
+        exerciseName: item.exerciseName,
+        currentVolumeKg: item.totalVolumeKg,
+        volumeDeltaKg: item.firstRecord ? null : item.volumeDeltaKg,
+        currentMaxWeightKg: item.maxWeightKg,
+        maxWeightDeltaKg: item.firstRecord ? null : item.maxWeightDeltaKg
+      }))
+    : summary.value?.comparisons || []
+)
 const highlightedComparisons = computed(() =>
   comparisons.value
     .filter((item) => item.volumeDeltaKg !== null || item.maxWeightDeltaKg !== null)
     .slice(0, 4)
 )
+const positiveComparisons = computed(() =>
+  comparisons.value.filter(
+    (item) => Number(item.volumeDeltaKg || 0) > 0 || Number(item.maxWeightDeltaKg || 0) > 0
+  )
+)
+const bestVolumeComparison = computed(() =>
+  comparisons.value
+    .filter((item) => item.volumeDeltaKg !== null)
+    .sort((a, b) => Number(b.volumeDeltaKg || 0) - Number(a.volumeDeltaKg || 0))[0]
+)
+const firstRecordCount = computed(() =>
+  report.value ? reportItems.value.filter((item) => item.firstRecord).length : 0
+)
+const progressTitle = computed(() => {
+  if (prs.value.length) return `新增 ${prs.value.length} 个 PR`
+  if (positiveComparisons.value.length) return `${positiveComparisons.value.length} 个动作超过上次`
+  if (firstRecordCount.value) return `${firstRecordCount.value} 个动作首次记录`
+  return '训练已记录'
+})
+const progressSub = computed(() => {
+  const best = bestVolumeComparison.value
+  if (best?.volumeDeltaKg && best.volumeDeltaKg > 0) {
+    return `${best.exerciseName} 容量比上次提升 ${deltaText(best.volumeDeltaKg)}。`
+  }
+  if (prs.value.length) return '本次训练刷新了个人最佳，后续可以在详情里复盘具体动作。'
+  if (firstRecordCount.value) return '首次记录的动作会作为之后对比进步的基线。'
+  return '保持连续记录，下一次训练后会有更清晰的对比。'
+})
+const sourceStatusText = computed(() => {
+  if (summary.value?.activePlanId && summary.value?.activePlanDayId) return '已完成计划训练'
+  if (summary.value?.activeTemplateId) return '模板训练已保存'
+  return '自由训练已保存'
+})
+const hasPlanContext = computed(() =>
+  Boolean(summary.value?.activePlanId && summary.value?.activePlanDayId)
+)
+
+onLoad((options) => {
+  const rawId = typeof options?.id === 'string' ? Number(options.id) : 0
+  if (Number.isFinite(rawId) && rawId > 0) {
+    void loadReport(rawId)
+  }
+})
+
+async function loadReport(trainingId: number) {
+  loadingReport.value = true
+  try {
+    report.value = await fetchTrainingReport(trainingId)
+  } catch (err) {
+    uni.showToast({ title: '训练报告加载失败', icon: 'none' })
+    console.error('[training] report fetch failed', err)
+  } finally {
+    loadingReport.value = false
+  }
+}
 
 function goHome() {
   workoutStore.setCompletedSummary(null)
@@ -37,13 +116,22 @@ function goHome() {
 }
 
 function goDetail() {
-  const trainingId = summary.value?.trainingId
+  const trainingId = displaySummary.value?.trainingId
   if (!trainingId) {
     goHome()
     return
   }
 
   uni.redirectTo({ url: `${routes.historyDetail}?id=${trainingId}` })
+}
+
+function goActivePlan() {
+  const planId = displaySummary.value?.activePlanId
+  if (!planId) {
+    goHome()
+    return
+  }
+  uni.redirectTo({ url: `${routes.planDetail}?id=${planId}` })
 }
 
 async function saveAsTemplate() {
@@ -76,6 +164,8 @@ function prTypeLabel(type: string) {
       return '最多次数'
     case 'MAX_VOLUME':
       return '最大容量'
+    case 'MAX_DURATION':
+      return '最长时长'
     default:
       return '个人最佳'
   }
@@ -83,6 +173,7 @@ function prTypeLabel(type: string) {
 
 function prValueText(type: string, value: number) {
   if (type === 'MAX_REPS') return `${value} 次`
+  if (type === 'MAX_DURATION') return formatSeconds(value)
   return `${formatWeight(value, weightUnit.value, 1)} ${weightUnit.value}`
 }
 
@@ -105,9 +196,13 @@ function deltaClass(value?: number | null) {
       <AppHeader title="训练完成" subtitle="本次训练已保存" />
 
       <view class="workout-summary__hero">
-        <view class="workout-summary__badge">完成</view>
-        <view class="workout-summary__title">{{ summary?.trainingName || '训练已完成' }}</view>
-        <view class="workout-summary__sub">保持记录，才能看到真实进步。</view>
+        <view class="workout-summary__badge">{{ sourceStatusText }}</view>
+        <view class="workout-summary__title">{{
+          displaySummary?.trainingName || '训练已完成'
+        }}</view>
+        <view class="workout-summary__sub">
+          {{ loadingReport ? '正在同步训练报告...' : '保持记录，才能看到真实进步。' }}
+        </view>
       </view>
 
       <view class="workout-summary__grid">
@@ -121,19 +216,20 @@ function deltaClass(value?: number | null) {
         </view>
         <view class="glass-card workout-summary__stat">
           <view class="workout-summary__label">动作</view>
-          <view class="workout-summary__value">{{ summary?.totalExerciseCount || 0 }} 个</view>
+          <view class="workout-summary__value"
+            >{{ displaySummary?.totalExerciseCount || 0 }} 个</view
+          >
         </view>
         <view class="glass-card workout-summary__stat">
           <view class="workout-summary__label">完成组</view>
-          <view class="workout-summary__value">{{ summary?.totalSetCount || 0 }} 组</view>
+          <view class="workout-summary__value">{{ displaySummary?.totalSetCount || 0 }} 组</view>
         </view>
       </view>
 
-      <view class="glass-card workout-summary__note">
-        <view class="workout-summary__note-title">下一步</view>
-        <view class="workout-summary__note-copy">
-          可以回首页查看本周训练变化，或进入训练详情复盘每个动作。
-        </view>
+      <view class="glass-card workout-summary__insight">
+        <view class="workout-summary__insight-label">本次收获</view>
+        <view class="workout-summary__insight-title">{{ progressTitle }}</view>
+        <view class="workout-summary__insight-copy">{{ progressSub }}</view>
       </view>
 
       <view v-if="highlightedComparisons.length" class="glass-card workout-summary__compare">
@@ -173,6 +269,13 @@ function deltaClass(value?: number | null) {
       <view class="workout-summary__actions">
         <view class="gradient-fire workout-summary__button btn-press" @tap="goHome">返回首页</view>
         <view class="glass-card workout-summary__button btn-press" @tap="goDetail">查看详情</view>
+        <view
+          v-if="hasPlanContext"
+          class="glass-card workout-summary__button btn-press"
+          @tap="goActivePlan"
+        >
+          查看当前计划
+        </view>
         <view class="glass-card workout-summary__button btn-press" @tap="saveAsTemplate">
           {{ savingTemplate ? '正在保存模板...' : '保存为我的模板' }}
         </view>
@@ -240,9 +343,36 @@ function deltaClass(value?: number | null) {
     font-weight: 900;
   }
 
-  &__note {
+  &__note,
+  &__insight {
     margin-top: 24rpx;
     padding: 28rpx;
+  }
+
+  &__insight {
+    border-color: rgba(80, 220, 180, 0.18);
+    background:
+      linear-gradient(145deg, rgba(80, 220, 180, 0.08), rgba(255, 255, 255, 0.045));
+  }
+
+  &__insight-label {
+    color: #3dd9a2;
+    font-size: 21rpx;
+    font-weight: 900;
+  }
+
+  &__insight-title {
+    margin-top: 10rpx;
+    color: #f5f5fa;
+    font-size: 32rpx;
+    font-weight: 900;
+  }
+
+  &__insight-copy {
+    margin-top: 10rpx;
+    color: #b8b8c8;
+    font-size: 24rpx;
+    line-height: 1.6;
   }
 
   &__prs {

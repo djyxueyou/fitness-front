@@ -12,6 +12,7 @@ export interface Exercise {
 }
 
 export interface ExerciseDetail extends Exercise {
+  secondaryMuscles?: string[]
   instructionText?: string
   commonMistakesText?: string
   checklistText?: string
@@ -19,6 +20,7 @@ export interface ExerciseDetail extends Exercise {
   mediaSizeBytes?: number
   mediaWidth?: number
   mediaHeight?: number
+  alternativeExerciseIds?: number[]
 }
 
 export interface ExerciseRecord {

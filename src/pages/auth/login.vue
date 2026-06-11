@@ -14,7 +14,9 @@ let eventChannel: UniApp.EventChannel | undefined
 onLoad(() => {
   const pages = getCurrentPages()
   const currentPage = pages[pages.length - 1]
-  eventChannel = currentPage?.getOpenerEventChannel?.()
+  eventChannel = (
+    currentPage as unknown as { getOpenerEventChannel?: () => UniApp.EventChannel }
+  )?.getOpenerEventChannel?.()
 })
 
 onUnload(() => {
@@ -37,6 +39,37 @@ function toggleAgreed() {
   agreed.value = !agreed.value
 }
 
+async function getWechatProfile() {
+  const allowed = await new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '完善头像和昵称',
+      content: '是否使用微信头像和昵称作为初始资料？不同意将使用默认头像和昵称。',
+      cancelText: '使用默认',
+      confirmText: '使用微信资料',
+      confirmColor: '#ff701c',
+      success: (res) => resolve(Boolean(res.confirm)),
+      fail: () => resolve(false)
+    })
+  })
+  if (!allowed) return {}
+  try {
+    const result = await new Promise<UniApp.GetUserProfileRes>((resolve, reject) => {
+      uni.getUserProfile({
+        desc: '用于完善训练账号头像和昵称',
+        success: resolve,
+        fail: reject
+      })
+    })
+    return {
+      nickname: result.userInfo?.nickName,
+      avatarUrl: result.userInfo?.avatarUrl
+    }
+  } catch (err) {
+    console.warn('[auth] get wechat profile skipped', err)
+    return {}
+  }
+}
+
 async function confirmLogin() {
   if (loading.value) return
   if (!agreed.value) {
@@ -46,7 +79,9 @@ async function confirmLogin() {
 
   loading.value = true
   try {
-    await bootstrapAuth()
+    await bootstrapAuth({
+      shouldUseWechatProfile: getWechatProfile
+    })
     emitAuthChanged()
     uni.showToast({ title: '登录成功', icon: 'none' })
     emitResult(true)

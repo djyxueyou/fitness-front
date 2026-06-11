@@ -2,8 +2,6 @@ import { request } from '@/api/http'
 
 export interface WechatLoginRequest {
   code: string
-  nickname?: string
-  avatarUrl?: string
 }
 
 export interface LoginResponse {
@@ -13,6 +11,8 @@ export interface LoginResponse {
   avatarUrl?: string
   weightUnit: string
   restSeconds: number
+  newUser?: boolean
+  profileInitializedByDefault?: boolean
 }
 
 export function wechatLogin(payload: WechatLoginRequest) {

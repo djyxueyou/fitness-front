@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import AppHeader from '@/components/app-header/index.vue'
+import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
+import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import type { TemplateDetailResponse } from '@/api/template'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
@@ -12,22 +15,60 @@ import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
+import { useProfileStore } from '@/stores/profile'
+import { formatWeight } from '@/utils/unit'
+
+interface ActionSheetItem {
+  key: string
+  label: string
+  description?: string
+  danger?: boolean
+  primary?: boolean
+}
 
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
+const profileStore = useProfileStore()
 const templateId = ref<number | null>(null)
 const detail = ref<TemplateDetailResponse | null>(null)
 const loading = ref(false)
 const starting = ref(false)
 const copying = ref(false)
 const saving = ref(false)
+const sheetVisible = ref(false)
+const sheetItems = ref<ActionSheetItem[]>([])
 
 const isSystemTemplate = computed(() => detail.value?.templateType === 'SYSTEM')
 const totalSets = computed(
   () => detail.value?.items.reduce((total, item) => total + item.targetSets, 0) ?? 0
 )
 const estimatedDuration = computed(() => Math.max(25, (detail.value?.items.length ?? 0) * 10))
+
+function formatTarget(item: TemplateDetailResponse['items'][number]) {
+  if (item.recordType === 'DURATION') {
+    return item.targetDurationSeconds
+      ? `${item.targetSets} 组 · 每组 ${formatDuration(item.targetDurationSeconds)}`
+      : `${item.targetSets} 组 · 使用默认时长`
+  }
+  if (item.recordType === 'BODYWEIGHT_REPS') {
+    return item.targetReps
+      ? `${item.targetSets} 组 · 每组 ${item.targetReps} 次`
+      : `${item.targetSets} 组 · 使用默认次数`
+  }
+  if (item.targetWeightKg != null && item.targetReps) {
+    return `${item.targetSets} 组 · ${formatWeight(item.targetWeightKg, profileStore.unit, 1)} ${profileStore.unit} × ${item.targetReps} 次`
+  }
+  return `${item.targetSets} 组 · 使用默认重量和次数`
+}
+
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (!minutes) return `${remainingSeconds} 秒`
+  if (!remainingSeconds) return `${minutes} 分钟`
+  return `${minutes} 分 ${remainingSeconds} 秒`
+}
 
 onLoad((options) => {
   const id = Number(options?.id)
@@ -67,7 +108,7 @@ async function startWorkout() {
   if (!templateId.value || starting.value) return
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok) return
-  const canStart = await prepareNewWorkout()
+  const canStart = await prepareNewWorkout(detail.value?.name)
   if (!canStart) return
 
   starting.value = true
@@ -144,11 +185,74 @@ async function removeTemplate() {
   }
 }
 
-async function prepareNewWorkout() {
+function openTemplateMoreSheet() {
+  if (!detail.value) return
+  sheetItems.value = isSystemTemplate.value
+    ? [
+        {
+          key: 'copy',
+          label: '复制到我的模板',
+          description: '复制后可以自由编辑动作和组数。',
+          primary: true
+        }
+      ]
+    : [
+        {
+          key: 'edit',
+          label: '编辑模板',
+          description: '调整动作、顺序和目标组数。',
+          primary: true
+        },
+        {
+          key: 'rename',
+          label: '改名',
+          description: '修改模板名称。'
+        },
+        {
+          key: 'copy',
+          label: '复制副本',
+          description: '复制一份新的自定义模板。'
+        },
+        {
+          key: 'delete',
+          label: '删除模板',
+          description: '删除后不可恢复。',
+          danger: true
+        }
+      ]
+  sheetVisible.value = true
+}
+
+function closeTemplateMoreSheet() {
+  sheetVisible.value = false
+}
+
+async function handleTemplateMoreAction(item: ActionSheetItem) {
+  closeTemplateMoreSheet()
+  if (item.key === 'copy') {
+    await copyTemplate()
+    return
+  }
+  if (item.key === 'edit') {
+    await editTemplate()
+    return
+  }
+  if (item.key === 'rename') {
+    await renameTemplate()
+    return
+  }
+  if (item.key === 'delete') {
+    await removeTemplate()
+  }
+}
+
+async function prepareNewWorkout(nextTitle?: string) {
   workoutStore.refreshDraftState()
   if (!workoutStore.hasRecoverableWorkout) return true
 
-  const action = await draftPromptStore.open()
+  const action = await draftPromptStore.open(
+    nextTitle ? { title: nextTitle, subtitle: '模板训练 · 删除当前草稿后直接开始' } : undefined
+  )
   if (action === 'continue') {
     if (workoutStore.restoreDraft()) {
       uni.navigateTo({ url: routes.workoutActive })
@@ -160,6 +264,19 @@ async function prepareNewWorkout() {
     return true
   }
   return false
+}
+
+async function openDraftFab() {
+  workoutStore.refreshDraftState()
+  const action = await draftPromptStore.open()
+  if (action === 'continue') {
+    if (workoutStore.restoreDraft()) {
+      uni.navigateTo({ url: routes.workoutActive })
+    }
+  }
+  if (action === 'discard') {
+    workoutStore.discardWorkout()
+  }
 }
 
 async function copyTemplate() {
@@ -185,6 +302,7 @@ async function copyTemplate() {
 
       <view v-if="detail" class="template-detail__content">
         <view class="glass-card template-detail__hero">
+          <view class="template-detail__hero-more btn-press" @tap="openTemplateMoreSheet">...</view>
           <view class="template-detail__tag">
             {{ isSystemTemplate ? '系统模板' : '我的模板' }}
           </view>
@@ -208,33 +326,6 @@ async function copyTemplate() {
           </view>
         </view>
 
-        <view class="template-detail__actions">
-          <view class="glass-card template-detail__action btn-press" @tap="copyTemplate">
-            {{ copying ? '复制中...' : '复制到我的模板' }}
-          </view>
-          <view
-            v-if="!isSystemTemplate"
-            class="glass-card template-detail__action btn-press"
-            @tap="editTemplate"
-          >
-            编辑模板
-          </view>
-          <view
-            v-if="!isSystemTemplate"
-            class="glass-card template-detail__action btn-press"
-            @tap="renameTemplate"
-          >
-            改名
-          </view>
-          <view
-            v-if="!isSystemTemplate"
-            class="template-detail__action template-detail__action--danger btn-press"
-            @tap="removeTemplate"
-          >
-            删除
-          </view>
-        </view>
-
         <view class="template-detail__section-title">动作安排</view>
         <view class="template-detail__items">
           <view
@@ -243,9 +334,14 @@ async function copyTemplate() {
             class="glass-card template-detail__item"
           >
             <view class="template-detail__index">{{ index + 1 }}</view>
+            <ExerciseThumbnail
+              :name="item.exerciseName"
+              :record-type="item.recordType"
+              :url="item.thumbnailUrl || item.thumbnailPath"
+            />
             <view class="template-detail__item-body">
               <view class="template-detail__item-name">{{ item.exerciseName }}</view>
-              <view class="template-detail__item-meta">目标 {{ item.targetSets }} 组</view>
+              <view class="template-detail__item-meta">{{ formatTarget(item) }}</view>
             </view>
           </view>
         </view>
@@ -256,13 +352,22 @@ async function copyTemplate() {
       </view>
 
       <view class="template-detail__footer">
-        <PrimaryButton :disabled="!detail || starting" @tap="startWorkout">
+        <PrimaryButton :disabled="!detail || starting" :loading="starting" @tap="startWorkout">
           {{ starting ? '正在开始...' : '开始此模板训练' }}
         </PrimaryButton>
       </view>
     </view>
   </scroll-view>
+  <WorkoutDraftFab @open="openDraftFab" />
   <WorkoutDraftPrompt />
+  <AppActionSheet
+    :visible="sheetVisible"
+    title="更多模板操作"
+    :subtitle="detail?.name || ''"
+    :items="sheetItems"
+    @close="closeTemplateMoreSheet"
+    @select="handleTemplateMoreAction"
+  />
   <MembershipRequiredModal />
 </template>
 
@@ -277,7 +382,25 @@ async function copyTemplate() {
   }
 
   &__hero {
+    position: relative;
     padding: 32rpx;
+  }
+
+  &__hero-more {
+    position: absolute;
+    top: 24rpx;
+    right: 24rpx;
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.07);
+    color: #ff9b58;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28rpx;
+    font-weight: 900;
+    letter-spacing: 2rpx;
   }
 
   &__tag {
@@ -292,6 +415,7 @@ async function copyTemplate() {
 
   &__title {
     margin-top: 22rpx;
+    padding-right: 76rpx;
     font-size: 42rpx;
     font-weight: 800;
     color: #f5f5fa;
@@ -328,27 +452,6 @@ async function copyTemplate() {
     font-size: 22rpx;
   }
 
-  &__actions {
-    display: flex;
-    gap: 16rpx;
-  }
-
-  &__action {
-    flex: 1;
-    padding: 22rpx;
-    text-align: center;
-    color: #f5f5fa;
-    font-size: 24rpx;
-    font-weight: 700;
-
-    &--danger {
-      border-radius: 26rpx;
-      color: #ff6b4a;
-      background: rgba(255, 107, 74, 0.12);
-      border: 1px solid rgba(255, 107, 74, 0.18);
-    }
-  }
-
   &__section-title {
     margin-top: 8rpx;
     color: #f5f5fa;
@@ -370,9 +473,9 @@ async function copyTemplate() {
   }
 
   &__index {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 22rpx;
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 20rpx;
     display: flex;
     align-items: center;
     justify-content: center;

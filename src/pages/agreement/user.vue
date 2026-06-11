@@ -109,8 +109,7 @@ function goBack() {
   height: 100vh;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 50% -10%, rgba(255, 80, 30, 0.12) 0%, transparent 58%),
-    #0a0a0e;
+    radial-gradient(circle at 50% -10%, rgba(255, 80, 30, 0.12) 0%, transparent 58%), #0a0a0e;
   color: #f5f5fa;
 
   &__shell {

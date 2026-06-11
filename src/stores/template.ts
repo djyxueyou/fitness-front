@@ -32,13 +32,14 @@ function getRecentTemplateIds() {
   return Array.isArray(value) ? value : []
 }
 
-  function setRecentTemplateIds(ids: number[]) {
+function setRecentTemplateIds(ids: number[]) {
   uni.setStorageSync(RECENT_TEMPLATE_IDS_KEY, ids)
 }
 
 function toTemplate(detail: TemplateDetailResponse, index: number): Template {
   const exercises = detail.items.length
   const isSystem = detail.templateType === 'SYSTEM'
+  const coverItem = detail.items.find((item) => item.thumbnailUrl || item.thumbnailPath) || detail.items[0]
   return {
     id: detail.id,
     name: detail.name,
@@ -52,7 +53,9 @@ function toTemplate(detail: TemplateDetailResponse, index: number): Template {
       ? [detail.description]
       : detail.items.slice(0, 4).map((item) => item.exerciseName),
     color: TEMPLATE_COLORS[index % TEMPLATE_COLORS.length],
-    accent: TEMPLATE_ACCENTS[index % TEMPLATE_ACCENTS.length]
+    accent: TEMPLATE_ACCENTS[index % TEMPLATE_ACCENTS.length],
+    coverUrl: coverItem?.thumbnailUrl || coverItem?.thumbnailPath,
+    coverRecordType: coverItem?.recordType
   }
 }
 
@@ -140,7 +143,9 @@ export const useTemplateStore = defineStore('template', () => {
           level: item.exerciseCount >= 7 ? '高级' : item.exerciseCount >= 4 ? '中级' : '初级',
           muscles: item.description ? [item.description] : [],
           color: TEMPLATE_COLORS[index % TEMPLATE_COLORS.length],
-          accent: TEMPLATE_ACCENTS[index % TEMPLATE_ACCENTS.length]
+          accent: TEMPLATE_ACCENTS[index % TEMPLATE_ACCENTS.length],
+          coverUrl: item.coverUrl,
+          coverRecordType: item.coverRecordType
         }))
         pruneRecentIds()
         loadedFromServer.value = true
@@ -191,7 +196,10 @@ export const useTemplateStore = defineStore('template', () => {
       name,
       items: detail.items.map<UpsertTemplateItemRequest>((item) => ({
         exerciseId: item.exerciseId,
-        targetSets: item.targetSets
+        targetSets: item.targetSets,
+        targetWeightKg: item.targetWeightKg,
+        targetReps: item.targetReps,
+        targetDurationSeconds: item.targetDurationSeconds
       }))
     }
     await updateTemplate(id, payload)
@@ -238,7 +246,10 @@ export const useTemplateStore = defineStore('template', () => {
       name: `新模板 ${new Date().toLocaleTimeString()}`,
       items: sourceItems.map((item) => ({
         exerciseId: item.id,
-        targetSets: 3
+        targetSets: 3,
+        targetWeightKg: item.recordType === 'WEIGHT_REPS' ? 20 : undefined,
+        targetReps: item.recordType !== 'DURATION' ? 10 : undefined,
+        targetDurationSeconds: item.recordType === 'DURATION' ? 60 : undefined
       }))
     })
     await fetchTemplates({ force: true })

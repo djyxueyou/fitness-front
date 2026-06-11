@@ -6,6 +6,8 @@ export interface TemplateListItemResponse {
   templateType: 'USER' | 'SYSTEM' | string
   description?: string
   exerciseCount: number
+  coverUrl?: string
+  coverRecordType?: string
   lastUsedAt?: string
   updatedAt?: string
 }
@@ -15,7 +17,13 @@ export interface TemplateItemResponse {
   exerciseName: string
   sortOrder: number
   targetSets: number
+  targetWeightKg?: number
+  targetReps?: number
+  targetDurationSeconds?: number
   recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
+  thumbnailSource?: string
+  thumbnailPath?: string
+  thumbnailUrl?: string
 }
 
 export interface TemplateDetailResponse {
@@ -32,6 +40,9 @@ export interface TemplateDetailResponse {
 export interface UpsertTemplateItemRequest {
   exerciseId: number
   targetSets: number
+  targetWeightKg?: number
+  targetReps?: number
+  targetDurationSeconds?: number
 }
 
 export interface UpsertTemplateRequest {

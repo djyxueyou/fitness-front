@@ -16,7 +16,7 @@ import {
 import { getToken } from '@/api/http'
 import type { Exercise, ExerciseDetail } from '@/types/exercise'
 
-const PAGE_SIZE = 6
+const PAGE_SIZE = 12
 
 interface ListCacheEntry {
   items: Exercise[]
@@ -55,13 +55,15 @@ function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exerc
 function normalizeDetail(item: import('@/api/exercise').ExerciseDetail): ExerciseDetail {
   return {
     ...normalizeSummary(item),
+    secondaryMuscles: item.secondaryMuscles || [],
     instructionText: item.instructionText,
     commonMistakesText: item.commonMistakesText,
     checklistText: item.checklistText,
     mediaUrl: item.mediaUrl || item.mediaPath,
     mediaSizeBytes: item.mediaSizeBytes,
     mediaWidth: item.mediaWidth,
-    mediaHeight: item.mediaHeight
+    mediaHeight: item.mediaHeight,
+    alternativeExerciseIds: item.alternativeExerciseIds || []
   }
 }
 
@@ -82,12 +84,17 @@ export const useExerciseStore = defineStore('exercise', () => {
   const activeCategoryCode = ref('')
   const activeKeyword = ref('')
   const activeScope = ref<'ALL' | 'SYSTEM' | 'CUSTOM'>('ALL')
+  const activePrimaryMuscle = ref('')
+  const activeEquipment = ref('')
+  const activeDifficultyLevel = ref('')
+  const activeRecordType = ref('')
   const pageNo = ref(0)
   const total = ref(0)
   const hasMore = ref(true)
   const loading = ref(false)
   const listError = ref('')
   const loadedFromServer = ref(false)
+  const fetchSequence = ref(0)
   const favoriteIds = ref<Set<number>>(new Set())
   const favoriteItems = ref<Exercise[]>([])
 
@@ -96,9 +103,21 @@ export const useExerciseStore = defineStore('exercise', () => {
   function queryKey(
     categoryCode = activeCategoryCode.value,
     keyword = activeKeyword.value,
-    scope = activeScope.value
+    scope = activeScope.value,
+    primaryMuscle = activePrimaryMuscle.value,
+    equipment = activeEquipment.value,
+    difficultyLevel = activeDifficultyLevel.value,
+    recordType = activeRecordType.value
   ) {
-    return `${scope}::${categoryCode || 'all'}::${keyword.trim()}`
+    return [
+      scope,
+      categoryCode || 'all',
+      keyword.trim(),
+      primaryMuscle || 'all',
+      equipment || 'all',
+      difficultyLevel || 'all',
+      recordType || 'all'
+    ].join('::')
   }
 
   async function fetchCategories() {
@@ -125,17 +144,37 @@ export const useExerciseStore = defineStore('exercise', () => {
     categoryCode?: string
     keyword?: string
     scope?: 'ALL' | 'SYSTEM' | 'CUSTOM'
+    primaryMuscle?: string
+    equipment?: string
+    difficultyLevel?: string
+    recordType?: string
   }) {
     const reset = options?.reset ?? false
     const force = options?.force ?? false
     const categoryCode = options?.categoryCode ?? activeCategoryCode.value
     const keyword = options?.keyword ?? activeKeyword.value
     const scope = options?.scope ?? activeScope.value
-    const key = queryKey(categoryCode, keyword, scope)
+    const primaryMuscle = options?.primaryMuscle ?? activePrimaryMuscle.value
+    const equipment = options?.equipment ?? activeEquipment.value
+    const difficultyLevel = options?.difficultyLevel ?? activeDifficultyLevel.value
+    const recordType = options?.recordType ?? activeRecordType.value
+    const key = queryKey(
+      categoryCode,
+      keyword,
+      scope,
+      primaryMuscle,
+      equipment,
+      difficultyLevel,
+      recordType
+    )
 
     activeCategoryCode.value = categoryCode
     activeKeyword.value = keyword
     activeScope.value = scope
+    activePrimaryMuscle.value = primaryMuscle
+    activeEquipment.value = equipment
+    activeDifficultyLevel.value = difficultyLevel
+    activeRecordType.value = recordType
 
     if (reset && !force && listCache.value[key]) {
       const cached = listCache.value[key]
@@ -147,11 +186,12 @@ export const useExerciseStore = defineStore('exercise', () => {
       return
     }
 
-    if (loading.value || (!reset && !hasMore.value)) {
+    if ((loading.value && !reset) || (!reset && !hasMore.value)) {
       return
     }
 
     loading.value = true
+    const fetchId = ++fetchSequence.value
     listError.value = ''
     try {
       const nextPageNo = reset ? 1 : pageNo.value + 1
@@ -160,9 +200,16 @@ export const useExerciseStore = defineStore('exercise', () => {
         pageSize: PAGE_SIZE,
         categoryCode: categoryCode || undefined,
         keyword: keyword.trim() || undefined,
-        scope
+        scope,
+        primaryMuscle: primaryMuscle || undefined,
+        equipment: equipment || undefined,
+        difficultyLevel: difficultyLevel || undefined,
+        recordType: recordType || undefined
       })
       await fetchFavoriteIdSet()
+      if (fetchId !== fetchSequence.value) {
+        return
+      }
       const nextItems = page.list.map(normalizeSummary)
       const baseItems = reset
         ? dedupeById(nextItems)
@@ -179,6 +226,9 @@ export const useExerciseStore = defineStore('exercise', () => {
         hasMore: hasMore.value
       }
     } catch (err) {
+      if (fetchId !== fetchSequence.value) {
+        return
+      }
       console.error('[exercise] fetch failed', err)
       listError.value = '动作加载失败，请稍后重试'
       loadedFromServer.value = false
@@ -188,7 +238,9 @@ export const useExerciseStore = defineStore('exercise', () => {
         hasMore.value = false
       }
     } finally {
-      loading.value = false
+      if (fetchId === fetchSequence.value) {
+        loading.value = false
+      }
     }
   }
 
@@ -417,6 +469,10 @@ export const useExerciseStore = defineStore('exercise', () => {
     loading,
     listError,
     loadedFromServer,
+    activePrimaryMuscle,
+    activeEquipment,
+    activeDifficultyLevel,
+    activeRecordType,
     fetchCategories,
     fetchExercises,
     fetchDetail,

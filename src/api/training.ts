@@ -63,6 +63,34 @@ export interface TrainingDetailResponse {
   items: TrainingItemDetailResponse[]
 }
 
+export interface TrainingReportItemResponse {
+  exerciseId: number
+  exerciseName: string
+  recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
+  completedSets: number
+  totalReps: number
+  totalDurationSeconds: number
+  totalVolumeKg: number
+  maxWeightKg: number
+  previousVolumeKg?: number | null
+  volumeDeltaKg?: number | null
+  previousMaxWeightKg?: number | null
+  maxWeightDeltaKg?: number | null
+  firstRecord?: boolean
+  prs: TrainingPrResponse[]
+}
+
+export interface TrainingReportResponse {
+  trainingId: number
+  trainingName: string
+  durationSeconds: number
+  totalExerciseCount: number
+  totalSetCount: number
+  totalVolumeKg: number
+  prCount: number
+  items: TrainingReportItemResponse[]
+}
+
 export interface TrainingCalendarDayResponse {
   trainingDate: string
   sessionCount: number
@@ -109,6 +137,8 @@ export interface SaveTrainingItemRequest {
 
 export interface SaveTrainingRequest {
   templateId?: number | null
+  planId?: number | null
+  planDayId?: number | null
   clientRequestId?: string
   trainingName: string
   startedAt: string
@@ -152,6 +182,13 @@ export function fetchTrainingHistory(params?: {
 export function fetchTrainingDetail(id: number) {
   return request<TrainingDetailResponse>({
     url: `/api/trainings/${id}`,
+    method: 'GET'
+  })
+}
+
+export function fetchTrainingReport(id: number) {
+  return request<TrainingReportResponse>({
+    url: `/api/trainings/${id}/report`,
     method: 'GET'
   })
 }

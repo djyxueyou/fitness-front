@@ -69,6 +69,26 @@ async function changeRest(seconds: number) {
     saving.value = false
   }
 }
+
+async function changeUnit(unit: 'kg' | 'lb') {
+  if (saving.value || unit === profileStore.unit) return
+  saving.value = true
+  try {
+    await profileStore.saveSettings({
+      weightUnit: unit,
+      restSeconds: profileStore.restSeconds
+    })
+    uni.showToast({ title: '单位已保存', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+    console.error('[settings] save weight unit failed', {
+      weightUnit: unit,
+      error: err
+    })
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <template>
@@ -83,6 +103,32 @@ async function changeRest(seconds: number) {
           <view class="settings__title">组间休息时长</view>
           <view class="settings__desc">
             每组完成后自动启动休息倒计时，训练中仍可临时跳过或加时。
+          </view>
+        </view>
+      </view>
+
+      <view class="settings__control glass-card">
+        <view class="settings__label-row">
+          <view>
+            <view class="settings__label">重量单位</view>
+            <view class="settings__hint">影响训练输入、容量统计和历史展示</view>
+          </view>
+          <view class="settings__saving">{{ saving ? '保存中' : '自动保存' }}</view>
+        </view>
+        <view class="settings__unit-row">
+          <view
+            class="settings__unit-option btn-press"
+            :class="{ 'settings__unit-option--active': profileStore.unit === 'kg' }"
+            @tap="changeUnit('kg')"
+          >
+            kg
+          </view>
+          <view
+            class="settings__unit-option btn-press"
+            :class="{ 'settings__unit-option--active': profileStore.unit === 'lb' }"
+            @tap="changeUnit('lb')"
+          >
+            lb
           </view>
         </view>
       </view>
@@ -240,6 +286,32 @@ async function changeRest(seconds: number) {
   &__value-row {
     margin-top: 30rpx;
     gap: 18rpx;
+  }
+
+  &__unit-row {
+    margin-top: 24rpx;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16rpx;
+  }
+
+  &__unit-option {
+    min-height: 78rpx;
+    border-radius: 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c8c8d4;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1rpx solid rgba(255, 255, 255, 0.08);
+    font-size: 28rpx;
+    font-weight: 900;
+
+    &--active {
+      color: #ff7b3c;
+      background: rgba(255, 80, 30, 0.14);
+      border-color: rgba(255, 80, 30, 0.58);
+    }
   }
 
   &__step-btn {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CustomExerciseDialog from '@/components/custom-exercise-dialog/index.vue'
+import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import {
   createCustomExercise,
@@ -320,15 +321,11 @@ function isSelected(exerciseId: number) {
           class="glass-card exercise-picker__item"
           @tap="selectExercise(exercise)"
         >
-          <image
-            v-if="exercise.thumbnailUrl"
-            class="exercise-picker__thumb"
-            :src="exercise.thumbnailUrl"
-            mode="aspectFill"
+          <ExerciseThumbnail
+            :name="exercise.name"
+            :record-type="exercise.recordType"
+            :url="exercise.thumbnailUrl"
           />
-          <view v-else class="exercise-picker__thumb-placeholder">
-            {{ exercise.name.slice(0, 1) }}
-          </view>
           <view class="exercise-picker__body">
             <view class="exercise-picker__name">{{ exercise.name }}</view>
             <view class="exercise-picker__meta">

@@ -12,23 +12,27 @@ const payingPlanCode = ref('')
 const benefits = [
   {
     title: '不限训练记录',
-    desc: '免费版每周只能保存 1 次训练，会员可不限次数记录。'
+    desc: '免费版每周保存次数有限，会员可不限次数记录训练。'
   },
   {
     title: '动作收藏',
-    desc: '收藏常用动作，在动作库和训练中快速找到。'
+    desc: '收藏常用动作，在动作库和训练中快速调用。'
   },
   {
-    title: '自定义动作',
+    title: '自定义动作库',
     desc: '创建只属于你的动作，支持自重、负重和计时类型。'
   },
   {
-    title: '自定义模板',
-    desc: '新建、复制、编辑模板，把常练计划沉淀下来。'
+    title: '训练模板与计划管理',
+    desc: '新建、复制和编辑训练模板，启用系统计划并复制、编辑自己的多周训练计划。'
+  },
+  {
+    title: '进阶训练分析',
+    desc: '查看训练容量趋势、肌群分布、PR 变化和长期训练报告。'
   },
   {
     title: '历史沉淀',
-    desc: '从训练历史保存为模板，复用自己的有效训练安排。'
+    desc: '从训练历史保存为模板，复用有效训练安排，持续优化训练计划。'
   }
 ]
 
@@ -44,9 +48,9 @@ const statusSub = computed(() => {
   const status = membershipStore.status
   if (!status) return '正在读取当前账号权益。'
   if (status.active) {
-    return `剩余 ${status.remainingDays} 天，可使用不限训练、收藏动作、自定义动作和自定义模板。`
+    return `剩余 ${status.remainingDays} 天，可使用不限训练记录、动作收藏、自定义动作、训练模板与计划管理和进阶训练分析。`
   }
-  return '免费版每周可保存 1 次训练，开通会员后解锁完整训练记录和自定义能力。'
+  return '免费版每周可保存 1 次训练，开通会员后解锁完整训练记录、自定义内容、训练计划管理和进阶分析。'
 })
 
 const expirationWarning = computed(() => {
@@ -63,7 +67,7 @@ const expirationWarning = computed(() => {
   if (status.expired) {
     return {
       type: 'expired',
-      text: '会员已过期。已创建的数据会保留，但不能继续收藏、新建或编辑自定义内容。'
+      text: '会员已过期。历史训练、已创建模板和计划会保留；但不能继续收藏、新建、复制或编辑自定义内容，也不能使用进阶分析。'
     }
   }
   return null
@@ -86,7 +90,7 @@ function goBack() {
 }
 
 function priceText(priceCent: number) {
-  return `¥${(priceCent / 100).toFixed(priceCent % 100 === 0 ? 0 : 1)}`
+  return `￥${(priceCent / 100).toFixed(priceCent % 100 === 0 ? 0 : 1)}`
 }
 
 function planSubText(months: number) {
@@ -109,7 +113,7 @@ async function buy(planCode: string) {
         paySign: params.paySign,
         success: () => resolve(),
         fail: reject
-      } as UniApp.RequestPaymentOptions)
+      } as unknown as UniApp.RequestPaymentOptions)
     })
 
     uni.showToast({ title: '支付处理中', icon: 'none' })
@@ -134,7 +138,7 @@ async function buy(planCode: string) {
     <view class="page-shell membership safe-bottom">
       <AppHeader
         title="会员中心"
-        subtitle="解锁完整训练记录、收藏和自定义能力"
+        subtitle="解锁不限训练记录、训练模板与计划管理和进阶训练分析"
         show-back
         @back="goBack"
       />
@@ -166,7 +170,11 @@ async function buy(planCode: string) {
 
       <view class="membership__section">选择套餐</view>
       <view class="membership__plans">
-        <view v-for="plan in membershipStore.plans" :key="plan.planCode" class="glass-card membership__plan">
+        <view
+          v-for="plan in membershipStore.plans"
+          :key="plan.planCode"
+          class="glass-card membership__plan"
+        >
           <view class="membership__plan-copy">
             <view class="membership__plan-name">{{ plan.name }}</view>
             <view class="membership__plan-sub">{{ planSubText(plan.durationMonths) }}</view>
@@ -181,10 +189,13 @@ async function buy(planCode: string) {
       </view>
 
       <view class="membership__note">
-        说明：会员到期后，历史训练、自定义动作和自定义模板会保留；但不能继续收藏、新建或编辑自定义内容。
+        说明：会员到期后，历史训练、已创建模板和计划会保留；但不能继续收藏、新建、复制或编辑自定义内容，也不能使用进阶分析。
       </view>
 
-      <view v-if="!membershipStore.plans.length && !membershipStore.loading" class="glass-card membership__empty">
+      <view
+        v-if="!membershipStore.plans.length && !membershipStore.loading"
+        class="glass-card membership__empty"
+      >
         暂无可购买套餐，请稍后再试。
       </view>
     </view>

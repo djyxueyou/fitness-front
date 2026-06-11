@@ -4,6 +4,7 @@ import { onShow } from '@dcloudio/uni-app'
 import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
+import TemplateCover from '@/components/template-cover/index.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
@@ -27,6 +28,7 @@ const actionSheetTitle = ref('')
 const actionSheetSubtitle = ref('')
 const actionSheetItems = ref<ActionSheetItem[]>([])
 const actionTarget = ref<Template | null>(null)
+const activeTab = ref<'mine' | 'system'>('mine')
 
 onShow(async () => {
   const ok = await ensureFeatureAuth('模板管理')
@@ -48,6 +50,10 @@ async function createTemplate() {
 
 function goDetail(id: number) {
   uni.navigateTo({ url: `${routes.templateDetail}?id=${id}` })
+}
+
+function showSystemTemplates() {
+  activeTab.value = 'system'
 }
 
 async function editTemplate(item: Template) {
@@ -171,22 +177,43 @@ function handleTemplateAction(action: ActionSheetItem) {
   <view class="template-manager-page">
     <scroll-view scroll-y class="page-scroll">
       <view class="page-shell template-manager safe-bottom">
-        <AppHeader title="模板管理" subtitle="系统模板可查看和复制，自定义模板可编辑" show-back @back="goBack" />
+        <AppHeader
+          title="模板管理"
+          subtitle="管理自己的训练模板，复制系统方案作为起点"
+          show-back
+          @back="goBack"
+        />
 
-        <view class="template-manager__summary glass-card">
-          <view class="template-manager__summary-item">
-            <view class="template-manager__summary-value">{{ templateStore.userItems.length }}</view>
-            <view class="template-manager__summary-label">我的模板</view>
+        <view class="template-manager__toolbar">
+          <view class="template-manager__toolbar-copy">
+            <view class="template-manager__toolbar-title">
+              我的模板 <text>{{ templateStore.userItems.length }}</text>
+            </view>
+            <view class="template-manager__toolbar-sub">
+              系统方案 {{ templateStore.systemItems.length }}
+            </view>
           </view>
-          <view class="template-manager__summary-item">
-            <view class="template-manager__summary-value">{{ templateStore.systemItems.length }}</view>
-            <view class="template-manager__summary-label">系统模板</view>
-          </view>
-          <view class="template-manager__create btn-press" @tap="createTemplate">新建模板</view>
+          <view class="template-manager__create btn-press" @tap="createTemplate">+ 新建模板</view>
         </view>
 
-        <view class="template-manager__section-title">我的模板</view>
-        <view class="template-manager__list">
+        <view class="template-manager__tabs">
+          <view
+            class="template-manager__tab btn-press"
+            :class="{ 'template-manager__tab--active': activeTab === 'mine' }"
+            @tap="activeTab = 'mine'"
+          >
+            我的模板 {{ templateStore.userItems.length }}
+          </view>
+          <view
+            class="template-manager__tab btn-press"
+            :class="{ 'template-manager__tab--active': activeTab === 'system' }"
+            @tap="activeTab = 'system'"
+          >
+            系统模板 {{ templateStore.systemItems.length }}
+          </view>
+        </view>
+
+        <view v-if="activeTab === 'mine'" class="template-manager__list">
           <view v-if="!templateStore.userItems.length" class="glass-card template-manager__empty">
             还没有自定义模板。可以从系统模板复制，或点击“新建模板”创建。
           </view>
@@ -194,12 +221,15 @@ function handleTemplateAction(action: ActionSheetItem) {
           <view
             v-for="item in templateStore.userItems"
             :key="item.id"
-            class="glass-card template-manager__item"
+            class="template-manager__item"
           >
             <template v-if="editingId === item.id">
               <input v-model="editName" class="template-manager__input" focus />
               <view class="template-manager__rename-actions">
-                <view class="template-manager__small-btn template-manager__small-btn--primary" @tap="saveRename">
+                <view
+                  class="template-manager__small-btn template-manager__small-btn--primary"
+                  @tap="saveRename"
+                >
                   保存
                 </view>
                 <view class="template-manager__small-btn" @tap="cancelRename">取消</view>
@@ -207,67 +237,83 @@ function handleTemplateAction(action: ActionSheetItem) {
             </template>
 
             <template v-else>
+              <view
+                class="template-manager__menu btn-press"
+                @tap.stop="openUserTemplateActions(item)"
+              >
+                ...
+              </view>
               <view class="template-manager__row">
                 <view class="template-manager__main" @tap="goDetail(item.id)">
-                  <view
-                    class="template-manager__icon"
-                    :style="{ background: item.color, color: item.accent }"
-                  >
-                    {{ item.tag }}
-                  </view>
+                  <TemplateCover
+                    :name="item.name"
+                    :url="item.coverUrl"
+                    :record-type="item.coverRecordType"
+                  />
                   <view class="template-manager__body">
                     <view class="template-manager__name">{{ item.name }}</view>
                     <view class="template-manager__meta">
                       {{ item.exercises }} 个动作 · {{ item.duration }} min
                     </view>
-                    <view v-if="item.description" class="template-manager__desc">
-                      {{ item.description }}
+                    <view class="template-manager__desc">
+                      {{ item.description || '自定义训练模板，可自由调整动作和目标。' }}
                     </view>
                   </view>
-                </view>
-
-                <view class="template-manager__menu btn-press" @tap.stop="openUserTemplateActions(item)">
-                  管理
+                  <view class="template-manager__arrow" />
                 </view>
               </view>
             </template>
           </view>
+
+          <view class="template-manager__helper btn-press" @tap="showSystemTemplates">
+            <view>
+              <view class="template-manager__helper-title">从系统模板快速开始</view>
+              <view class="template-manager__helper-sub">复制后可自由调整动作和组数</view>
+            </view>
+            <view class="template-manager__helper-arrow">›</view>
+          </view>
         </view>
 
-        <view class="template-manager__section-title">系统模板</view>
-        <view class="template-manager__list">
+        <view v-else class="template-manager__list template-manager__list--system">
           <view
             v-for="item in templateStore.systemItems"
             :key="item.id"
-            class="glass-card template-manager__item template-manager__item--system"
+            class="template-manager__item template-manager__item--system"
           >
             <view class="template-manager__row">
               <view class="template-manager__main" @tap="goDetail(item.id)">
-                <view
-                  class="template-manager__icon"
-                  :style="{ background: item.color, color: item.accent }"
-                >
-                  SYS
-                </view>
+                <TemplateCover
+                  :name="item.name"
+                  :url="item.coverUrl"
+                  :record-type="item.coverRecordType"
+                />
                 <view class="template-manager__body">
                   <view class="template-manager__name">{{ item.name }}</view>
                   <view class="template-manager__meta">
-                    {{ item.exercises }} 个动作 · 只读，可复制到我的模板
+                    {{ item.exercises }} 个动作 · 只读
                   </view>
-                  <view v-if="item.description" class="template-manager__desc">
-                    {{ item.description }}
+                  <view class="template-manager__desc">
+                    {{ item.description || '系统训练方案，复制后可自由调整。' }}
                   </view>
                 </view>
               </view>
 
-              <view class="template-manager__menu template-manager__menu--primary btn-press" @tap.stop="openSystemTemplateActions(item)">
+            </view>
+            <view class="template-manager__item-actions">
+              <view
+                class="template-manager__menu template-manager__menu--primary btn-press"
+                @tap.stop="duplicateTemplate(item.id)"
+              >
                 复制
               </view>
+              <view
+                class="template-manager__arrow template-manager__arrow--action btn-press"
+                @tap.stop="goDetail(item.id)"
+              />
             </view>
           </view>
         </view>
       </view>
-
     </scroll-view>
 
     <AppActionSheet
@@ -284,34 +330,41 @@ function handleTemplateAction(action: ActionSheetItem) {
 
 <style lang="scss" scoped>
 .template-manager {
-  &__summary {
-    padding: 24rpx;
-    display: grid;
-    grid-template-columns: 1fr 1fr 180rpx;
+  &__toolbar {
+    padding: 8rpx 0 24rpx;
+    display: flex;
     align-items: center;
-    gap: 18rpx;
-    margin-bottom: 30rpx;
+    justify-content: space-between;
+    gap: 20rpx;
   }
 
-  &__summary-item {
+  &__toolbar-copy {
     min-width: 0;
+    flex: 1;
   }
 
-  &__summary-value {
+  &__toolbar-title {
     color: #f5f5fa;
-    font-size: 42rpx;
+    font-size: 30rpx;
     font-weight: 900;
+
+    text {
+      margin-left: 8rpx;
+      color: #ff8d4e;
+    }
   }
 
-  &__summary-label {
-    margin-top: 4rpx;
+  &__toolbar-sub {
+    margin-top: 8rpx;
     color: #828296;
-    font-size: 22rpx;
+    font-size: 21rpx;
   }
 
   &__create {
-    height: 72rpx;
-    border-radius: 24rpx;
+    min-width: 190rpx;
+    height: 70rpx;
+    padding: 0 24rpx;
+    border-radius: 22rpx;
     background: linear-gradient(135deg, #ff501e, #ffa03c);
     color: #fff;
     display: flex;
@@ -321,25 +374,50 @@ function handleTemplateAction(action: ActionSheetItem) {
     font-weight: 900;
   }
 
-  &__section-title {
-    margin: 28rpx 0 16rpx;
-    color: #f5f5fa;
-    font-size: 30rpx;
+  &__tabs {
+    margin-bottom: 22rpx;
+    padding: 6rpx;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6rpx;
+    border-radius: 22rpx;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1rpx solid rgba(255, 255, 255, 0.075);
+  }
+
+  &__tab {
+    min-height: 66rpx;
+    border-radius: 17rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9292a5;
+    font-size: 23rpx;
     font-weight: 900;
+
+    &--active {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(255, 80, 30, 0.92), rgba(255, 140, 40, 0.78));
+      box-shadow: 0 8rpx 24rpx rgba(255, 80, 30, 0.2);
+    }
   }
 
   &__list {
     display: flex;
     flex-direction: column;
-    gap: 18rpx;
+    gap: 12rpx;
   }
 
   &__item {
-    padding: 24rpx;
-    border-color: rgba(255, 255, 255, 0.08);
+    position: relative;
+    min-height: 146rpx;
+    padding: 20rpx 76rpx 20rpx 20rpx;
+    border-radius: 22rpx;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1rpx solid rgba(255, 255, 255, 0.075);
 
     &--system {
-      background: rgba(255, 255, 255, 0.035);
+      padding: 20rpx 166rpx 20rpx 20rpx;
     }
   }
 
@@ -348,6 +426,10 @@ function handleTemplateAction(action: ActionSheetItem) {
     display: flex;
     align-items: center;
     gap: 18rpx;
+  }
+
+  &__main {
+    min-height: 106rpx;
   }
 
   &__row {
@@ -360,13 +442,13 @@ function handleTemplateAction(action: ActionSheetItem) {
   }
 
   &__icon {
-    width: 76rpx;
-    height: 76rpx;
-    border-radius: 24rpx;
+    width: 68rpx;
+    height: 68rpx;
+    border-radius: 20rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22rpx;
+    font-size: 20rpx;
     font-weight: 900;
     flex-shrink: 0;
   }
@@ -376,9 +458,31 @@ function handleTemplateAction(action: ActionSheetItem) {
     min-width: 0;
   }
 
+  &__arrow {
+    position: absolute;
+    right: 28rpx;
+    bottom: 26rpx;
+    width: 14rpx;
+    height: 14rpx;
+    flex-shrink: 0;
+    border-top: 3rpx solid rgba(255, 255, 255, 0.9);
+    border-right: 3rpx solid rgba(255, 255, 255, 0.9);
+    transform: rotate(45deg);
+
+    &--action {
+      position: static;
+      width: 14rpx;
+      height: 14rpx;
+      margin: 0 4rpx 0 2rpx;
+      padding: 8rpx;
+      background-clip: content-box;
+    }
+  }
+
   &__name {
+    padding-right: 76rpx;
     color: #f5f5fa;
-    font-size: 30rpx;
+    font-size: 27rpx;
     font-weight: 900;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -387,25 +491,25 @@ function handleTemplateAction(action: ActionSheetItem) {
 
   &__meta,
   &__desc {
-    margin-top: 8rpx;
+    margin-top: 6rpx;
     color: #828296;
-    font-size: 22rpx;
+    font-size: 20rpx;
     line-height: 1.45;
   }
 
   &__desc {
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
 
   &__menu,
   &__small-btn {
-    min-width: 92rpx;
+    min-width: 72rpx;
     min-height: 56rpx;
     padding: 0 18rpx;
-    border-radius: 18rpx;
+    border-radius: 999rpx;
     background: rgba(255, 255, 255, 0.07);
     color: #f5f5fa;
     display: flex;
@@ -416,10 +520,64 @@ function handleTemplateAction(action: ActionSheetItem) {
     flex-shrink: 0;
 
     &--primary {
+      min-width: 96rpx;
       background: rgba(255, 80, 30, 0.14);
       color: #ff7a32;
       border: 1px solid rgba(255, 80, 30, 0.2);
     }
+  }
+
+  &__menu:not(&__menu--primary) {
+    position: absolute;
+    top: 18rpx;
+    right: 18rpx;
+    width: 58rpx;
+    min-width: 58rpx;
+    min-height: 50rpx;
+    padding: 0;
+    color: #ff9b58;
+    font-size: 28rpx;
+    letter-spacing: 2rpx;
+  }
+
+  &__item-actions {
+    position: absolute;
+    right: 18rpx;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+  }
+
+  &__helper {
+    margin-top: 8rpx;
+    min-height: 98rpx;
+    padding: 18rpx 22rpx;
+    border-radius: 22rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+    background: rgba(255, 80, 30, 0.065);
+    border: 1rpx solid rgba(255, 80, 30, 0.18);
+  }
+
+  &__helper-title {
+    color: #f5f5fa;
+    font-size: 23rpx;
+    font-weight: 900;
+  }
+
+  &__helper-sub {
+    margin-top: 6rpx;
+    color: #9a8490;
+    font-size: 20rpx;
+  }
+
+  &__helper-arrow {
+    color: #ff8d4e;
+    font-size: 38rpx;
   }
 
   &__rename-actions {
@@ -443,7 +601,8 @@ function handleTemplateAction(action: ActionSheetItem) {
   }
 
   &__empty {
-    padding: 28rpx;
+    padding: 26rpx;
+    border-radius: 22rpx;
     color: #828296;
     font-size: 24rpx;
     line-height: 1.6;

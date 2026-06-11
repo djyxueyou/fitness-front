@@ -8,6 +8,12 @@ function defaultDescription(featureName: string) {
   if (featureName.includes('收藏')) {
     return '开通会员后可收藏常用动作，训练和动作库中都能快速找到。'
   }
+  if (featureName.includes('训练计划') || featureName.includes('计划')) {
+    return '开通会员后可复制系统计划，并编辑自己的多周训练安排。'
+  }
+  if (featureName.includes('分析') || featureName.includes('报告')) {
+    return '开通会员后可查看训练容量趋势、肌群分布、PR 变化和长期训练报告。'
+  }
   if (featureName.includes('自定义动作') || featureName.includes('动作')) {
     return '开通会员后可创建只属于你的动作库，支持自重、负重和计时类型。'
   }

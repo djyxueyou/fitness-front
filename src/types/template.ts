@@ -10,4 +10,6 @@ export interface Template {
   muscles: string[]
   color: string
   accent: string
+  coverUrl?: string
+  coverRecordType?: string
 }

@@ -7,43 +7,25 @@ import TagChip from '@/components/tag-chip/index.vue'
 import { getToken } from '@/api/http'
 import { fetchExerciseLastPerformance, type ExerciseLastPerformanceResponse } from '@/api/training'
 import { useExerciseStore } from '@/stores/exercise'
+import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { routes } from '@/utils/navigation'
 import { formatSeconds } from '@/utils/format'
+import type { Exercise } from '@/types/exercise'
 
 const exerciseStore = useExerciseStore()
+const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const exerciseId = ref(0)
 const loading = ref(true)
 const isAdded = ref(false)
+const lastPerformance = ref<ExerciseLastPerformanceResponse | null>(null)
+const alternativeExercises = ref<Exercise[]>([])
 
 const exercise = computed(() => exerciseStore.getById(exerciseId.value))
-const lastPerformance = ref<ExerciseLastPerformanceResponse | null>(null)
-
-const record = computed(() => {
-  const p = lastPerformance.value
-  if (!p) return { maxWeight: '--', bestSet: '--' }
-  if (exercise.value?.recordType === 'DURATION') {
-    return {
-      maxWeight: p.bestDurationSeconds ? formatSeconds(p.bestDurationSeconds) : '--',
-      bestSet: p.sets.length ? formatSeconds(p.sets[0].durationSeconds || 0) : '--'
-    }
-  }
-  if (exercise.value?.recordType === 'BODYWEIGHT_REPS') {
-    return {
-      maxWeight: p.sets.length ? `${Math.max(...p.sets.map((set) => set.reps || 0))} 次` : '--',
-      bestSet: p.sets.length ? `自重 x ${p.sets[0].reps}` : '--'
-    }
-  }
-  return {
-    maxWeight: `${p.bestWeightKg} kg`,
-    bestSet: p.sets.length ? `${p.sets[0].weightKg} kg x ${p.sets[0].reps}` : '--'
-  }
-})
-const demoUrl = computed(() =>
-  'mediaUrl' in (exercise.value || {}) ? exercise.value?.mediaUrl || '' : ''
-)
+const demoUrl = computed(() => exercise.value?.mediaUrl || '')
 const coverUrl = computed(() => exercise.value?.thumbnailUrl || '')
 const isCustomExercise = computed(() => exercise.value?.exerciseType === 'USER')
 const instructionTips = computed(() =>
@@ -55,6 +37,8 @@ const mistakeTips = computed(() =>
 const checklistTips = computed(() =>
   isCustomExercise.value ? [] : splitContent(exercise.value?.checklistText)
 )
+const secondaryMuscles = computed(() => exercise.value?.secondaryMuscles || [])
+const alternativeExerciseIds = computed(() => exercise.value?.alternativeExerciseIds || [])
 const isInCurrentWorkout = computed(() =>
   exercise.value ? workoutStore.hasExercise(exercise.value.id) : false
 )
@@ -66,18 +50,39 @@ const bestMetricLabel = computed(() =>
       : '最大重量'
 )
 const bestMetricSubLabel = computed(() =>
-  exercise.value?.recordType === 'WEIGHT_REPS' ? '1RM' : '历史表现'
+  exercise.value?.recordType === 'WEIGHT_REPS' ? '历史表现' : '最佳记录'
 )
-
-onLoad(async (query) => {
-  const id = Number(query.id)
-  if (Number.isNaN(id) || id <= 0) {
-    loading.value = false
-    return
+const record = computed(() => {
+  const performance = lastPerformance.value
+  if (!performance) return { best: '--', lastSet: '--' }
+  if (exercise.value?.recordType === 'DURATION') {
+    return {
+      best: performance.bestDurationSeconds ? formatSeconds(performance.bestDurationSeconds) : '--',
+      lastSet: performance.sets.length
+        ? formatSeconds(performance.sets[0].durationSeconds || 0)
+        : '--'
+    }
   }
-  const ok = await ensureFeatureAuth('查看动作详情')
-  if (!ok) {
-    uni.navigateBack()
+  if (exercise.value?.recordType === 'BODYWEIGHT_REPS') {
+    return {
+      best: performance.sets.length
+        ? `${Math.max(...performance.sets.map((set) => set.reps || 0))} 次`
+        : '--',
+      lastSet: performance.sets.length ? `自重 x ${performance.sets[0].reps}` : '--'
+    }
+  }
+  return {
+    best: `${performance.bestWeightKg} kg`,
+    lastSet: performance.sets.length
+      ? `${performance.sets[0].weightKg} kg x ${performance.sets[0].reps}`
+      : '--'
+  }
+})
+
+onLoad((query = {}) => {
+  const id = Number(query.id)
+  if (!Number.isFinite(id) || id <= 0) {
+    loading.value = false
     return
   }
   exerciseId.value = id
@@ -88,8 +93,14 @@ async function loadDetail(id: number) {
   loading.value = true
   try {
     await exerciseStore.fetchDetail(id)
-    // Also fetch last performance for this exercise
-    fetchExerciseLastPerformance(id).then(p => { lastPerformance.value = p }).catch(() => {})
+    await loadAlternatives()
+    if (getToken()) {
+      fetchExerciseLastPerformance(id)
+        .then((performance) => {
+          lastPerformance.value = performance
+        })
+        .catch(() => {})
+    }
   } catch (err) {
     console.error('[exercise-detail] fetch failed', err)
     uni.showToast({ title: '动作详情加载失败', icon: 'none' })
@@ -98,15 +109,34 @@ async function loadDetail(id: number) {
   }
 }
 
+async function loadAlternatives() {
+  const ids = alternativeExerciseIds.value.filter((id) => id !== exerciseId.value)
+  if (!ids.length) {
+    alternativeExercises.value = []
+    return
+  }
+  const results = await Promise.allSettled(ids.map((id) => exerciseStore.fetchDetail(id)))
+  alternativeExercises.value = results
+    .map((result, index) => {
+      if (result.status === 'fulfilled') return result.value
+      return exerciseStore.getById(ids[index])
+    })
+    .filter((item): item is Exercise => Boolean(item))
+}
+
 function goBack() {
   uni.navigateBack()
+}
+
+function goAlternative(id: number) {
+  uni.redirectTo({ url: `${routes.exerciseDetail}?id=${id}` })
 }
 
 function splitContent(text?: string) {
   if (!text) return []
   return text
-    .split(/\r?\n|；|;|。/)
-    .map((item) => item.replace(/^[-\d.、\s]+/, '').trim())
+    .split(/\r?\n|；|。/)
+    .map((item) => item.replace(/^[-\d.\s]+/, '').trim())
     .filter(Boolean)
 }
 
@@ -114,13 +144,11 @@ async function toggleFavorite() {
   const wasLoggedIn = !!getToken()
   const ok = await ensureFeatureAuth('收藏动作')
   if (!ok || !exercise.value) return
-
   if (!wasLoggedIn) {
     await exerciseStore.refreshFavoriteStates()
     uni.showToast({ title: '已登录，请再次点击收藏', icon: 'none' })
     return
   }
-
   if (!(await ensureMembershipFeature('收藏动作'))) return
   await exerciseStore.toggleFavorite(exercise.value.id)
 }
@@ -128,7 +156,12 @@ async function toggleFavorite() {
 async function addToWorkout() {
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok || !exercise.value) return
-  const added = workoutStore.addExercise(exercise.value.id, exercise.value.name, exercise.value.muscle)
+  const added = workoutStore.addExercise(
+    exercise.value.id,
+    exercise.value.name,
+    exercise.value.muscle,
+    exercise.value.recordType
+  )
   if (!added) {
     uni.showToast({ title: '该动作已在当前训练中', icon: 'none' })
     return
@@ -139,11 +172,27 @@ async function addToWorkout() {
     isAdded.value = false
   }, 1600)
 }
+
+async function addToTemplate() {
+  const ok = await ensureFeatureAuth('模板管理')
+  if (!ok || !exercise.value) return
+  if (!(await ensureMembershipFeature('自定义模板'))) return
+  try {
+    const result = await templateStore.saveFromPlan(`${exercise.value.name} 模板`, [
+      { exerciseId: exercise.value.id, targetSets: 3 }
+    ])
+    uni.showToast({ title: '已创建模板', icon: 'none' })
+    uni.navigateTo({ url: `${routes.templateDetail}?id=${result.id}` })
+  } catch (err) {
+    uni.showToast({ title: '添加失败', icon: 'none' })
+    console.error('[exercise-detail] add to template failed', err)
+  }
+}
 </script>
 
 <template>
   <scroll-view scroll-y class="page-scroll">
-    <view v-if="exercise" class="page-shell safe-bottom">
+    <view v-if="exercise" class="page-shell exercise-detail safe-bottom">
       <AppHeader
         :title="exercise.name"
         :subtitle="`${exercise.muscle} · ${exercise.category}`"
@@ -162,26 +211,37 @@ async function addToWorkout() {
       </AppHeader>
 
       <view class="exercise-detail__preview">
-        <view class="exercise-detail__preview-card">
-          <image v-if="demoUrl" class="exercise-detail__demo" :src="demoUrl" mode="aspectFit" lazy-load />
-          <image
-            v-else-if="coverUrl"
-            class="exercise-detail__demo"
-            :src="coverUrl"
-            mode="aspectFit"
-          />
-          <view v-else class="exercise-detail__placeholder">
-            <view class="exercise-detail__placeholder-icon">GIF</view>
-            <view class="muted">{{ loading ? '加载动作演示中...' : '暂无动作演示' }}</view>
-          </view>
+        <image
+          v-if="demoUrl"
+          class="exercise-detail__demo"
+          :src="demoUrl"
+          mode="aspectFit"
+          lazy-load
+        />
+        <image
+          v-else-if="coverUrl"
+          class="exercise-detail__demo"
+          :src="coverUrl"
+          mode="aspectFit"
+        />
+        <view v-else class="exercise-detail__placeholder">
+          <view class="exercise-detail__placeholder-icon">GIF</view>
+          <view class="muted">{{ loading ? '加载动作演示中...' : '暂无动作演示' }}</view>
         </view>
       </view>
 
       <view class="exercise-detail__chips">
         <TagChip :text="`器械：${exercise.equipment}`" />
         <TagChip :text="`难度：${exercise.level}`" />
-        <TagChip :text="`肌群：${exercise.muscle}`" />
+        <TagChip :text="`主肌群：${exercise.muscle}`" />
         <TagChip :text="`分类：${exercise.category}`" />
+      </view>
+
+      <view v-if="secondaryMuscles.length" class="glass-card exercise-detail__section">
+        <view class="exercise-detail__section-title">辅助肌群</view>
+        <view class="exercise-detail__chips exercise-detail__chips--inside">
+          <TagChip v-for="muscle in secondaryMuscles" :key="muscle" :text="muscle" />
+        </view>
       </view>
 
       <view v-if="instructionTips.length" class="glass-card exercise-detail__section">
@@ -214,31 +274,54 @@ async function addToWorkout() {
         </view>
       </view>
 
+      <view v-if="alternativeExerciseIds.length" class="glass-card exercise-detail__section">
+        <view class="exercise-detail__section-title">替代动作</view>
+        <view class="exercise-detail__alternatives">
+          <view
+            v-for="item in alternativeExercises"
+            :key="item.id"
+            class="exercise-detail__alternative btn-press"
+            @tap="goAlternative(item.id)"
+          >
+            <view class="exercise-detail__alternative-name">{{ item.name }}</view>
+            <view class="exercise-detail__alternative-meta">
+              {{ item.muscle }} · {{ item.equipment }}
+            </view>
+          </view>
+        </view>
+      </view>
+
       <view class="glass-card exercise-detail__section">
         <view class="exercise-detail__section-head">
           <view class="exercise-detail__section-title">历史最佳</view>
-          <view class="muted">更多</view>
+          <view class="muted">最近表现</view>
         </view>
         <view class="exercise-detail__records">
           <view class="exercise-detail__record">
             <view class="muted">{{ bestMetricLabel }}</view>
-            <view class="exercise-detail__record-value">{{ record.maxWeight }}</view>
+            <view class="exercise-detail__record-value">{{ record.best }}</view>
             <view class="muted">{{ bestMetricSubLabel }}</view>
           </view>
           <view class="exercise-detail__record">
-            <view class="muted">最佳工作组</view>
-            <view class="exercise-detail__record-value">{{ record.bestSet }}</view>
-            <view class="muted">历史表现</view>
+            <view class="muted">最近工作组</view>
+            <view class="exercise-detail__record-value">{{ record.lastSet }}</view>
+            <view class="muted">上次记录</view>
           </view>
         </view>
       </view>
 
       <view
         class="exercise-detail__cta"
-        :class="{ 'glass-card': isAdded || isInCurrentWorkout, 'gradient-fire glow-primary': !isAdded && !isInCurrentWorkout }"
+        :class="{
+          'glass-card': isAdded || isInCurrentWorkout,
+          'gradient-fire glow-primary': !isAdded && !isInCurrentWorkout
+        }"
         @tap="addToWorkout"
       >
         {{ isAdded || isInCurrentWorkout ? '已在今日训练中' : '添加到今日训练' }}
+      </view>
+      <view class="glass-card exercise-detail__template-cta btn-press" @tap="addToTemplate">
+        添加到模板
       </view>
     </view>
     <view v-else class="page-shell safe-bottom">
@@ -268,7 +351,7 @@ async function addToWorkout() {
     }
   }
 
-  &__preview-card {
+  &__preview {
     min-height: 420rpx;
     border-radius: 36rpx;
     border: 1px solid rgba(255, 80, 30, 0.16);
@@ -310,6 +393,10 @@ async function addToWorkout() {
     flex-wrap: wrap;
     gap: 12rpx;
     margin: 24rpx 0;
+
+    &--inside {
+      margin: 0;
+    }
   }
 
   &__section {
@@ -329,29 +416,40 @@ async function addToWorkout() {
     margin-bottom: 16rpx;
   }
 
-  &__tip {
+  &__tip,
+  &__check {
     display: flex;
     align-items: flex-start;
     gap: 16rpx;
     margin-top: 16rpx;
   }
 
-  &__tip-index {
+  &__tip-index,
+  &__check-dot {
     width: 40rpx;
     height: 40rpx;
     border-radius: 14rpx;
-    background: linear-gradient(135deg, #ff501e, #ffa03c);
-    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 20rpx;
     font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  &__tip-index {
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
+    color: #fff;
 
     &--warn {
       background: rgba(255, 107, 74, 0.18);
       color: #ff6b4a;
     }
+  }
+
+  &__check-dot {
+    background: rgba(61, 217, 162, 0.16);
+    color: #3dd9a2;
   }
 
   &__tip-text {
@@ -360,24 +458,41 @@ async function addToWorkout() {
     line-height: 1.6;
   }
 
-  &__check {
+  &__alternatives {
     display: flex;
-    align-items: flex-start;
-    gap: 16rpx;
-    margin-top: 16rpx;
+    flex-wrap: wrap;
+    gap: 12rpx;
   }
 
-  &__check-dot {
-    width: 40rpx;
-    height: 40rpx;
-    border-radius: 14rpx;
-    background: rgba(61, 217, 162, 0.16);
-    color: #3dd9a2;
+  &__alternative {
+    min-width: 220rpx;
+    min-height: 92rpx;
+    padding: 16rpx 18rpx;
+    border-radius: 22rpx;
+    background: rgba(255, 80, 30, 0.1);
+    border: 1rpx solid rgba(255, 80, 30, 0.22);
+    color: #f5f5fa;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
     justify-content: center;
-    font-size: 20rpx;
     font-weight: 800;
+  }
+
+  &__alternative-name {
+    max-width: 320rpx;
+    font-size: 24rpx;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__alternative-meta {
+    margin-top: 6rpx;
+    color: #9d9daf;
+    font-size: 20rpx;
+    line-height: 1.35;
   }
 
   &__records {
@@ -399,7 +514,8 @@ async function addToWorkout() {
     font-weight: 700;
   }
 
-  &__cta {
+  &__cta,
+  &__template-cta {
     min-height: 92rpx;
     border-radius: 28rpx;
     display: flex;
@@ -408,6 +524,11 @@ async function addToWorkout() {
     font-size: 28rpx;
     font-weight: 700;
     color: #fff;
+  }
+
+  &__template-cta {
+    margin-top: 18rpx;
+    color: #ff7a32;
   }
 }
 </style>

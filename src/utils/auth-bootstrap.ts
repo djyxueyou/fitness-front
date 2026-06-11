@@ -1,10 +1,22 @@
 import { clearToken, getToken, setToken } from '@/api/http'
 import { wechatLogin } from '@/api/auth'
-import { clearCachedUserProfile, fetchUserProfile, setCachedUserProfile } from '@/api/user'
+import {
+  clearCachedUserProfile,
+  fetchUserProfile,
+  setCachedUserProfile,
+  updateUserProfile
+} from '@/api/user'
 
 const LOGIN_TIMEOUT_MS = 2500
 let loginInFlight: Promise<void> | null = null
 let authRunSeq = 0
+
+export interface BootstrapAuthOptions {
+  shouldUseWechatProfile?: () => Promise<{
+    nickname?: string
+    avatarUrl?: string
+  }>
+}
 
 const PERSISTENT_MOCK_KEY = 'LIFTLOG_MOCK_OPENID'
 
@@ -85,7 +97,7 @@ function isLatestRun(runId: number) {
   return runId === authRunSeq
 }
 
-async function runLogin(runId: number) {
+async function runLogin(runId: number, options: BootstrapAuthOptions = {}) {
   const useRealLogin = String(import.meta.env.VITE_WECHAT_REAL_LOGIN || '').toLowerCase() === 'true'
   let code = mockCode()
 
@@ -97,14 +109,23 @@ async function runLogin(runId: number) {
   }
 
   const loginRes = await wechatLogin({
-    code,
-    nickname: 'LiftLog User'
+    code
   })
 
   if (!isLatestRun(runId)) {
     return
   }
   setToken(loginRes.token)
+
+  if (loginRes.newUser && loginRes.profileInitializedByDefault && options.shouldUseWechatProfile) {
+    const wechatProfile = await options.shouldUseWechatProfile()
+    if (wechatProfile.nickname || wechatProfile.avatarUrl) {
+      await updateUserProfile({
+        nickname: wechatProfile.nickname || loginRes.nickname,
+        avatarUrl: wechatProfile.avatarUrl || loginRes.avatarUrl
+      })
+    }
+  }
 
   const profile = await fetchUserProfile()
   if (!isLatestRun(runId)) {
@@ -117,7 +138,7 @@ export async function validateStoredToken() {
   await ensureTokenValid()
 }
 
-export async function bootstrapAuth() {
+export async function bootstrapAuth(options: BootstrapAuthOptions = {}) {
   const valid = await ensureTokenValid()
   if (valid) {
     return
@@ -129,7 +150,7 @@ export async function bootstrapAuth() {
   const runId = ++authRunSeq
   loginInFlight = (async () => {
     try {
-      await runLogin(runId)
+      await runLogin(runId, options)
     } catch (err) {
       if (isLatestRun(runId)) {
         clearToken()

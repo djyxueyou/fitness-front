@@ -8,9 +8,9 @@ defineProps<{
 </script>
 
 <template>
-  <view class="glass-card stat-card">
+  <view class="surface-card stat-card">
     <view class="stat-card__meta">
-      <text v-if="icon">{{ icon }}</text>
+      <text v-if="icon" class="stat-card__icon">{{ icon }}</text>
       <text class="stat-card__label">{{ label }}</text>
     </view>
     <view class="stat-card__value">{{ value }}</view>
@@ -21,8 +21,6 @@ defineProps<{
 <style lang="scss" scoped>
 .stat-card {
   padding: 24rpx;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.05);
 
   &__meta {
     display: flex;
@@ -40,6 +38,7 @@ defineProps<{
     background: rgba(255, 80, 30, 0.1);
     border-radius: 8rpx;
     font-size: 20rpx;
+    color: #ff823c;
   }
 
   &__label {
@@ -53,7 +52,7 @@ defineProps<{
   &__value {
     color: #f5f5fa;
     font-size: 34rpx;
-    font-weight: 800;
+    font-weight: 900;
     text-shadow: 0 0 20rpx rgba(255, 255, 255, 0.1);
   }
 
@@ -61,7 +60,7 @@ defineProps<{
     margin-top: 6rpx;
     color: $color-primary-soft;
     font-size: 18rpx;
-    font-weight: 600;
+    font-weight: 800;
   }
 }
 </style>

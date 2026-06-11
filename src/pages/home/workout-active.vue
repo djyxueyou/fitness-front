@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { onHide } from '@dcloudio/uni-app'
 import ExercisePicker from '@/components/exercise-picker/index.vue'
 import ProgressBar from '@/components/progress-bar/index.vue'
@@ -23,12 +23,12 @@ const profileStore = useProfileStore()
 const trainingStore = useTrainingStore()
 const membershipPromptStore = useMembershipPromptStore()
 const showFinish = ref(false)
+const showExitConfirm = ref(false)
 const submitting = ref(false)
 const currentExerciseIndex = ref(0)
 const menuExerciseIndex = ref<number | null>(null)
 const restRemaining = ref(0)
 const restTitle = ref('')
-const restNextExerciseIndex = ref<number | null>(null)
 const pickerVisible = ref(false)
 const startupLoading = ref(false)
 const unit = computed<WeightUnit>(() => profileStore.unit)
@@ -60,14 +60,60 @@ const currentSetIndex = computed(() => {
   const nextIndex = exercise.sets.findIndex((set) => !set.done)
   return nextIndex >= 0 ? nextIndex : Math.max(exercise.sets.length - 1, 0)
 })
+const currentExerciseDoneCount = computed(() =>
+  currentExercise.value ? exerciseDoneSets(currentExercise.value) : 0
+)
+const previousExerciseIndex = computed(() =>
+  findAdjacentActiveExerciseIndex(currentExerciseIndex.value, -1)
+)
+const nextExerciseIndex = computed(() => findAdjacentActiveExerciseIndex(currentExerciseIndex.value, 1))
+const previousExerciseText = computed(() =>
+  previousExerciseIndex.value === null
+    ? '没有上一个'
+    : workoutStore.activeExercises[previousExerciseIndex.value]?.name || '上一个动作'
+)
+const nextExerciseText = computed(() =>
+  nextExerciseIndex.value === null
+    ? '没有下一个'
+    : workoutStore.activeExercises[nextExerciseIndex.value]?.name || '下一个动作'
+)
+const currentActionTitle = computed(() => {
+  const exercise = currentExercise.value
+  if (!exercise) return '准备训练'
+  if (exercise.ended) return `${exercise.name} 已完成`
+  return exercise.name
+})
+const currentActionSub = computed(() => {
+  const exercise = currentExercise.value
+  if (!exercise) return '添加动作后开始记录训练。'
+  if (exercise.ended) {
+    const nextIndex = nextExerciseIndex.value
+    return nextIndex === null
+      ? '所有动作都已完成，可以结束训练。'
+      : `下一个动作：${workoutStore.activeExercises[nextIndex]?.name || '继续训练'}`
+  }
+  return `当前第 ${currentSetIndex.value + 1} / ${exercise.sets.length} 组 · 已完成 ${currentExerciseDoneCount.value} 组`
+})
 const currentExerciseScrollId = computed(() => `workout-exercise-${currentExerciseIndex.value}`)
 const displayTotalVolume = computed(() =>
   formatWeight(Number(workoutStore.totalVolume || 0), unit.value, 1)
 )
 const displayStep = computed(() => (unit.value === 'lb' ? LB_STEP : KG_STEP))
+const sourceText = computed(() => {
+  if (workoutStore.sourceType === 'PLAN') return '计划训练'
+  if (workoutStore.sourceType === 'TEMPLATE') return '模板训练'
+  return '自由训练'
+})
 const selectedExerciseIds = computed(() =>
   workoutStore.activeExercises.map((exercise) => exercise.id)
 )
+const exitConfirmTitle = '\u9000\u51fa\u8bad\u7ec3\uff1f'
+const exitConfirmDesc =
+  '\u5f53\u524d\u8bad\u7ec3\u4f1a\u4fdd\u5b58\u4e3a\u8349\u7a3f\uff0c\u7a0d\u540e\u53ef\u4ee5\u4ece\u53f3\u4fa7\u5165\u53e3\u7ee7\u7eed\u3002'
+const exitConfirmHint =
+  '\u9000\u51fa\u540e\u4e0d\u4f1a\u5b8c\u6210\u8bad\u7ec3\uff0c\u4e5f\u4e0d\u4f1a\u751f\u6210\u8bad\u7ec3\u8bb0\u5f55\u3002'
+const exitConfirmCancelText = '\u7ee7\u7eed\u8bad\u7ec3'
+const exitConfirmSubmitText = '\u4fdd\u5b58\u5e76\u9000\u51fa'
 
 function toLocalDateTimeString(iso: string) {
   const date = new Date(iso)
@@ -130,23 +176,24 @@ function lastSetText(exercise: WorkoutExercise, setIndex: number) {
 }
 
 function closePage() {
-  if (workoutStore.doneSets > 0) {
-    uni.showModal({
-      title: '退出训练？',
-      content: '已完成的训练数据已自动保存为草稿，退出后可以继续训练。',
-      confirmText: '退出',
-      cancelText: '继续训练',
-      success: (res) => {
-        if (res.confirm) {
-          clearTimers()
-          uni.navigateBack()
-        }
-      }
-    })
+  if (workoutStore.hasMeaningfulDraft) {
+    showExitConfirm.value = true
   } else {
+    workoutStore.discardWorkout()
     clearTimers()
     uni.navigateBack()
   }
+}
+
+function cancelExit() {
+  showExitConfirm.value = false
+}
+
+function confirmExit() {
+  showExitConfirm.value = false
+  workoutStore.persistDraft()
+  clearTimers()
+  uni.navigateBack()
 }
 
 function clearTimers() {
@@ -156,10 +203,9 @@ function clearTimers() {
   restTimer = null
 }
 
-function startRest(title: string, nextExerciseIndex: number | null = null) {
+function startRest(title: string) {
   if (restTimer) clearInterval(restTimer)
   restTitle.value = title
-  restNextExerciseIndex.value = nextExerciseIndex
   restRemaining.value = profileStore.restSeconds
 
   if (restRemaining.value <= 0) {
@@ -177,18 +223,29 @@ function startRest(title: string, nextExerciseIndex: number | null = null) {
 
 function skipRest() {
   if (restTimer) clearInterval(restTimer)
-  const nextExerciseIndex = restNextExerciseIndex.value
   restTimer = null
   restRemaining.value = 0
   restTitle.value = ''
-  restNextExerciseIndex.value = null
-  if (nextExerciseIndex !== null) {
-    currentExerciseIndex.value = nextExerciseIndex
-  }
 }
 
 function addRestSeconds(seconds: number) {
   restRemaining.value += seconds
+}
+
+async function focusWorkoutExercise(index: number, persist = true) {
+  if (!workoutStore.activeExercises[index]) return
+  currentExerciseIndex.value = -1
+  await nextTick()
+  currentExerciseIndex.value = index
+  menuExerciseIndex.value = null
+  if (persist) {
+    workoutStore.updateDraftFocus(index)
+  }
+}
+
+async function applyRestoredDraftFocus() {
+  if (!workoutStore.activeExercises.length) return
+  await focusWorkoutExercise(workoutStore.resolveDraftFocusIndex(), false)
 }
 
 async function initializeWorkout() {
@@ -196,14 +253,18 @@ async function initializeWorkout() {
     if (!workoutStore.activeExercises.length) {
       workoutStore.restoreDraft()
     }
+    await applyRestoredDraftFocus()
     return
   }
 
   const templateId = workoutStore.pendingStartTemplateId
+  const planId = workoutStore.pendingStartPlanId
+  const planDayId = workoutStore.pendingStartPlanDayId
   startupLoading.value = true
   try {
-    await workoutStore.startWorkout(templateId)
+    await workoutStore.startWorkout(templateId, { planId, planDayId })
     workoutStore.clearPendingStart()
+    await applyRestoredDraftFocus()
   } catch (err) {
     workoutStore.clearPendingStart()
     uni.showToast({ title: '训练加载失败，请重试', icon: 'none' })
@@ -216,20 +277,21 @@ async function initializeWorkout() {
   }
 }
 
-function switchExercise(delta: number) {
-  const from = currentExerciseIndex.value < 0
-    ? (delta > 0 ? -1 : workoutStore.activeExercises.length)
-    : currentExerciseIndex.value
+async function switchExercise(delta: number) {
+  const from =
+    currentExerciseIndex.value < 0
+      ? delta > 0
+        ? -1
+        : workoutStore.activeExercises.length
+      : currentExerciseIndex.value
   const nextIndex = findAdjacentActiveExerciseIndex(from, delta)
   if (nextIndex === null) return
-  currentExerciseIndex.value = nextIndex
-  menuExerciseIndex.value = null
+  await focusWorkoutExercise(nextIndex)
 }
 
-function selectExercise(index: number) {
+async function selectExercise(index: number) {
   if (!workoutStore.activeExercises[index]) return
-  currentExerciseIndex.value = index
-  menuExerciseIndex.value = null
+  await focusWorkoutExercise(index)
 }
 
 function handleCardTap(index: number) {
@@ -237,14 +299,13 @@ function handleCardTap(index: number) {
     currentExerciseIndex.value = -1
     menuExerciseIndex.value = null
   } else {
-    selectExercise(index)
+    void selectExercise(index)
   }
 }
 
-function reopenExercise(index: number) {
+async function reopenExercise(index: number) {
   workoutStore.reopenExercise(index)
-  currentExerciseIndex.value = index
-  menuExerciseIndex.value = null
+  await focusWorkoutExercise(index)
 }
 
 function stepWeight(setIndex: number, direction: 1 | -1) {
@@ -277,7 +338,11 @@ function stepDuration(setIndex: number, direction: 1 | -1) {
   )
 }
 
-function updateWeight(setIndex: number, event: { detail: { value: string } }) {
+function inputValue(event: unknown) {
+  return String((event as { detail?: { value?: string | number } })?.detail?.value ?? '')
+}
+
+function updateWeight(setIndex: number, event: unknown) {
   if (
     currentExercise.value?.ended ||
     isBodyweightExercise(currentExercise.value) ||
@@ -285,29 +350,32 @@ function updateWeight(setIndex: number, event: { detail: { value: string } }) {
   ) {
     return
   }
-  const value = Number(event.detail.value)
+  const value = Number(inputValue(event))
   if (!Number.isFinite(value)) return
   workoutStore.updateSet(currentExerciseIndex.value, setIndex, {
     weight: Math.max(0, Number(convertUnitToKg(value, unit.value).toFixed(2)))
   })
+  workoutStore.updateDraftFocus(currentExerciseIndex.value, setIndex)
 }
 
-function updateReps(setIndex: number, event: { detail: { value: string } }) {
+function updateReps(setIndex: number, event: unknown) {
   if (currentExercise.value?.ended || isDurationExercise(currentExercise.value)) return
-  const value = Number(event.detail.value)
+  const value = Number(inputValue(event))
   if (!Number.isFinite(value)) return
   workoutStore.updateSet(currentExerciseIndex.value, setIndex, {
     reps: Math.max(0, Math.round(value))
   })
+  workoutStore.updateDraftFocus(currentExerciseIndex.value, setIndex)
 }
 
-function updateDuration(setIndex: number, event: { detail: { value: string } }) {
+function updateDuration(setIndex: number, event: unknown) {
   if (currentExercise.value?.ended || !isDurationExercise(currentExercise.value)) return
-  const value = Number(event.detail.value)
+  const value = Number(inputValue(event))
   if (!Number.isFinite(value)) return
   workoutStore.updateSet(currentExerciseIndex.value, setIndex, {
     durationSeconds: Math.max(1, Math.round(value))
   })
+  workoutStore.updateDraftFocus(currentExerciseIndex.value, setIndex)
 }
 
 function toggleSetDone(setIndex: number) {
@@ -326,7 +394,14 @@ function toggleSetDone(setIndex: number) {
   if (afterExercise.sets.every((set) => set.done)) {
     const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
     workoutStore.endExercise(currentExerciseIndex.value)
-    startRest(`${afterExercise.name} 已完成`, nextIndex)
+    if (nextIndex !== null) {
+      void focusWorkoutExercise(nextIndex)
+    }
+    startRest(
+      nextIndex === null
+        ? `${afterExercise.name} 已完成`
+        : `${afterExercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`
+    )
     return
   }
   startRest(`第 ${setIndex + 1} 组已完成`)
@@ -358,6 +433,7 @@ function deleteSet(exerciseIndex: number, setIndex: number) {
   if (!ok) {
     uni.showToast({ title: '至少保留一组', icon: 'none' })
   }
+  workoutStore.updateDraftFocus(exerciseIndex)
 }
 
 function openExercisePicker() {
@@ -379,8 +455,7 @@ function addExerciseFromPicker(exercise: ExerciseSummary) {
     uni.showToast({ title: '该动作已在本次训练中', icon: 'none' })
     return
   }
-  currentExerciseIndex.value = workoutStore.activeExercises.length - 1
-  menuExerciseIndex.value = null
+  void focusWorkoutExercise(workoutStore.activeExercises.length - 1)
   pickerVisible.value = false
   uni.showToast({ title: '已添加动作', icon: 'none' })
 }
@@ -403,7 +478,8 @@ function finishExerciseEarly() {
   const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
   if (nextIndex !== null) {
     workoutStore.endExercise(currentExerciseIndex.value)
-    startRest(`${exercise.name} 已完成`, nextIndex)
+    void focusWorkoutExercise(nextIndex)
+    startRest(`${exercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`)
     return
   }
 
@@ -449,6 +525,7 @@ function deleteExercise(index: number) {
       currentExerciseIndex.value,
       Math.max(workoutStore.activeExercises.length - 1, 0)
     )
+    workoutStore.updateDraftFocus(currentExerciseIndex.value)
     menuExerciseIndex.value = null
   }
 
@@ -539,6 +616,8 @@ async function confirmFinish() {
   try {
     result = await saveTraining({
       templateId: workoutStore.activeTemplateId,
+      planId: workoutStore.activePlanId,
+      planDayId: workoutStore.activePlanDayId,
       clientRequestId: workoutStore.ensureClientRequestId(),
       trainingName: workoutStore.activeTemplateName || '自由训练',
       startedAt: toLocalDateTimeString(startedAt),
@@ -564,6 +643,9 @@ async function confirmFinish() {
     trainingName: workoutStore.activeTemplateName || '自由训练',
     startedAt,
     endedAt,
+    activeTemplateId: workoutStore.activeTemplateId,
+    activePlanId: workoutStore.activePlanId,
+    activePlanDayId: workoutStore.activePlanDayId,
     plannedItems: workoutStore.activeExercises.map((exercise) => ({
       exerciseId: exercise.id,
       targetSets: exercise.sets.length
@@ -573,7 +655,7 @@ async function confirmFinish() {
   workoutStore.finishWorkout()
   trainingStore.invalidateCache()
   emitTrainingChanged()
-  uni.redirectTo({ url: routes.workoutSummary })
+  uni.redirectTo({ url: `${routes.cultivationSettlement}?id=${result.trainingId}` })
 }
 
 onMounted(() => {
@@ -593,7 +675,11 @@ onHide(() => {
 })
 
 onUnmounted(() => {
-  workoutStore.persistDraft()
+  if (workoutStore.hasMeaningfulDraft) {
+    workoutStore.persistDraft()
+  } else {
+    workoutStore.discardWorkout()
+  }
   clearTimers()
 })
 </script>
@@ -603,6 +689,7 @@ onUnmounted(() => {
     <view class="workout-active__top">
       <view class="workout-active__close btn-press" @tap="closePage">×</view>
       <view class="workout-active__title-wrap">
+        <view class="workout-active__source">{{ sourceText }}</view>
         <view class="workout-active__title">{{ workoutStore.activeTemplateName }}</view>
         <view class="workout-active__timer">{{ formatSeconds(workoutStore.elapsedSeconds) }}</view>
       </view>
@@ -636,16 +723,33 @@ onUnmounted(() => {
       </view>
     </view>
 
+    <view class="glass-card workout-active__focus">
+      <view>
+        <view class="workout-active__focus-label">当前动作</view>
+        <view class="workout-active__focus-title">{{ currentActionTitle }}</view>
+        <view class="workout-active__focus-sub">{{ currentActionSub }}</view>
+      </view>
+      <view class="workout-active__focus-pill">
+        {{ workoutStore.doneSets }}/{{ workoutStore.totalSets }} 组
+      </view>
+    </view>
+
     <view class="workout-active__switcher">
-      <view class="glass-card workout-active__switch btn-press" @tap="switchExercise(-1)"
-        >上一个动作</view
+      <view
+        class="glass-card workout-active__switch btn-press"
+        :class="{ 'workout-active__switch--disabled': previousExerciseIndex === null }"
+        @tap="switchExercise(-1)"
+        >{{ previousExerciseText }}</view
       >
       <view class="workout-active__switch-index">
         {{ workoutStore.activeExercises.length ? currentExerciseIndex + 1 : 0 }} /
         {{ workoutStore.activeExercises.length }}
       </view>
-      <view class="glass-card workout-active__switch btn-press" @tap="switchExercise(1)"
-        >下一个动作</view
+      <view
+        class="glass-card workout-active__switch btn-press"
+        :class="{ 'workout-active__switch--disabled': nextExerciseIndex === null }"
+        @tap="switchExercise(1)"
+        >{{ nextExerciseText }}</view
       >
     </view>
 
@@ -925,6 +1029,26 @@ onUnmounted(() => {
       </view>
     </view>
 
+    <view v-if="showExitConfirm" class="workout-active__overlay" @tap="cancelExit">
+      <view class="workout-active__sheet workout-active__sheet--confirm" @tap.stop>
+        <view class="workout-active__sheet-handle" />
+        <view class="workout-active__confirm-title">{{ exitConfirmTitle }}</view>
+        <view class="muted workout-active__confirm-desc">{{ exitConfirmDesc }}</view>
+        <view class="workout-active__confirm-hint">{{ exitConfirmHint }}</view>
+        <view class="workout-active__confirm-actions">
+          <view class="glass-card workout-active__confirm-btn btn-press" @tap="cancelExit">
+            {{ exitConfirmCancelText }}
+          </view>
+          <view
+            class="gradient-fire workout-active__confirm-btn workout-active__confirm-btn--primary btn-press"
+            @tap="confirmExit"
+          >
+            {{ exitConfirmSubmitText }}
+          </view>
+        </view>
+      </view>
+    </view>
+
     <ExercisePicker
       :visible="pickerVisible"
       title="添加训练动作"
@@ -947,6 +1071,7 @@ onUnmounted(() => {
   &__top,
   &__progress,
   &__stats,
+  &__focus,
   &__switcher {
     flex-shrink: 0;
   }
@@ -995,6 +1120,13 @@ onUnmounted(() => {
     font-weight: 700;
   }
 
+  &__source {
+    margin-bottom: 4rpx;
+    color: #ff7a32;
+    font-size: 20rpx;
+    font-weight: 800;
+  }
+
   &__timer,
   &__percent {
     color: #ff501e;
@@ -1014,7 +1146,7 @@ onUnmounted(() => {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 16rpx;
-    margin: 24rpx 0;
+    margin: 24rpx 0 16rpx;
   }
 
   &__stat {
@@ -1032,12 +1164,52 @@ onUnmounted(() => {
     font-weight: 800;
   }
 
+  &__focus {
+    padding: 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+    border-color: rgba(255, 80, 30, 0.18);
+  }
+
+  &__focus-label {
+    color: #ff9b58;
+    font-size: 21rpx;
+    font-weight: 800;
+  }
+
+  &__focus-title {
+    margin-top: 8rpx;
+    color: #f5f5fa;
+    font-size: 30rpx;
+    font-weight: 900;
+    line-height: 1.35;
+  }
+
+  &__focus-sub {
+    margin-top: 8rpx;
+    color: #828296;
+    font-size: 22rpx;
+    line-height: 1.45;
+  }
+
+  &__focus-pill {
+    flex-shrink: 0;
+    padding: 12rpx 18rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 80, 30, 0.14);
+    color: #ff9b58;
+    font-size: 22rpx;
+    font-weight: 900;
+  }
+
   &__switcher {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 16rpx;
-    margin-bottom: 20rpx;
+    margin: 16rpx 0 20rpx;
   }
 
   &__switch {
@@ -1045,6 +1217,11 @@ onUnmounted(() => {
     text-align: center;
     color: #f5f5fa;
     font-size: 24rpx;
+    line-height: 1.35;
+
+    &--disabled {
+      opacity: 0.46;
+    }
   }
 
   &__switch-index {
@@ -1484,7 +1661,16 @@ onUnmounted(() => {
     width: 100%;
     background: #14141c;
     border-radius: 36rpx 36rpx 0 0;
-    padding: 24rpx 32rpx calc(env(safe-area-inset-bottom) + 24rpx);
+    padding: 28rpx 32rpx calc(env(safe-area-inset-bottom) + 28rpx);
+
+    &--confirm {
+      margin: 0 24rpx calc(env(safe-area-inset-bottom) + 24rpx);
+      border-radius: 34rpx;
+      background: rgba(20, 20, 28, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 -24rpx 80rpx rgba(0, 0, 0, 0.52);
+      backdrop-filter: blur(18rpx);
+    }
   }
 
   &__sheet-handle {
@@ -1500,7 +1686,7 @@ onUnmounted(() => {
   }
 
   &__sheet-btn {
-    min-height: 92rpx;
+    min-height: 88rpx;
     border-radius: 28rpx;
     display: flex;
     align-items: center;
@@ -1512,6 +1698,52 @@ onUnmounted(() => {
 
     &--disabled {
       opacity: 0.62;
+    }
+  }
+
+  &__confirm-title {
+    color: #f5f5fa;
+    font-size: 34rpx;
+    font-weight: 900;
+  }
+
+  &__confirm-desc {
+    margin-top: 14rpx;
+    font-size: 25rpx;
+    line-height: 1.55;
+  }
+
+  &__confirm-hint {
+    margin-top: 22rpx;
+    padding: 18rpx 20rpx;
+    border-radius: 22rpx;
+    background: rgba(255, 125, 25, 0.12);
+    border: 1px solid rgba(255, 125, 25, 0.18);
+    color: #c7c0d6;
+    font-size: 23rpx;
+    line-height: 1.5;
+  }
+
+  &__confirm-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16rpx;
+    margin-top: 24rpx;
+  }
+
+  &__confirm-btn {
+    min-height: 88rpx;
+    border-radius: 26rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f5f5fa;
+    font-size: 28rpx;
+    font-weight: 900;
+
+    &--primary {
+      color: #fff;
+      box-shadow: 0 18rpx 44rpx rgba(255, 93, 24, 0.3);
     }
   }
 }

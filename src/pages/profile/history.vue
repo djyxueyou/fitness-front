@@ -41,7 +41,11 @@ onShow(async () => {
 })
 
 function goBack() {
-  uni.navigateBack()
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack()
+    return
+  }
+  uni.switchTab({ url: routes.home })
 }
 
 async function onDeleteHistory(id: number) {
@@ -97,7 +101,7 @@ function formatDate(dateText: string) {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
 }
 
-function getFilterRange(key: HistoryFilterKey) {
+function getFilterRange(key: HistoryFilterKey): { startedFrom?: string; startedTo?: string } {
   const now = new Date()
   if (key === 'all') return {}
   if (key === 'week') {

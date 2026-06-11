@@ -11,7 +11,9 @@
     "build:mp-weixin": "uni build -p mp-weixin --mode mp-weixin && node scripts/sync-mp-weixin-appid.mjs",
     "build:app-plus": "uni build -p app-plus",
     "format": "prettier --write \"src/**/*.{vue,ts,js,scss,json}\" \"*.{ts,js,json}\"",
-    "format:check": "prettier --check \"src/**/*.{vue,ts,js,scss,json}\" \"*.{ts,js,json}\""
+    "format:check": "prettier --check \"src/**/*.{vue,ts,js,scss,json}\" \"*.{ts,js,json}\"",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "verify": "npm run format:check && npm run typecheck && npm run build:mp-weixin"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5000720260410001",
@@ -29,6 +31,7 @@
     "@dcloudio/vite-plugin-uni": "3.0.0-5000720260410001",
     "prettier": "^3.8.3",
     "typescript": "^5.9.3",
-    "vite": "5.2.8"
+    "vite": "5.2.8",
+    "vue-tsc": "^3.3.2"
   }
 }

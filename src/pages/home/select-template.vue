@@ -5,17 +5,20 @@ import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import TemplateItem from '@/components/template-item/index.vue'
+import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
-import type { TemplateListItemResponse } from '@/api/template'
 import { fetchTrainingHistory, type TrainingHistoryItemResponse } from '@/api/training'
+import { usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
+import type { Template } from '@/types/template'
 
 const templateStore = useTemplateStore()
+const planStore = usePlanStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
@@ -25,8 +28,8 @@ const recentTemplates = computed(() =>
 const searchText = ref('')
 const activeTab = ref<'mine' | 'recent' | 'system'>('mine')
 const tabs = [
-  { key: 'mine', label: '我的模板' },
   { key: 'recent', label: '最近使用' },
+  { key: 'mine', label: '我的模板' },
   { key: 'system', label: '系统模板' }
 ] as const
 
@@ -46,7 +49,7 @@ const emptyText = computed(() => {
   return '暂无系统模板'
 })
 
-function filterTemplates(items: TemplateListItemResponse[]) {
+function filterTemplates(items: Template[]) {
   const keyword = searchText.value.trim().toLowerCase()
   if (!keyword) return items
   return items.filter((item) => {
@@ -62,6 +65,9 @@ onShow(async () => {
     return
   }
   workoutStore.refreshDraftState()
+  planStore.fetchPlans().catch((err) => {
+    console.error('[template] plan fetch failed', err)
+  })
   await loadTemplates(false)
   fetchTrainingHistory({ pageNo: 1, pageSize: 20 })
     .then((page) => {
@@ -103,10 +109,23 @@ async function continueWorkout() {
   uni.navigateTo({ url: routes.workoutActive })
 }
 
+async function openDraftFab() {
+  workoutStore.refreshDraftState()
+  const action = await draftPromptStore.open()
+  if (action === 'continue') {
+    await continueWorkout()
+  }
+  if (action === 'discard') {
+    workoutStore.discardWorkout()
+  }
+}
+
 async function startWorkout(templateId: number | null) {
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok) return
-  const canStart = await prepareNewWorkout()
+  const canStart = await prepareNewWorkout(
+    templateId ? templateStore.getById(templateId)?.name || '模板训练' : '自由训练'
+  )
   if (!canStart) return
   if (templateId) {
     templateStore.markUsed(templateId)
@@ -133,11 +152,13 @@ function goSystemTemplates() {
   activeTab.value = 'system'
 }
 
-async function prepareNewWorkout() {
+async function prepareNewWorkout(nextTitle?: string) {
   workoutStore.refreshDraftState()
   if (!workoutStore.hasRecoverableWorkout) return true
 
-  const action = await draftPromptStore.open()
+  const action = await draftPromptStore.open(
+    nextTitle ? { title: nextTitle, subtitle: '删除当前草稿后直接开始' } : undefined
+  )
   if (action === 'continue') {
     if (workoutStore.restoreDraft()) {
       uni.navigateTo({ url: routes.workoutActive })
@@ -156,8 +177,8 @@ async function prepareNewWorkout() {
   <scroll-view scroll-y class="page-scroll">
     <view class="page-shell safe-bottom">
       <AppHeader
-        title="选择模板"
-        subtitle="选择一个训练计划，开始今天的训练"
+        title="选择训练模板"
+        subtitle="选择一套动作安排，或直接自由训练"
         show-back
         @back="goBack"
       >
@@ -167,6 +188,10 @@ async function prepareNewWorkout() {
           </view>
         </template>
       </AppHeader>
+
+      <view v-if="planStore.activePlan" class="glass-card select-template__plan-hint">
+        你有进行中的计划，也可以返回首页开始今日计划。
+      </view>
 
       <view class="glass-card select-template__search">
         <text class="select-template__search-icon">⌕</text>
@@ -256,6 +281,7 @@ async function prepareNewWorkout() {
       </view>
     </view>
   </scroll-view>
+  <WorkoutDraftFab @open="openDraftFab" />
   <WorkoutDraftPrompt />
   <MembershipRequiredModal />
 </template>
@@ -278,6 +304,15 @@ async function prepareNewWorkout() {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 80, 30, 0.15);
     border-radius: 32rpx;
+  }
+
+  &__plan-hint {
+    margin-top: 24rpx;
+    padding: 22rpx 24rpx;
+    color: #b8b8c8;
+    font-size: 23rpx;
+    line-height: 1.5;
+    border-color: rgba(255, 80, 30, 0.18);
   }
 
   &__search-input {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import AppActionSheet from '@/components/app-action-sheet/index.vue'
+import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import type { Exercise } from '@/types/exercise'
 
 interface ActionSheetItem {
@@ -16,7 +17,6 @@ const props = defineProps<{
   customActions?: boolean
 }>()
 
-const thumbFailed = ref(false)
 const actionSheetVisible = ref(false)
 
 const customActionItems: ActionSheetItem[] = [
@@ -61,17 +61,12 @@ function handleCustomAction(item: ActionSheetItem) {
 <template>
   <view class="exercise-item-wrap">
     <view class="glass-card exercise-item btn-press" @tap="emit('select', exercise.id)">
-      <image
-        v-if="exercise.thumbnailUrl && !thumbFailed"
-        class="exercise-item__thumb"
-        :src="exercise.thumbnailUrl"
-        mode="aspectFill"
-        lazy-load
-        @error="thumbFailed = true"
+      <ExerciseThumbnail
+        :name="exercise.name"
+        :record-type="exercise.recordType"
+        :url="exercise.thumbnailUrl"
+        size="large"
       />
-      <view v-else class="exercise-item__avatar">
-        {{ exercise.name.slice(0, 1) }}
-      </view>
 
       <view class="exercise-item__body">
         <view class="exercise-item__top">
@@ -132,28 +127,6 @@ function handleCustomAction(item: ActionSheetItem) {
   align-items: center;
   gap: 18rpx;
   padding: 24rpx 22rpx;
-
-  &__avatar,
-  &__thumb {
-    width: 104rpx;
-    height: 104rpx;
-    border-radius: 24rpx;
-    flex-shrink: 0;
-  }
-
-  &__avatar {
-    background: rgba(255, 80, 30, 0.15);
-    color: #ff501e;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 40rpx;
-    font-weight: 700;
-  }
-
-  &__thumb {
-    background: rgba(255, 80, 30, 0.12);
-  }
 
   &__body {
     flex: 1;

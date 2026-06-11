@@ -16,8 +16,36 @@ const unit = computed(() => profileStore.unit)
 
 const totalSetsText = computed(() => `${detail.value?.totalSetCount || 0} 组`)
 const detailPrs = computed(() => detail.value?.prs || [])
+const improvedItems = computed(() =>
+  (detail.value?.items || []).filter(
+    (item) => Number(item.volumeDeltaKg || 0) > 0 || Number(item.maxWeightDeltaKg || 0) > 0
+  )
+)
+const firstRecordItems = computed(() =>
+  (detail.value?.items || []).filter((item) => item.firstRecord)
+)
+const bestImprovedItem = computed(() =>
+  (detail.value?.items || [])
+    .filter((item) => item.volumeDeltaKg !== null && item.volumeDeltaKg !== undefined)
+    .sort((a, b) => Number(b.volumeDeltaKg || 0) - Number(a.volumeDeltaKg || 0))[0]
+)
+const detailInsightTitle = computed(() => {
+  if (detailPrs.value.length) return `刷新 ${detailPrs.value.length} 个 PR`
+  if (improvedItems.value.length) return `${improvedItems.value.length} 个动作超过上次`
+  if (firstRecordItems.value.length) return `${firstRecordItems.value.length} 个动作首次记录`
+  return '本次训练已完成'
+})
+const detailInsightSub = computed(() => {
+  const best = bestImprovedItem.value
+  if (best?.volumeDeltaKg && best.volumeDeltaKg > 0) {
+    return `${best.exerciseName} 的容量提升 ${comparisonText(best.volumeDeltaKg, unit.value)}。`
+  }
+  if (detailPrs.value.length) return '可以从下方 PR 和动作明细查看具体突破。'
+  if (firstRecordItems.value.length) return '首次记录会成为后续训练的对比基线。'
+  return '这次训练没有明显超过上次，继续保持记录可以看到趋势。'
+})
 
-onLoad(async (query) => {
+onLoad(async (query = {}) => {
   loading.value = true
   try {
     const idValue = Number(query.id)
@@ -132,7 +160,9 @@ function comparisonClass(value?: number | null) {
         <view class="history-detail__stats">
           <view class="glass-card history-detail__stat">
             <view class="history-detail__stat-icon">⏱</view>
-            <view class="history-detail__stat-value">{{ formatSeconds(detail.durationSeconds) }}</view>
+            <view class="history-detail__stat-value">{{
+              formatSeconds(detail.durationSeconds)
+            }}</view>
             <view class="muted">时长</view>
           </view>
           <view class="glass-card history-detail__stat">
@@ -147,6 +177,12 @@ function comparisonClass(value?: number | null) {
             </view>
             <view class="muted">总容量</view>
           </view>
+        </view>
+
+        <view class="glass-card history-detail__insight">
+          <view class="history-detail__insight-label">训练复盘</view>
+          <view class="history-detail__insight-title">{{ detailInsightTitle }}</view>
+          <view class="history-detail__insight-sub">{{ detailInsightSub }}</view>
         </view>
 
         <view v-if="detailPrs.length" class="glass-card history-detail__prs">
@@ -261,6 +297,34 @@ function comparisonClass(value?: number | null) {
     padding: 24rpx;
   }
 
+  &__insight {
+    margin-bottom: 24rpx;
+    padding: 28rpx;
+    border-color: rgba(80, 220, 180, 0.18);
+    background:
+      linear-gradient(145deg, rgba(80, 220, 180, 0.08), rgba(255, 255, 255, 0.045));
+  }
+
+  &__insight-label {
+    color: #3dd9a2;
+    font-size: 21rpx;
+    font-weight: 900;
+  }
+
+  &__insight-title {
+    margin-top: 10rpx;
+    color: #f5f5fa;
+    font-size: 32rpx;
+    font-weight: 900;
+  }
+
+  &__insight-sub {
+    margin-top: 10rpx;
+    color: #b8b8c8;
+    font-size: 24rpx;
+    line-height: 1.6;
+  }
+
   &__section-title {
     color: #f5f5fa;
     font-size: 28rpx;
@@ -305,7 +369,7 @@ function comparisonClass(value?: number | null) {
   }
 
   &__card {
-    padding: 24rpx;
+    padding: 26rpx;
   }
 
   &__card-top {

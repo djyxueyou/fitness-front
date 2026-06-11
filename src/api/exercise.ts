@@ -17,6 +17,7 @@ export interface ExerciseSummary {
 }
 
 export interface ExerciseDetail extends ExerciseSummary {
+  secondaryMuscles?: string[]
   instructionText?: string
   commonMistakesText?: string
   checklistText?: string
@@ -26,6 +27,7 @@ export interface ExerciseDetail extends ExerciseSummary {
   mediaSizeBytes?: number
   mediaWidth?: number
   mediaHeight?: number
+  alternativeExerciseIds?: number[]
 }
 
 export interface ExerciseCategory {
@@ -64,6 +66,10 @@ function cleanQuery(params?: {
   categoryCode?: string
   keyword?: string
   scope?: string
+  primaryMuscle?: string
+  equipment?: string
+  difficultyLevel?: string
+  recordType?: string
   pageNo?: number
   pageSize?: number
 }) {
@@ -79,6 +85,10 @@ export function fetchExerciseList(params?: {
   categoryCode?: string
   keyword?: string
   scope?: 'ALL' | 'SYSTEM' | 'CUSTOM'
+  primaryMuscle?: string
+  equipment?: string
+  difficultyLevel?: string
+  recordType?: string
   pageNo?: number
   pageSize?: number
 }) {

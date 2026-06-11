@@ -16,7 +16,10 @@ const promptStore = useMembershipPromptStore()
         <view class="membership-modal__secondary btn-press" @tap="promptStore.close(false)">
           暂不开通
         </view>
-        <view class="gradient-fire membership-modal__primary btn-press" @tap="promptStore.goMembership">
+        <view
+          class="gradient-fire membership-modal__primary btn-press"
+          @tap="promptStore.goMembership"
+        >
           开通会员
         </view>
       </view>
