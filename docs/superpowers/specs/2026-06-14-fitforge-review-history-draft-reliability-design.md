@@ -1,8 +1,8 @@
-# FitForge 周复盘、历史与离线可靠性设计
+# FitForge 周复盘、历史与训练草稿可靠性设计
 
 ## 1. 目标
 
-让用户在训练后理解本周完成情况、明确下一步行动，并确保断网、退出或提交失败时训练记录不会丢失。
+让用户在训练后理解本周完成情况、明确下一步行动，并通过可靠草稿确保退出、断网或提交失败时当前训练不会丢失。
 
 ## 2. 范围
 
@@ -12,9 +12,8 @@
 - 周训练复盘。
 - 错过训练后的恢复安排。
 - 历史记录与日历联动。
-- 本地训练草稿扩展。
-- 离线训练提交队列。
-- 同步失败与冲突处理。
+- 训练草稿有效期与过期确认。
+- 保存失败后的草稿保留与手动重试。
 
 ### 不包含
 
@@ -121,40 +120,39 @@
 - 结果页展示“本周进度”和“下一次建议”。
 - 不要求用户立即进入修为之外的多个页面。
 
-## 7. 离线训练
+## 7. 训练草稿可靠性
 
-### 7.1 本地保存
+### 7.1 草稿保存
 
-现有本地草稿扩展为离线可靠记录：
+增强现有本地草稿：
 
 - 每次修改训练组后保存本地快照。
-- 当前草稿不再仅因超过 6 小时而直接删除；超过有效期后进入“历史草稿”确认。
-- 完成训练后先写入本地提交队列，再尝试请求服务端。
-- 服务端成功返回后标记为 `SYNCED` 并清理提交快照。
+- 草稿有效期由 6 小时调整为 48 小时。
+- 草稿超过 48 小时后不得静默删除，进入“发现未完成训练”确认。
+- 同一时间只允许存在一份草稿；开始新训练前必须恢复或删除旧草稿。
+- 服务端保存成功后才清理草稿。
 
 ### 7.2 用户可见状态
 
-- 训练中断网：顶部轻提示“离线记录中”。
-- 完成训练但未上传：结果页显示“已保存到本机，恢复网络后同步”。
-- 首页存在待同步记录：显示非阻断式同步提示。
-- 同步成功：轻量 Toast，不打断当前操作。
+- 有有效草稿：首页展示“继续训练”。
+- 有过期草稿：首页或开始训练前展示恢复或删除确认。
+- 完成训练提交失败：保留当前页面和草稿，显示“训练已保存在本机”。
+- 保存失败状态提供“重新提交”和“稍后处理”。
 
-### 7.3 重试策略
+### 7.3 保存失败重试
 
-- 打开 App、恢复网络、进入首页时触发重试。
-- 每条记录使用已有 `clientRequestId` 保证幂等。
-- 自动重试失败三次后改为手动重试。
-- 用户可在设置中的“同步状态”查看失败项。
+- 只允许用户主动重新提交，不建设后台自动同步队列。
+- 重试继续使用原 `clientRequestId`，依赖现有服务端幂等能力。
+- 重试成功后进入现有训练完成流程并清除草稿。
+- 用户选择稍后处理时返回首页，首页继续展示该草稿。
 
-## 8. 冲突处理
+## 8. 明确不建设的能力
 
-首版只处理训练记录冲突：
-
-- 同一 `clientRequestId` 已存在服务端：以服务端成功结果为准，标记同步完成。
-- 本地记录与服务端记录内容不同：进入 `CONFLICT`。
-- 冲突页面展示本地版本和服务端版本的开始时间、动作数、组数、容量。
-- 用户选择保留本地、保留服务端或两条都保留。
-- 选择两条都保留时，本地版本生成新的 `clientRequestId`。
+- 多条训练提交队列。
+- 后台自动同步。
+- 跨设备草稿同步。
+- 本地与服务端版本冲突合并。
+- 完整离线浏览计划、动作库和历史。
 
 ## 9. 建议数据契约
 
@@ -188,16 +186,15 @@ interface ReschedulePlanDayRequest {
 
 该能力作用于用户启用计划实例，不修改原始计划模板。
 
-### 9.3 本地同步队列
+### 9.3 训练草稿状态
 
 ```ts
-interface PendingTrainingSync {
-  localId: string
+interface ReliableWorkoutDraft {
   clientRequestId: string
   payload: SaveTrainingRequest
-  status: 'PENDING' | 'SYNCING' | 'FAILED' | 'CONFLICT'
-  retryCount: number
-  lastAttemptAt?: string
+  savedAt: string
+  expiresAt: string
+  status: 'ACTIVE' | 'EXPIRED' | 'SAVE_FAILED' | 'SUBMITTING'
   errorMessage?: string
 }
 ```
@@ -211,20 +208,20 @@ interface PendingTrainingSync {
 | `overdue_workout_resolution_opened` | `overdue_count` |
 | `overdue_workout_resolved` | `resolution_type` |
 | `calendar_date_opened` | `has_plan`, `has_training`, `has_attention` |
-| `offline_mode_entered` | `during_workout` |
-| `training_queued_for_sync` | `source_type` |
-| `training_sync_succeeded` | `retry_count` |
-| `training_sync_failed` | `retry_count`, `error_category` |
-| `training_sync_conflict_resolved` | `resolution_type` |
+| `workout_draft_restored` | `draft_age_hours`, `expired` |
+| `workout_draft_discarded` | `draft_age_hours`, `expired` |
+| `training_save_failed` | `error_category`, `source_type` |
+| `training_save_retry_clicked` | `draft_age_hours` |
+| `training_save_retry_succeeded` | `draft_age_hours` |
 
 ## 11. 异常与边界
 
 - 周复盘接口失败：保留首页基础周统计，提供重试。
 - 用户没有启用计划：周复盘只总结实际训练，不显示计划完成率。
 - 改期目标日期冲突：明确显示冲突并允许继续或重新选择。
-- 待同步记录存在时注销：先提示用户导出或完成同步。
+- 草稿存在时注销：先提示用户恢复、删除或取消注销。
 - 本地存储空间不足：训练中立即提示，并允许用户完成当前页面输入后重试保存。
-- 同步队列不得因用户退出 App 而丢失。
+- 保存失败后不得清除草稿或结束当前训练状态。
 
 ## 12. 验收标准
 
@@ -232,7 +229,6 @@ interface PendingTrainingSync {
 - 周复盘能够覆盖有计划、无计划、有训练和无训练状态。
 - 逾期训练可选择补练、改期或跳过。
 - 日历、历史、周复盘进入同一训练详情语义。
-- 断网时能够开始、记录并完成训练。
-- 网络恢复后能够自动同步，并通过 `clientRequestId` 避免重复记录。
-- 冲突状态不会自动覆盖任一版本。
-
+- 已经开始的训练在断网时仍可继续记录。
+- 保存失败后草稿保留，并可使用原 `clientRequestId` 手动重试。
+- 草稿超过 48 小时后不会静默删除。
