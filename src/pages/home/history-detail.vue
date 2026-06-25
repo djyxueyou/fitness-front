@@ -2,16 +2,24 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
+import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
+import ShareCardSheet from '@/components/share-card-sheet/index.vue'
+import { fetchWorkoutSharePreview, type SharePreviewResponse } from '@/api/share'
 import { useTrainingStore } from '@/stores/training'
 import { useProfileStore } from '@/stores/profile'
+import { useThemeStore } from '@/stores/theme'
 import { formatSeconds } from '@/utils/format'
 import { formatWeight } from '@/utils/unit'
 
 const trainingStore = useTrainingStore()
 const profileStore = useProfileStore()
+const themeStore = useThemeStore()
 const trainingId = ref<number | null>(null)
 const detail = ref<Awaited<ReturnType<typeof trainingStore.fetchDetail>> | null>(null)
 const loading = ref(false)
+const shareVisible = ref(false)
+const shareLoading = ref(false)
+const sharePreview = ref<SharePreviewResponse | null>(null)
 const unit = computed(() => profileStore.unit)
 
 const totalSetsText = computed(() => `${detail.value?.totalSetCount || 0} 组`)
@@ -24,10 +32,11 @@ const improvedItems = computed(() =>
 const firstRecordItems = computed(() =>
   (detail.value?.items || []).filter((item) => item.firstRecord)
 )
-const bestImprovedItem = computed(() =>
-  (detail.value?.items || [])
-    .filter((item) => item.volumeDeltaKg !== null && item.volumeDeltaKg !== undefined)
-    .sort((a, b) => Number(b.volumeDeltaKg || 0) - Number(a.volumeDeltaKg || 0))[0]
+const bestImprovedItem = computed(
+  () =>
+    (detail.value?.items || [])
+      .filter((item) => item.volumeDeltaKg !== null && item.volumeDeltaKg !== undefined)
+      .sort((a, b) => Number(b.volumeDeltaKg || 0) - Number(a.volumeDeltaKg || 0))[0]
 )
 const detailInsightTitle = computed(() => {
   if (detailPrs.value.length) return `刷新 ${detailPrs.value.length} 个 PR`
@@ -71,6 +80,37 @@ onLoad(async (query = {}) => {
 
 function goBack() {
   uni.navigateBack()
+}
+
+async function openShareCard() {
+  if (!trainingId.value) {
+    uni.showToast({ title: '训练记录不存在', icon: 'none' })
+    return
+  }
+  shareVisible.value = true
+  shareLoading.value = true
+  try {
+    sharePreview.value = await fetchWorkoutSharePreview(trainingId.value)
+  } catch (err) {
+    shareVisible.value = false
+    uni.showToast({ title: '分享预览生成失败', icon: 'none' })
+    console.error('[share] workout detail preview failed', err)
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+function closeShareCard() {
+  shareVisible.value = false
+}
+
+function copyShareText() {
+  const text = sharePreview.value?.copyText
+  if (!text) return
+  uni.setClipboardData({
+    data: text,
+    success: () => uni.showToast({ title: '已复制分享文案', icon: 'none' })
+  })
 }
 
 function formatDate(dateText?: string) {
@@ -145,8 +185,11 @@ function comparisonClass(value?: number | null) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view
+      class="page-shell history-detail-page secondary-page safe-bottom"
+      :class="themeStore.themeClass"
+    >
       <AppHeader
         :title="detail?.trainingName || '训练详情'"
         :subtitle="formatDate(detail?.startedAt)"
@@ -157,6 +200,10 @@ function comparisonClass(value?: number | null) {
       <view v-if="loading" class="muted">加载中...</view>
 
       <template v-else-if="detail">
+        <view class="history-detail__share-row">
+          <view class="history-detail__share btn-press" @tap="openShareCard">分享训练</view>
+        </view>
+
         <view class="history-detail__stats">
           <view class="glass-card history-detail__stat">
             <view class="history-detail__stat-icon">⏱</view>
@@ -209,7 +256,18 @@ function comparisonClass(value?: number | null) {
             class="glass-card history-detail__card"
           >
             <view class="history-detail__card-top">
-              <view class="history-detail__card-title">{{ exercise.exerciseName }}</view>
+              <ExerciseThumbnail
+                :name="exercise.exerciseName"
+                :record-type="exercise.recordType"
+                :url="exercise.thumbnailUrl || exercise.thumbnailPath"
+              />
+              <view class="history-detail__card-heading">
+                <view class="history-detail__card-title">{{ exercise.exerciseName }}</view>
+                <view class="history-detail__card-meta">
+                  {{ exercise.primaryMuscle || '训练动作' }}
+                  <template v-if="exercise.equipment"> · {{ exercise.equipment }}</template>
+                </view>
+              </view>
               <view class="muted">{{ exercise.completedSets }} 组</view>
             </view>
 
@@ -264,10 +322,36 @@ function comparisonClass(value?: number | null) {
       </template>
     </view>
   </scroll-view>
+  <ShareCardSheet
+    :visible="shareVisible"
+    :preview="sharePreview"
+    :loading="shareLoading"
+    @close="closeShareCard"
+    @copy="copyShareText"
+  />
 </template>
 
 <style lang="scss" scoped>
 .history-detail {
+  &__share-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 18rpx;
+  }
+
+  &__share {
+    min-height: 58rpx;
+    padding: 0 22rpx;
+    border-radius: 999rpx;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23rpx;
+    font-weight: 900;
+  }
+
   &__stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -300,33 +384,32 @@ function comparisonClass(value?: number | null) {
   &__insight {
     margin-bottom: 24rpx;
     padding: 28rpx;
-    border-color: rgba(80, 220, 180, 0.18);
-    background:
-      linear-gradient(145deg, rgba(80, 220, 180, 0.08), rgba(255, 255, 255, 0.045));
+    border-color: rgba(114, 191, 130, 0.3);
+    background: rgba(114, 191, 130, 0.08);
   }
 
   &__insight-label {
-    color: #3dd9a2;
+    color: var(--app-success);
     font-size: 21rpx;
     font-weight: 900;
   }
 
   &__insight-title {
     margin-top: 10rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 32rpx;
     font-weight: 900;
   }
 
   &__insight-sub {
     margin-top: 10rpx;
-    color: #b8b8c8;
+    color: var(--app-text-muted);
     font-size: 24rpx;
     line-height: 1.6;
   }
 
   &__section-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 28rpx;
     font-weight: 800;
   }
@@ -339,24 +422,24 @@ function comparisonClass(value?: number | null) {
     gap: 16rpx;
     padding: 18rpx;
     border-radius: 22rpx;
-    background: rgba(255, 80, 30, 0.08);
+    background: var(--app-accent-soft);
   }
 
   &__pr-name {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 24rpx;
     font-weight: 800;
   }
 
   &__pr-type {
     margin-top: 6rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
   }
 
   &__pr-value {
     flex-shrink: 0;
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 26rpx;
     font-weight: 900;
   }
@@ -375,14 +458,26 @@ function comparisonClass(value?: number | null) {
   &__card-top {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 18rpx;
     padding-bottom: 18rpx;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  &__card-heading {
+    min-width: 0;
+    flex: 1;
   }
 
   &__card-title {
+    color: var(--app-text);
     font-size: 28rpx;
-    font-weight: 700;
+    font-weight: 900;
+  }
+
+  &__card-meta {
+    margin-top: 6rpx;
+    color: var(--app-text-muted);
+    font-size: 21rpx;
   }
 
   &__summary {
@@ -393,14 +488,14 @@ function comparisonClass(value?: number | null) {
   }
 
   &__summary-value {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 26rpx;
     font-weight: 800;
   }
 
   &__summary-label {
     margin-top: 6rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
   }
 
@@ -414,26 +509,26 @@ function comparisonClass(value?: number | null) {
   &__compare-item {
     padding: 18rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--app-bg);
   }
 
   &__compare-label {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
   }
 
   &__compare-value {
     margin-top: 8rpx;
-    color: #b8b8c8;
+    color: var(--app-text-secondary);
     font-size: 24rpx;
     font-weight: 800;
 
     &--up {
-      color: #3dd9a2;
+      color: var(--app-success);
     }
 
     &--down {
-      color: #ff6b4a;
+      color: var(--app-danger);
     }
   }
 
@@ -445,11 +540,11 @@ function comparisonClass(value?: number | null) {
     margin-top: 14rpx;
     padding: 18rpx;
     border-radius: 22rpx;
-    background: rgba(255, 80, 30, 0.08);
+    background: var(--app-bg);
   }
 
   &__set-label {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 

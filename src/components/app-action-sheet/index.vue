@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
+
 interface ActionSheetItem {
   key: string
   label: string
@@ -21,7 +25,12 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <view v-if="visible" class="app-action-sheet__mask" @tap="emit('close')">
+  <view
+    v-if="visible"
+    class="app-action-sheet__mask"
+    :class="themeStore.themeClass"
+    @tap="emit('close')"
+  >
     <view class="app-action-sheet" @tap.stop>
       <view class="app-action-sheet__handle" />
       <view class="app-action-sheet__head">
@@ -67,9 +76,9 @@ const emit = defineEmits<{
   z-index: 91;
   padding: 20rpx;
   border-radius: 34rpx;
-  background: rgba(16, 16, 24, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 -24rpx 80rpx rgba(0, 0, 0, 0.52);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-focus);
   backdrop-filter: blur(18rpx);
 
   &__mask {
@@ -85,7 +94,7 @@ const emit = defineEmits<{
     height: 8rpx;
     margin: 0 auto 20rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--app-border-strong);
   }
 
   &__head {
@@ -97,7 +106,7 @@ const emit = defineEmits<{
   }
 
   &__title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 32rpx;
     font-weight: 900;
   }
@@ -105,7 +114,7 @@ const emit = defineEmits<{
   &__subtitle,
   &__item-desc {
     margin-top: 6rpx;
-    color: #858599;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.45;
   }
@@ -114,8 +123,8 @@ const emit = defineEmits<{
     width: 58rpx;
     height: 58rpx;
     border-radius: 20rpx;
-    background: rgba(255, 255, 255, 0.07);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -137,12 +146,12 @@ const emit = defineEmits<{
     align-items: center;
     justify-content: space-between;
     gap: 16rpx;
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
 
     &--primary {
-      background: rgba(255, 80, 30, 0.14);
-      border-color: rgba(255, 80, 30, 0.3);
+      background: var(--app-accent-soft);
+      border-color: rgba(255, 100, 24, 0.3);
     }
 
     &--danger {
@@ -156,21 +165,21 @@ const emit = defineEmits<{
   }
 
   &__item-label {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 28rpx;
     font-weight: 900;
   }
 
   &__item--primary &__item-label {
-    color: #ff8a3d;
+    color: var(--app-accent);
   }
 
   &__item--danger &__item-label {
-    color: #ff6b4a;
+    color: var(--app-danger);
   }
 
   &__item-arrow {
-    color: #77778a;
+    color: var(--app-text-muted);
     font-size: 38rpx;
     font-weight: 700;
     flex-shrink: 0;
@@ -183,10 +192,10 @@ const emit = defineEmits<{
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #b8b8c8;
+    color: var(--app-text-secondary);
     font-size: 26rpx;
     font-weight: 900;
-    background: rgba(255, 255, 255, 0.075);
+    background: var(--app-bg);
   }
 }
 </style>

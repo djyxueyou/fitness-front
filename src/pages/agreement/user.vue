@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
 const updatedAt = '2026 年 5 月 28 日'
 
 const sections = [
@@ -66,8 +69,8 @@ function goBack() {
 </script>
 
 <template>
-  <scroll-view scroll-y class="agreement-page">
-    <view class="agreement-page__shell">
+  <scroll-view scroll-y class="agreement-page" :class="themeStore.themeClass">
+    <view class="agreement-page__shell" :class="themeStore.themeClass">
       <view class="agreement-page__header">
         <view class="agreement-page__back" @tap="goBack">‹</view>
         <view class="agreement-page__header-title">用户协议</view>
@@ -109,8 +112,9 @@ function goBack() {
   height: 100vh;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 50% -10%, rgba(255, 80, 30, 0.12) 0%, transparent 58%), #0a0a0e;
-  color: #f5f5fa;
+    radial-gradient(circle at 50% -10%, rgba(255, 100, 24, 0.08) 0%, transparent 42%),
+    var(--app-bg);
+  color: var(--app-text);
 
   &__shell {
     min-height: 100vh;
@@ -129,18 +133,19 @@ function goBack() {
     width: 72rpx;
     height: 72rpx;
     border-radius: 24rpx;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
+    box-shadow: var(--app-shadow-card);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 48rpx;
     line-height: 1;
   }
 
   &__header-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 42rpx;
     font-weight: 800;
     line-height: 1.2;
@@ -163,7 +168,7 @@ function goBack() {
   }
 
   &__title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 38rpx;
     line-height: 1.2;
     font-weight: 800;
@@ -171,15 +176,16 @@ function goBack() {
 
   &__date {
     margin-top: 10rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 24rpx;
   }
 
   &__card {
     margin-top: 20rpx;
     border-radius: 30rpx;
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
+    box-shadow: var(--app-shadow-card);
     overflow: hidden;
   }
 
@@ -189,20 +195,20 @@ function goBack() {
   }
 
   &__summary {
-    color: #d8d8e2;
+    color: var(--app-text-secondary);
     font-size: 26rpx;
     line-height: 1.7;
   }
 
   &__section-title {
-    color: #fff;
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 800;
     margin-bottom: 18rpx;
   }
 
   &__paragraph {
-    color: #a9a9b8;
+    color: var(--app-text-secondary);
     font-size: 25rpx;
     line-height: 1.75;
   }

@@ -97,6 +97,21 @@ export interface AnalyticsPrListResponse {
   items: AnalyticsPrItemResponse[]
 }
 
+export interface AnalyticsInsightResponse {
+  type: string
+  title: string
+  description: string
+}
+
+export interface AdvancedAnalyticsSummaryResponse {
+  dataReady: boolean
+  readinessCode: string
+  headline: string
+  summary: string
+  highlights: AnalyticsInsightResponse[]
+  attentionItems: AnalyticsInsightResponse[]
+}
+
 export function fetchWeeklyVolume(weeks = 12) {
   return request<AnalyticsWeeklyVolumeResponse>({
     url: '/api/trainings/analytics/weekly-volume',
@@ -142,5 +157,12 @@ export function fetchAnalyticsPrs(range: AnalyticsRange = 'month') {
     url: '/api/trainings/analytics/prs',
     method: 'GET',
     data: { range }
+  })
+}
+
+export function fetchAdvancedAnalyticsSummary() {
+  return request<AdvancedAnalyticsSummaryResponse>({
+    url: '/api/trainings/analytics/advanced-summary',
+    method: 'GET'
   })
 }

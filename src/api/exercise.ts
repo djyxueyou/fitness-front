@@ -5,10 +5,16 @@ export interface ExerciseSummary {
   name: string
   categoryCode: string
   categoryName: string
-  primaryMuscle: string
-  equipment: string
-  difficultyLevel: string
+  primaryMuscleCode?: string
+  primaryMuscleName?: string
+  secondaryMuscles?: string[]
+  equipmentCode?: string
+  equipmentName?: string
+  equipmentDetail?: string
+  difficultyCode?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | string
+  difficultyName?: string
   recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
+  searchKeywords?: string
   exerciseType?: 'SYSTEM' | 'USER' | string
   thumbnailSource?: string
   thumbnailPath?: string
@@ -22,7 +28,7 @@ export interface ExerciseDetail extends ExerciseSummary {
   commonMistakesText?: string
   checklistText?: string
   mediaSource: string
-  mediaPath: string
+  mediaPath?: string
   mediaUrl?: string
   mediaSizeBytes?: number
   mediaWidth?: number
@@ -51,8 +57,13 @@ export interface CreateCustomExerciseRequest {
   name: string
   categoryCode?: string
   categoryName?: string
-  primaryMuscle?: string
-  equipment?: string
+  primaryMuscleCode?: string
+  primaryMuscleName?: string
+  equipmentCode?: string
+  equipmentName?: string
+  equipmentDetail?: string
+  difficultyCode?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | string
+  difficultyName?: string
   recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
 }
 
@@ -66,9 +77,9 @@ function cleanQuery(params?: {
   categoryCode?: string
   keyword?: string
   scope?: string
-  primaryMuscle?: string
-  equipment?: string
-  difficultyLevel?: string
+  primaryMuscleCode?: string
+  equipmentCode?: string
+  difficultyCode?: string
   recordType?: string
   pageNo?: number
   pageSize?: number
@@ -85,9 +96,9 @@ export function fetchExerciseList(params?: {
   categoryCode?: string
   keyword?: string
   scope?: 'ALL' | 'SYSTEM' | 'CUSTOM'
-  primaryMuscle?: string
-  equipment?: string
-  difficultyLevel?: string
+  primaryMuscleCode?: string
+  equipmentCode?: string
+  difficultyCode?: string
   recordType?: string
   pageNo?: number
   pageSize?: number

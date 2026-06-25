@@ -18,6 +18,7 @@ import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import { useProfileStore } from '@/stores/profile'
+import { useThemeStore } from '@/stores/theme'
 import { convertUnitToKg, formatWeight } from '@/utils/unit'
 
 interface EditableTemplateItem {
@@ -33,6 +34,7 @@ interface EditableTemplateItem {
 
 const templateStore = useTemplateStore()
 const profileStore = useProfileStore()
+const themeStore = useThemeStore()
 const templateId = ref<number | null>(null)
 const templateName = ref('')
 const items = ref<EditableTemplateItem[]>([])
@@ -121,10 +123,10 @@ async function saveTemplate() {
     items: items.value.map<UpsertTemplateItemRequest>((item) => ({
       exerciseId: item.exerciseId,
       targetSets: item.targetSets,
-      targetWeightKg: item.recordType === 'WEIGHT_REPS' ? item.targetWeightKg ?? 20 : undefined,
-      targetReps: item.recordType !== 'DURATION' ? item.targetReps ?? 10 : undefined,
+      targetWeightKg: item.recordType === 'WEIGHT_REPS' ? (item.targetWeightKg ?? 20) : undefined,
+      targetReps: item.recordType !== 'DURATION' ? (item.targetReps ?? 10) : undefined,
       targetDurationSeconds:
-        item.recordType === 'DURATION' ? item.targetDurationSeconds ?? 60 : undefined
+        item.recordType === 'DURATION' ? (item.targetDurationSeconds ?? 60) : undefined
     }))
   }
 
@@ -218,12 +220,18 @@ function adjustSets(index: number, delta: -1 | 1) {
   )
 }
 
-function adjustTarget(index: number, field: 'targetWeightKg' | 'targetReps' | 'targetDurationSeconds', delta: number) {
+function adjustTarget(
+  index: number,
+  field: 'targetWeightKg' | 'targetReps' | 'targetDurationSeconds',
+  delta: number
+) {
   items.value = items.value.map((item, itemIndex) => {
     if (itemIndex !== index) return item
     const minimum = field === 'targetWeightKg' ? 0 : 1
-    const current = item[field] ?? (field === 'targetDurationSeconds' ? 60 : field === 'targetReps' ? 10 : 20)
-    const normalizedDelta = field === 'targetWeightKg' ? convertUnitToKg(delta, weightUnit.value) : delta
+    const current =
+      item[field] ?? (field === 'targetDurationSeconds' ? 60 : field === 'targetReps' ? 10 : 20)
+    const normalizedDelta =
+      field === 'targetWeightKg' ? convertUnitToKg(delta, weightUnit.value) : delta
     return {
       ...item,
       [field]: Math.max(minimum, Number((current + normalizedDelta).toFixed(2)))
@@ -271,9 +279,9 @@ function confirmDuration() {
 </script>
 
 <template>
-  <view class="template-edit">
-    <scroll-view scroll-y class="page-scroll">
-      <view class="page-shell template-edit__shell safe-bottom">
+  <view class="template-edit operation-page" :class="themeStore.themeClass">
+    <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+      <view class="page-shell template-edit__shell safe-bottom" :class="themeStore.themeClass">
         <AppHeader
           :title="isEditMode ? '编辑模板' : '新建模板'"
           subtitle="选择动作并设置目标组数"
@@ -299,7 +307,11 @@ function confirmDuration() {
           <view>
             <view class="template-edit__section-title">动作安排</view>
             <view class="template-edit__section-sub">
-              {{ items.length ? `${items.length} 个动作 · ${totalSets} 个目标组` : '按训练顺序添加动作' }}
+              {{
+                items.length
+                  ? `${items.length} 个动作 · ${totalSets} 个目标组`
+                  : '按训练顺序添加动作'
+              }}
             </view>
           </view>
           <view class="template-edit__add btn-press" @tap="openExercisePicker">
@@ -341,32 +353,56 @@ function confirmDuration() {
               <view v-if="item.recordType === 'WEIGHT_REPS'" class="template-edit__target">
                 <view class="template-edit__target-label">目标重量</view>
                 <view class="template-edit__target-control">
-                  <view class="template-edit__target-step btn-press" @tap="adjustTarget(index, 'targetWeightKg', -2.5)">−</view>
+                  <view
+                    class="template-edit__target-step btn-press"
+                    @tap="adjustTarget(index, 'targetWeightKg', -2.5)"
+                    >−</view
+                  >
                   <view class="template-edit__target-value">
                     {{ formatWeight(item.targetWeightKg ?? 20, weightUnit, 1) }} {{ weightUnit }}
                   </view>
-                  <view class="template-edit__target-step btn-press" @tap="adjustTarget(index, 'targetWeightKg', 2.5)">+</view>
+                  <view
+                    class="template-edit__target-step btn-press"
+                    @tap="adjustTarget(index, 'targetWeightKg', 2.5)"
+                    >+</view
+                  >
                 </view>
               </view>
               <view v-if="item.recordType !== 'DURATION'" class="template-edit__target">
                 <view class="template-edit__target-label">目标次数</view>
                 <view class="template-edit__target-control">
-                  <view class="template-edit__target-step btn-press" @tap="adjustTarget(index, 'targetReps', -1)">−</view>
+                  <view
+                    class="template-edit__target-step btn-press"
+                    @tap="adjustTarget(index, 'targetReps', -1)"
+                    >−</view
+                  >
                   <view class="template-edit__target-value">{{ item.targetReps ?? 10 }} 次</view>
-                  <view class="template-edit__target-step btn-press" @tap="adjustTarget(index, 'targetReps', 1)">+</view>
+                  <view
+                    class="template-edit__target-step btn-press"
+                    @tap="adjustTarget(index, 'targetReps', 1)"
+                    >+</view
+                  >
                 </view>
               </view>
               <view v-else class="template-edit__target">
                 <view class="template-edit__target-label">每组时长</view>
                 <view class="template-edit__target-control">
-                  <view class="template-edit__target-step btn-press" @tap="adjustTarget(index, 'targetDurationSeconds', -15)">−</view>
+                  <view
+                    class="template-edit__target-step btn-press"
+                    @tap="adjustTarget(index, 'targetDurationSeconds', -15)"
+                    >−</view
+                  >
                   <view
                     class="template-edit__target-value template-edit__target-value--editable btn-press"
                     @tap="openDurationEditor(index)"
                   >
                     {{ formatDuration(item.targetDurationSeconds ?? 60) }}
                   </view>
-                  <view class="template-edit__target-step btn-press" @tap="adjustTarget(index, 'targetDurationSeconds', 15)">+</view>
+                  <view
+                    class="template-edit__target-step btn-press"
+                    @tap="adjustTarget(index, 'targetDurationSeconds', 15)"
+                    >+</view
+                  >
                 </view>
               </view>
             </view>
@@ -414,6 +450,7 @@ function confirmDuration() {
     </view>
 
     <ExercisePicker
+      :class="themeStore.themeClass"
       :visible="pickerVisible"
       title="添加动作"
       subtitle="搜索并添加到当前模板"
@@ -473,8 +510,8 @@ function confirmDuration() {
     margin-top: 8rpx;
     padding: 22rpx 24rpx 20rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.035);
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
   }
 
   &__form-head {
@@ -485,14 +522,14 @@ function confirmDuration() {
 
   &__label,
   &__section-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 27rpx;
     font-weight: 900;
   }
 
   &__name-count,
   &__section-sub {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
   }
 
@@ -503,14 +540,14 @@ function confirmDuration() {
   &__input {
     margin-top: 12rpx;
     min-height: 72rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 32rpx;
     font-weight: 800;
-    border-bottom: 1rpx solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1rpx solid var(--app-border);
   }
 
   &__placeholder {
-    color: #828296;
+    color: var(--app-text-muted);
   }
 
   &__toolbar {
@@ -552,8 +589,8 @@ function confirmDuration() {
   &__item {
     padding: 20rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.035);
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
   }
 
   &__item-main {
@@ -570,7 +607,7 @@ function confirmDuration() {
     align-items: center;
     justify-content: center;
     background: rgba(255, 80, 30, 0.16);
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 24rpx;
     font-weight: 900;
     flex-shrink: 0;
@@ -584,7 +621,7 @@ function confirmDuration() {
 
   &__name,
   &__exercise-name {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 26rpx;
     font-weight: 900;
     overflow: hidden;
@@ -594,7 +631,7 @@ function confirmDuration() {
 
   &__meta {
     margin-top: 6rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
   }
 
@@ -614,8 +651,8 @@ function confirmDuration() {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     font-size: 20rpx;
     font-weight: 800;
   }
@@ -623,12 +660,12 @@ function confirmDuration() {
   &__sets-value {
     min-width: 54rpx;
     text-align: center;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 17rpx;
 
     text {
       display: block;
-      color: #f5f5fa;
+      color: var(--app-text);
       font-size: 27rpx;
       font-weight: 900;
       line-height: 1.1;
@@ -650,11 +687,12 @@ function confirmDuration() {
     min-width: 0;
     padding: 14rpx;
     border-radius: 16rpx;
-    background: rgba(255, 255, 255, 0.045);
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
   }
 
   &__target-label {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 18rpx;
   }
 
@@ -673,14 +711,14 @@ function confirmDuration() {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5fa;
+    background: var(--app-surface);
+    color: var(--app-text-secondary);
     font-size: 22rpx;
   }
 
   &__target-value {
     min-width: 0;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 21rpx;
     font-weight: 900;
     text-align: center;
@@ -701,12 +739,12 @@ function confirmDuration() {
     gap: 8rpx;
     margin-top: 16rpx;
     padding-top: 14rpx;
-    border-top: 1rpx solid rgba(255, 255, 255, 0.06);
+    border-top: 1rpx solid var(--app-border);
   }
 
   &__sort-label {
     margin-right: auto;
-    color: #676779;
+    color: var(--app-text-muted);
     font-size: 19rpx;
   }
 
@@ -733,8 +771,8 @@ function confirmDuration() {
     align-items: center;
     justify-content: center;
     text-align: center;
-    background: rgba(255, 255, 255, 0.025);
-    border: 1rpx dashed rgba(255, 255, 255, 0.12);
+    background: var(--app-surface);
+    border: 1rpx dashed var(--app-border-strong);
   }
 
   &__empty-icon {
@@ -744,15 +782,15 @@ function confirmDuration() {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff7a32;
-    background: rgba(255, 80, 30, 0.14);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     font-size: 44rpx;
     font-weight: 400;
   }
 
   &__empty-title {
     margin-top: 20rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 27rpx;
     font-weight: 900;
   }
@@ -760,7 +798,7 @@ function confirmDuration() {
   &__empty-sub {
     max-width: 440rpx;
     margin-top: 10rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 21rpx;
     line-height: 1.55;
   }
@@ -773,8 +811,8 @@ function confirmDuration() {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff7a32;
-    background: rgba(255, 80, 30, 0.1);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     border: 1rpx solid rgba(255, 80, 30, 0.26);
     font-size: 22rpx;
     font-weight: 900;
@@ -793,8 +831,8 @@ function confirmDuration() {
     left: 0;
     right: 0;
     padding: 16rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
-    background: rgba(10, 10, 15, 0.96);
-    border-top: 1rpx solid rgba(255, 255, 255, 0.07);
+    background: var(--app-surface-raised);
+    border-top: 1rpx solid var(--app-border);
     backdrop-filter: blur(24rpx);
   }
 
@@ -802,12 +840,12 @@ function confirmDuration() {
     display: flex;
     justify-content: space-between;
     margin-bottom: 12rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 20rpx;
     font-weight: 800;
 
     text {
-      color: #828296;
+      color: var(--app-text-muted);
       font-weight: 500;
     }
   }
@@ -824,8 +862,9 @@ function confirmDuration() {
     bottom: 0;
     padding: 28rpx;
     border-radius: 36rpx 36rpx 0 0;
-    background: #101018;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface-raised);
+    border: 1px solid var(--app-border);
+    box-shadow: var(--app-shadow-focus);
   }
 
   &__picker-head {
@@ -835,7 +874,7 @@ function confirmDuration() {
   }
 
   &__picker-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 34rpx;
     font-weight: 800;
   }
@@ -844,7 +883,7 @@ function confirmDuration() {
   &__exercise-meta,
   &__picker-footer {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
@@ -855,8 +894,8 @@ function confirmDuration() {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text);
     font-size: 36rpx;
   }
 
@@ -866,7 +905,7 @@ function confirmDuration() {
   }
 
   &__search-input {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 26rpx;
   }
 
@@ -884,8 +923,8 @@ function confirmDuration() {
   &__category {
     padding: 14rpx 22rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     font-size: 24rpx;
 
     &--active {
@@ -920,13 +959,13 @@ function confirmDuration() {
     align-items: center;
     justify-content: center;
     background: rgba(255, 80, 30, 0.14);
-    color: #ff501e;
+    color: var(--app-accent);
     font-size: 30rpx;
     font-weight: 800;
   }
 
   &__exercise-add {
-    color: #ff501e;
+    color: var(--app-accent);
     font-size: 24rpx;
     font-weight: 700;
   }
@@ -945,9 +984,9 @@ function confirmDuration() {
   z-index: 51;
   padding: 20rpx;
   border-radius: 34rpx;
-  background: rgba(16, 16, 24, 0.98);
-  border: 1rpx solid rgba(255, 255, 255, 0.09);
-  box-shadow: 0 -24rpx 80rpx rgba(0, 0, 0, 0.52);
+  background: var(--app-surface-raised);
+  border: 1rpx solid var(--app-border);
+  box-shadow: var(--app-shadow-focus);
   backdrop-filter: blur(18rpx);
 
   &__mask {
@@ -963,7 +1002,7 @@ function confirmDuration() {
     height: 8rpx;
     margin: 0 auto 20rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--app-border-strong);
   }
 
   &__head,
@@ -975,14 +1014,14 @@ function confirmDuration() {
   }
 
   &__title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 32rpx;
     font-weight: 900;
   }
 
   &__sub {
     margin-top: 6rpx;
-    color: #858599;
+    color: var(--app-text-muted);
     font-size: 21rpx;
   }
 
@@ -994,8 +1033,8 @@ function confirmDuration() {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: #f5f5fa;
-    background: rgba(255, 255, 255, 0.07);
+    color: var(--app-text);
+    background: var(--app-bg);
     font-size: 34rpx;
   }
 
@@ -1009,20 +1048,20 @@ function confirmDuration() {
   &__field {
     padding: 18rpx 20rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1rpx solid rgba(255, 255, 255, 0.07);
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
   }
 
   &__input {
     height: 62rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 36rpx;
     font-weight: 900;
     text-align: center;
   }
 
   &__unit {
-    color: #858599;
+    color: var(--app-text-muted);
     font-size: 20rpx;
     text-align: center;
   }
@@ -1040,8 +1079,8 @@ function confirmDuration() {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff9b58;
-    background: rgba(255, 80, 30, 0.1);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     border: 1rpx solid rgba(255, 80, 30, 0.2);
     font-size: 19rpx;
     font-weight: 800;
@@ -1064,8 +1103,8 @@ function confirmDuration() {
   }
 
   &__cancel {
-    color: #b8b8c8;
-    background: rgba(255, 255, 255, 0.07);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
   }
 
   &__confirm {

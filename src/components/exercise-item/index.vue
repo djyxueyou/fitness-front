@@ -142,7 +142,7 @@ function handleCustomAction(item: ActionSheetItem) {
   &__name {
     flex: 1;
     min-width: 0;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 900;
     line-height: 1.25;
@@ -154,7 +154,7 @@ function handleCustomAction(item: ActionSheetItem) {
 
   &__meta {
     margin-top: 8rpx;
-    color: #8f8fa3;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.35;
     display: -webkit-box;
@@ -172,21 +172,21 @@ function handleCustomAction(item: ActionSheetItem) {
   }
 
   &__favorite {
-    width: 46rpx;
-    height: 46rpx;
+    width: 48rpx;
+    height: 48rpx;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #9a9aab;
+    color: #8f9bad;
     font-size: 32rpx;
     transition:
       color 0.2s ease,
-      text-shadow 0.2s ease;
+      transform 0.2s ease;
 
     &--active {
-      color: #ff4d4f;
-      text-shadow: 0 0 12rpx rgba(255, 77, 79, 0.5);
+      color: #ff4d5a;
+      transform: scale(1.04);
     }
   }
 
@@ -203,9 +203,9 @@ function handleCustomAction(item: ActionSheetItem) {
   }
 
   &__manage {
-    color: #f5f5fa;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
   }
 }
 </style>

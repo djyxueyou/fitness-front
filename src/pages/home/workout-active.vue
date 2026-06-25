@@ -1,27 +1,36 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { onHide } from '@dcloudio/uni-app'
+import { onHide, onShow } from '@dcloudio/uni-app'
 import ExercisePicker from '@/components/exercise-picker/index.vue'
 import ProgressBar from '@/components/progress-bar/index.vue'
+import AppActionSheet from '@/components/app-action-sheet/index.vue'
+import EffortPicker from '@/components/effort-picker/index.vue'
+import ProgressionRecommendation from '@/components/progression-recommendation/index.vue'
+import { useMembershipPromptStore } from '@/stores/membership-prompt'
+import PlateCalculator from '@/components/plate-calculator/index.vue'
 import type { ExerciseSummary } from '@/api/exercise'
-import { saveTraining } from '@/api/training'
+import { saveTraining, type SaveTrainingRequest } from '@/api/training'
 import { routes } from '@/utils/navigation'
 import { formatSeconds } from '@/utils/format'
 import { emitTrainingChanged } from '@/utils/training-events'
+import { buildWarmupCandidates, type WarmupCandidate } from '@/utils/warmup'
 import { useProfileStore } from '@/stores/profile'
 import { useTrainingStore } from '@/stores/training'
-import { useMembershipPromptStore } from '@/stores/membership-prompt'
+import { useThemeStore } from '@/stores/theme'
 import { convertUnitToKg, formatWeight, type WeightUnit } from '@/utils/unit'
-import { useWorkoutStore, type WorkoutComparison, type WorkoutExercise } from '@/stores/workout'
-
-const KG_STEP = 2.5
-const LB_STEP = 5
-const DURATION_STEP_SECONDS = 10
+import {
+  useWorkoutStore,
+  type WorkoutComparison,
+  type WorkoutEffort,
+  type WorkoutExercise,
+  type WorkoutSetType
+} from '@/stores/workout'
 
 const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
-const trainingStore = useTrainingStore()
 const membershipPromptStore = useMembershipPromptStore()
+const trainingStore = useTrainingStore()
+const themeStore = useThemeStore()
 const showFinish = ref(false)
 const showExitConfirm = ref(false)
 const submitting = ref(false)
@@ -31,12 +40,26 @@ const restRemaining = ref(0)
 const restTitle = ref('')
 const pickerVisible = ref(false)
 const startupLoading = ref(false)
+const effortTarget = ref<{ exerciseIndex: number; setIndex: number } | null>(null)
+const plateCalculatorVisible = ref(false)
+const toolFeedback = ref('')
+const warmupManagerIndex = ref<number | null>(null)
+const warmupPreviewIndex = ref<number | null>(null)
+const warmupPreviewSets = ref<WarmupCandidate[]>([])
+const supersetIntroIndex = ref<number | null>(null)
+const replacementTargetIndex = ref<number | null>(null)
+const pendingReplacement = ref<{ targetIndex: number; exercise: ExerciseSummary } | null>(null)
+const pendingDeleteIndex = ref<number | null>(null)
+const restFocusIndex = ref<number | null>(null)
 const unit = computed<WeightUnit>(() => profileStore.unit)
 let timer: ReturnType<typeof setInterval> | null = null
 let restTimer: ReturnType<typeof setInterval> | null = null
 let stepTimer: ReturnType<typeof setInterval> | null = null
 let stepDelayTimer: ReturnType<typeof setTimeout> | null = null
+let toolFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 let lastDraftPersistedAt = 0
+let restStartedAt = 0
+let restDurationSeconds = 0
 
 function startStepTimer(action: () => void) {
   clearStepTimer()
@@ -66,7 +89,9 @@ const currentExerciseDoneCount = computed(() =>
 const previousExerciseIndex = computed(() =>
   findAdjacentActiveExerciseIndex(currentExerciseIndex.value, -1)
 )
-const nextExerciseIndex = computed(() => findAdjacentActiveExerciseIndex(currentExerciseIndex.value, 1))
+const nextExerciseIndex = computed(() =>
+  findAdjacentActiveExerciseIndex(currentExerciseIndex.value, 1)
+)
 const previousExerciseText = computed(() =>
   previousExerciseIndex.value === null
     ? '没有上一个'
@@ -98,14 +123,25 @@ const currentExerciseScrollId = computed(() => `workout-exercise-${currentExerci
 const displayTotalVolume = computed(() =>
   formatWeight(Number(workoutStore.totalVolume || 0), unit.value, 1)
 )
-const displayStep = computed(() => (unit.value === 'lb' ? LB_STEP : KG_STEP))
+const displayStep = computed(() =>
+  unit.value === 'lb' ? profileStore.weightStepLb : profileStore.weightStepKg
+)
 const sourceText = computed(() => {
   if (workoutStore.sourceType === 'PLAN') return '计划训练'
   if (workoutStore.sourceType === 'TEMPLATE') return '模板训练'
   return '自由训练'
 })
 const selectedExerciseIds = computed(() =>
-  workoutStore.activeExercises.map((exercise) => exercise.id)
+  workoutStore.activeExercises
+    .filter((_, index) => index !== replacementTargetIndex.value)
+    .map((exercise) => exercise.id)
+)
+const plateCalculatorTarget = computed(() => {
+  const set = currentExercise.value?.sets.find((item) => item.setType !== 'WARMUP' && !item.done)
+  return set?.weight || 0
+})
+const warmupPreviewExercise = computed(() =>
+  warmupPreviewIndex.value === null ? null : workoutStore.activeExercises[warmupPreviewIndex.value]
 )
 const exitConfirmTitle = '\u9000\u51fa\u8bad\u7ec3\uff1f'
 const exitConfirmDesc =
@@ -124,13 +160,13 @@ function toLocalDateTimeString(iso: string) {
 }
 
 function exerciseDoneSets(exercise: WorkoutExercise) {
-  return exercise.sets.filter((set) => set.done).length
+  return exercise.sets.filter((set) => set.done && set.setType !== 'WARMUP').length
 }
 
 function exerciseVolume(exercise: WorkoutExercise) {
   if (isBodyweightExercise(exercise)) return 0
   return exercise.sets
-    .filter((set) => set.done)
+    .filter((set) => set.done && set.setType !== 'WARMUP')
     .reduce((total, set) => total + set.weight * set.reps, 0)
 }
 
@@ -144,6 +180,18 @@ function isBodyweightExercise(exercise?: WorkoutExercise) {
 
 function isDurationExercise(exercise?: WorkoutExercise) {
   return exercise?.recordType === 'DURATION'
+}
+
+function hasWarmupSets(exercise: WorkoutExercise) {
+  return exercise.sets.some((set) => set.setType === 'WARMUP')
+}
+
+function warmupSetCount(exercise: WorkoutExercise) {
+  return exercise.sets.filter((set) => set.setType === 'WARMUP').length
+}
+
+function isBarbellExercise(exercise: WorkoutExercise) {
+  return Boolean(exercise.equipment?.includes('杠铃'))
 }
 
 function exerciseSummaryText(exercise: WorkoutExercise) {
@@ -189,8 +237,9 @@ function cancelExit() {
   showExitConfirm.value = false
 }
 
-function confirmExit() {
+async function confirmExit() {
   showExitConfirm.value = false
+  await workoutStore.reportAllRecommendationOverrides()
   workoutStore.persistDraft()
   clearTimers()
   uni.navigateBack()
@@ -199,41 +248,84 @@ function confirmExit() {
 function clearTimers() {
   if (timer) clearInterval(timer)
   if (restTimer) clearInterval(restTimer)
+  if (toolFeedbackTimer) clearTimeout(toolFeedbackTimer)
   timer = null
   restTimer = null
+  toolFeedbackTimer = null
 }
 
-function startRest(title: string) {
+function startRestInterval() {
+  if (restTimer) clearInterval(restTimer)
+  restTimer = setInterval(() => {
+    restRemaining.value -= 1
+    if (restRemaining.value <= 0) {
+      skipRest(true)
+    }
+  }, 1000)
+}
+
+function startRest(title: string, focusAfterRestIndex: number | null = null) {
   if (restTimer) clearInterval(restTimer)
   restTitle.value = title
   restRemaining.value = profileStore.restSeconds
+  restDurationSeconds = profileStore.restSeconds
+  restStartedAt = Date.now()
+  restFocusIndex.value = focusAfterRestIndex
 
   if (restRemaining.value <= 0) {
     skipRest()
     return
   }
 
-  restTimer = setInterval(() => {
-    restRemaining.value -= 1
-    if (restRemaining.value <= 0) {
-      skipRest()
-    }
-  }, 1000)
+  startRestInterval()
 }
 
-function skipRest() {
+function notifyRestFinished() {
+  if (profileStore.restVibration) {
+    uni.vibrateShort({ type: 'medium' })
+  }
+  uni.showToast({ title: '休息结束，开始下一组', icon: 'none' })
+}
+
+function skipRest(notify = false) {
   if (restTimer) clearInterval(restTimer)
   restTimer = null
   restRemaining.value = 0
+  restStartedAt = 0
+  restDurationSeconds = 0
   restTitle.value = ''
+  const focusIndex = restFocusIndex.value
+  restFocusIndex.value = null
+  if (notify) {
+    notifyRestFinished()
+  }
+  if (focusIndex !== null) {
+    void focusWorkoutExercise(focusIndex)
+  }
 }
 
 function addRestSeconds(seconds: number) {
   restRemaining.value += seconds
+  restDurationSeconds += seconds
+}
+
+function restoreRestFromClock() {
+  if (!restStartedAt || !restDurationSeconds || restRemaining.value <= 0) return
+  const elapsed = Math.floor((Date.now() - restStartedAt) / 1000)
+  const remaining = restDurationSeconds - elapsed
+  if (remaining <= 0) {
+    skipRest(true)
+    return
+  }
+  restRemaining.value = remaining
+  startRestInterval()
 }
 
 async function focusWorkoutExercise(index: number, persist = true) {
   if (!workoutStore.activeExercises[index]) return
+  if (persist && index !== currentExerciseIndex.value && currentExerciseIndex.value >= 0) {
+    await workoutStore.reportRecommendationOverrideIfNeeded(currentExerciseIndex.value)
+  }
   currentExerciseIndex.value = -1
   await nextTick()
   currentExerciseIndex.value = index
@@ -326,7 +418,7 @@ function stepWeight(setIndex: number, direction: 1 | -1) {
 
 function stepReps(setIndex: number, direction: 1 | -1) {
   if (currentExercise.value?.ended || isDurationExercise(currentExercise.value)) return
-  workoutStore.adjustReps(currentExerciseIndex.value, setIndex, direction)
+  workoutStore.adjustReps(currentExerciseIndex.value, setIndex, profileStore.repsStep * direction)
 }
 
 function stepDuration(setIndex: number, direction: 1 | -1) {
@@ -334,7 +426,7 @@ function stepDuration(setIndex: number, direction: 1 | -1) {
   workoutStore.adjustDuration(
     currentExerciseIndex.value,
     setIndex,
-    DURATION_STEP_SECONDS * direction
+    profileStore.durationStepSeconds * direction
   )
 }
 
@@ -378,6 +470,207 @@ function updateDuration(setIndex: number, event: unknown) {
   workoutStore.updateDraftFocus(currentExerciseIndex.value, setIndex)
 }
 
+function setTypeText(setType?: WorkoutSetType) {
+  if (setType === 'WARMUP') return '热'
+  if (setType === 'DROP') return '降'
+  if (setType === 'FAILURE') return '力'
+  return ''
+}
+
+function chooseSetType(exerciseIndex: number, setIndex: number) {
+  const set = workoutStore.activeExercises[exerciseIndex]?.sets[setIndex]
+  if (!set || set.done) return
+  const values: WorkoutSetType[] = ['NORMAL', 'WARMUP', 'DROP', 'FAILURE']
+  uni.showActionSheet({
+    itemList: ['普通组', '热身组', '递减组', '力竭组'],
+    success: ({ tapIndex }) => {
+      const type = values[tapIndex]
+      if (type) workoutStore.setSetType(exerciseIndex, setIndex, type)
+    }
+  })
+}
+
+function selectEffort(effort: WorkoutEffort) {
+  const target = effortTarget.value
+  if (!target) return
+  workoutStore.setEffort(target.exerciseIndex, target.setIndex, effort)
+  effortTarget.value = null
+}
+
+async function applyRecommendation(exerciseIndex: number) {
+  try {
+    if (await workoutStore.applyRecommendation(exerciseIndex)) {
+      uni.showToast({ title: '已应用为本次及下次目标', icon: 'none' })
+    }
+  } catch (err) {
+    const message = err instanceof Error && err.message ? err.message : '建议已过期，请重新进入训练'
+    uni.showToast({ title: message.slice(0, 30), icon: 'none' })
+  }
+}
+
+function showProgressionMembership() {
+  void membershipPromptStore.open(
+    'Pro 训练建议',
+    '升级 Pro 后可查看下一次训练的具体重量、次数或时长目标，以及生成建议的训练依据。',
+    'progression_recommendation'
+  )
+}
+
+async function keepCurrentRecommendation(exerciseIndex: number) {
+  const exercise = workoutStore.activeExercises[exerciseIndex]
+  if (!exercise) return
+  try {
+    await workoutStore.dismissRecommendation(exercise.id)
+  } catch (err) {
+    const message = err instanceof Error && err.message ? err.message : '建议已过期，请重新进入训练'
+    uni.showToast({ title: message.slice(0, 30), icon: 'none' })
+  }
+}
+
+function applyLastPerformance(exerciseIndex: number) {
+  const applied = workoutStore.applyLastPerformance(exerciseIndex)
+  uni.showToast({ title: applied ? '已沿用上次记录' : '暂无上次记录', icon: 'none' })
+}
+
+function showToolFeedback(message: string) {
+  toolFeedback.value = message
+  if (toolFeedbackTimer) clearTimeout(toolFeedbackTimer)
+  toolFeedbackTimer = setTimeout(() => {
+    toolFeedback.value = ''
+    toolFeedbackTimer = null
+  }, 2800)
+}
+
+function generateWarmups(exerciseIndex: number) {
+  const exercise = workoutStore.activeExercises[exerciseIndex]
+  if (!exercise) return
+  if (hasWarmupSets(exercise)) {
+    warmupManagerIndex.value = exerciseIndex
+    return
+  }
+  if (isBodyweightExercise(exercise)) {
+    showToolFeedback('自重动作建议直接开始，也可以手动添加适应组')
+    return
+  }
+  if (isDurationExercise(exercise)) {
+    showToolFeedback('计时动作暂不生成热身组')
+    return
+  }
+  const firstWorkSet = exercise.sets.find((set) => set.setType !== 'WARMUP')
+  if (!firstWorkSet?.weight) {
+    showToolFeedback('请先设置第一个正式组重量')
+    return
+  }
+  const candidates = buildWarmupCandidates({
+    targetWeight: firstWorkSet.weight,
+    targetReps: firstWorkSet.reps,
+    weightStep:
+      unit.value === 'lb' ? convertUnitToKg(profileStore.weightStepLb, 'lb') : profileStore.weightStepKg
+  })
+  if (!candidates.length) {
+    showToolFeedback('当前重量不需要额外热身组')
+    return
+  }
+  warmupPreviewIndex.value = exerciseIndex
+  warmupPreviewSets.value = candidates
+  return
+  const generated = workoutStore.generateWarmupSets(exerciseIndex)
+  showToolFeedback(generated ? '已生成 2 组热身组，可继续调整重量和次数' : '请先设置首个正式组重量')
+}
+
+function insertWarmupPreview() {
+  const exerciseIndex = warmupPreviewIndex.value
+  if (exerciseIndex === null) return
+  const inserted = workoutStore.insertWarmupSets(exerciseIndex, warmupPreviewSets.value)
+  showToolFeedback(
+    inserted
+      ? `已插入 ${warmupPreviewSets.value.length} 组热身组，可继续调整重量和次数`
+      : '当前动作无法插入热身组'
+  )
+  closeWarmupPreview()
+}
+
+function closeWarmupPreview() {
+  warmupPreviewIndex.value = null
+  warmupPreviewSets.value = []
+}
+
+function applySupersetToggle(exerciseIndex: number) {
+  const exercise = workoutStore.activeExercises[exerciseIndex]
+  const ok = exercise?.supersetGroupId
+    ? workoutStore.removeSuperset(exerciseIndex)
+    : workoutStore.toggleSupersetWithNext(exerciseIndex)
+  menuExerciseIndex.value = null
+  if (!ok) uni.showToast({ title: '需要下一个动作才能组成超级组', icon: 'none' })
+}
+
+function toggleSuperset(exerciseIndex: number) {
+  const exercise = workoutStore.activeExercises[exerciseIndex]
+  if (exercise?.supersetGroupId || uni.getStorageSync('FITFORGE_SUPERSET_INTRO_SEEN')) {
+    applySupersetToggle(exerciseIndex)
+    return
+  }
+  menuExerciseIndex.value = null
+  supersetIntroIndex.value = exerciseIndex
+}
+
+function startSupersetFromIntro() {
+  const exerciseIndex = supersetIntroIndex.value
+  if (exerciseIndex === null) return
+  uni.setStorageSync('FITFORGE_SUPERSET_INTRO_SEEN', '1')
+  supersetIntroIndex.value = null
+  applySupersetToggle(exerciseIndex)
+}
+
+function handleWarmupManagerAction(item: { key: string }) {
+  const exerciseIndex = warmupManagerIndex.value
+  if (exerciseIndex === null) return
+  if (item.key === 'regenerate') {
+    const removed = workoutStore.removeWarmupSets(exerciseIndex)
+    if (removed) generateWarmups(exerciseIndex)
+    else uni.showToast({ title: '已完成的热身组不能重新生成', icon: 'none' })
+  }
+  if (item.key === 'remove') {
+    const removed = workoutStore.removeWarmupSets(exerciseIndex)
+    showToolFeedback(removed ? '已删除全部热身组' : '已完成的热身组不能删除')
+  }
+  warmupManagerIndex.value = null
+}
+
+function openPlateCalculator(exerciseIndex: number) {
+  currentExerciseIndex.value = exerciseIndex
+  menuExerciseIndex.value = null
+  plateCalculatorVisible.value = true
+}
+
+function findSupersetNextIndex(exerciseIndex: number) {
+  const groupId = workoutStore.activeExercises[exerciseIndex]?.supersetGroupId
+  if (!groupId) return null
+  const candidates = workoutStore.activeExercises
+    .map((exercise, index) => ({ exercise, index }))
+    .filter(
+      ({ exercise, index }) =>
+        index !== exerciseIndex &&
+        exercise.supersetGroupId === groupId &&
+        !exercise.ended &&
+        exercise.sets.some((set) => !set.done)
+    )
+  return candidates[0]?.index ?? null
+}
+
+function canToggleSuperset(exerciseIndex: number) {
+  const exercise = workoutStore.activeExercises[exerciseIndex]
+  if (exercise?.supersetGroupId) return true
+  const nextExercise = workoutStore.activeExercises[exerciseIndex + 1]
+  return Boolean(nextExercise && !nextExercise.ended)
+}
+
+function openReplacementPicker(exerciseIndex: number) {
+  replacementTargetIndex.value = exerciseIndex
+  pickerVisible.value = true
+  menuExerciseIndex.value = null
+}
+
 function toggleSetDone(setIndex: number) {
   const exercise = currentExercise.value
   const targetSet = exercise?.sets[setIndex]
@@ -389,8 +682,29 @@ function toggleSetDone(setIndex: number) {
     return
   }
 
+  const shouldAskEffort =
+    (targetSet.setType || 'NORMAL') !== 'WARMUP' &&
+    exercise.sets.filter((set) => set.setType !== 'WARMUP' && !set.done).length === 1
+
   workoutStore.toggleSet(currentExerciseIndex.value, setIndex)
+  void workoutStore.reportRecommendationOverrideIfNeeded(currentExerciseIndex.value)
   const afterExercise = workoutStore.activeExercises[currentExerciseIndex.value]
+  const supersetNextIndex = findSupersetNextIndex(currentExerciseIndex.value)
+  if (supersetNextIndex !== null) {
+    if (afterExercise.sets.every((set) => set.done)) {
+      workoutStore.endExercise(currentExerciseIndex.value)
+    }
+    if (supersetNextIndex < currentExerciseIndex.value) {
+      startRest('超级组一轮已完成', supersetNextIndex)
+    } else {
+      void focusWorkoutExercise(supersetNextIndex)
+    }
+    return
+  }
+  // 余力反馈只在不需要切换超级组动作时询问，避免打断组合训练节奏。
+  if (shouldAskEffort) {
+    effortTarget.value = { exerciseIndex: currentExerciseIndex.value, setIndex }
+  }
   if (afterExercise.sets.every((set) => set.done)) {
     const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
     workoutStore.endExercise(currentExerciseIndex.value)
@@ -413,15 +727,6 @@ function addSet(exerciseIndex = currentExerciseIndex.value) {
   menuExerciseIndex.value = null
 }
 
-function deleteLastSet(exerciseIndex = currentExerciseIndex.value) {
-  if (workoutStore.activeExercises[exerciseIndex]?.ended) return
-  const ok = workoutStore.deleteLastSet(exerciseIndex)
-  menuExerciseIndex.value = null
-  if (!ok) {
-    uni.showToast({ title: '已完成组不能删除', icon: 'none' })
-  }
-}
-
 function deleteSet(exerciseIndex: number, setIndex: number) {
   const targetSet = workoutStore.activeExercises[exerciseIndex]?.sets[setIndex]
   if (!targetSet) return
@@ -442,14 +747,27 @@ function openExercisePicker() {
 
 function closeExercisePicker() {
   pickerVisible.value = false
+  replacementTargetIndex.value = null
 }
 
 function addExerciseFromPicker(exercise: ExerciseSummary) {
+  if (replacementTargetIndex.value !== null) {
+    const targetIndex = replacementTargetIndex.value
+    const current = workoutStore.activeExercises[targetIndex]
+    if (current?.sets.some((set) => set.done)) {
+      pendingReplacement.value = { targetIndex, exercise }
+      pickerVisible.value = false
+    } else {
+      replaceExercise(targetIndex, exercise)
+    }
+    return
+  }
   const added = workoutStore.addExercise(
     exercise.id,
     exercise.name,
     exercise.primaryMuscle || '',
-    exercise.recordType || 'WEIGHT_REPS'
+    exercise.recordType || 'WEIGHT_REPS',
+    exercise.equipment
   )
   if (!added) {
     uni.showToast({ title: '该动作已在本次训练中', icon: 'none' })
@@ -460,9 +778,35 @@ function addExerciseFromPicker(exercise: ExerciseSummary) {
   uni.showToast({ title: '已添加动作', icon: 'none' })
 }
 
+function replaceExercise(targetIndex: number, exercise: ExerciseSummary) {
+  const replaced = workoutStore.replaceExercise(
+    targetIndex,
+    exercise.id,
+    exercise.name,
+    exercise.primaryMuscle || '',
+    exercise.recordType || 'WEIGHT_REPS',
+    exercise.equipment
+  )
+  if (replaced) void focusWorkoutExercise(targetIndex)
+  pickerVisible.value = false
+  replacementTargetIndex.value = null
+  pendingReplacement.value = null
+}
+
+function confirmReplacement() {
+  const pending = pendingReplacement.value
+  if (pending) replaceExercise(pending.targetIndex, pending.exercise)
+}
+
+function cancelReplacement() {
+  pendingReplacement.value = null
+  replacementTargetIndex.value = null
+}
+
 function finishExerciseEarly() {
   const exercise = currentExercise.value
   if (!exercise) return
+  void workoutStore.reportRecommendationOverrideIfNeeded(currentExerciseIndex.value)
 
   if (exercise.ended) {
     workoutStore.reopenExercise(currentExerciseIndex.value)
@@ -479,7 +823,9 @@ function finishExerciseEarly() {
   if (nextIndex !== null) {
     workoutStore.endExercise(currentExerciseIndex.value)
     void focusWorkoutExercise(nextIndex)
-    startRest(`${exercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`)
+    startRest(
+      `${exercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`
+    )
     return
   }
 
@@ -519,36 +865,31 @@ function deleteExercise(index: number) {
   const exercise = workoutStore.activeExercises[index]
   if (!exercise) return
 
-  const remove = () => {
-    workoutStore.removeExercise(index)
-    currentExerciseIndex.value = Math.min(
-      currentExerciseIndex.value,
-      Math.max(workoutStore.activeExercises.length - 1, 0)
-    )
-    workoutStore.updateDraftFocus(currentExerciseIndex.value)
-    menuExerciseIndex.value = null
-  }
-
   if (!exerciseDoneSets(exercise)) {
-    remove()
+    confirmDeleteExercise(index)
     return
   }
 
-  uni.showModal({
-    title: '删除动作？',
-    content: `${exercise.name} 已有完成组，删除后本次训练不会提交这些组。`,
-    confirmText: '删除',
-    cancelText: '取消',
-    success: (res) => {
-      if (res.confirm) remove()
-    }
-  })
+  pendingDeleteIndex.value = index
+  menuExerciseIndex.value = null
+}
+
+function confirmDeleteExercise(index = pendingDeleteIndex.value) {
+  if (index === null) return
+  workoutStore.removeExercise(index)
+  currentExerciseIndex.value = Math.min(
+    currentExerciseIndex.value,
+    Math.max(workoutStore.activeExercises.length - 1, 0)
+  )
+  workoutStore.updateDraftFocus(currentExerciseIndex.value)
+  menuExerciseIndex.value = null
+  pendingDeleteIndex.value = null
 }
 
 function buildWorkoutComparisons() {
   return workoutStore.activeExercises
     .map<WorkoutComparison | null>((exercise) => {
-      const doneSets = exercise.sets.filter((set) => set.done)
+      const doneSets = exercise.sets.filter((set) => set.done && set.setType !== 'WARMUP')
       if (!doneSets.length) return null
       const currentVolumeKg = isBodyweightExercise(exercise)
         ? 0
@@ -584,6 +925,7 @@ function handleFinishTap() {
 
 async function confirmFinish() {
   if (submitting.value) return
+  await workoutStore.reportAllRecommendationOverrides()
   const startedAt =
     workoutStore.startedAt ||
     new Date(Date.now() - workoutStore.elapsedSeconds * 1000).toISOString()
@@ -591,7 +933,7 @@ async function confirmFinish() {
   const items = workoutStore.activeExercises
     .map((exercise) => ({
       exerciseId: exercise.id,
-      targetSets: exercise.sets.length,
+      targetSets: exercise.sets.filter((set) => set.setType !== 'WARMUP').length,
       sets: exercise.sets
         .filter((set) => set.done)
         .map((set) => ({
@@ -600,7 +942,14 @@ async function confirmFinish() {
               ? 0
               : Number(set.weight.toFixed(2)),
           reps: isDurationExercise(exercise) ? 1 : set.reps,
-          durationSeconds: isDurationExercise(exercise) ? set.durationSeconds || 60 : undefined
+          durationSeconds: isDurationExercise(exercise) ? set.durationSeconds || 60 : undefined,
+          setType: set.setType || 'NORMAL',
+          effort: set.effort,
+          plannedWeightKg: set.plannedWeightKg ?? set.weight,
+          plannedReps: set.plannedReps ?? set.reps,
+          plannedDurationSeconds: set.plannedDurationSeconds ?? set.durationSeconds,
+          targetSource: set.targetSource ?? 'MANUAL',
+          sourceRecommendationId: set.sourceRecommendationId
         }))
     }))
     .filter((item) => item.sets.length > 0)
@@ -612,6 +961,16 @@ async function confirmFinish() {
 
   workoutStore.persistDraft()
   submitting.value = true
+  const payload: SaveTrainingRequest = {
+    templateId: workoutStore.activeTemplateId,
+    planId: workoutStore.activePlanId,
+    planDayId: workoutStore.activePlanDayId,
+    clientRequestId: workoutStore.ensureClientRequestId(),
+    trainingName: workoutStore.activeTemplateName || '自由训练',
+    startedAt: toLocalDateTimeString(startedAt),
+    endedAt: toLocalDateTimeString(endedAt),
+    items
+  }
   let result: Awaited<ReturnType<typeof saveTraining>>
   try {
     result = await saveTraining({
@@ -625,13 +984,9 @@ async function confirmFinish() {
       items
     })
   } catch (err) {
-    workoutStore.persistDraft()
+    workoutStore.markSaveFailed(payload)
     const message = err instanceof Error && err.message ? err.message : '保存失败，请重试'
-    if (message.includes('免费训练次数') || message.includes('会员')) {
-      await membershipPromptStore.open('训练记录', message)
-    } else {
-      uni.showToast({ title: message.slice(0, 30), icon: 'none' })
-    }
+    uni.showToast({ title: message.slice(0, 30), icon: 'none' })
     console.error('[training] save failed', err)
     submitting.value = false
     return
@@ -658,6 +1013,37 @@ async function confirmFinish() {
   uni.redirectTo({ url: `${routes.cultivationSettlement}?id=${result.trainingId}` })
 }
 
+async function retrySaveFailedDraft() {
+  if (submitting.value || !workoutStore.lastSubmitPayload) return
+  submitting.value = true
+  try {
+    const result = await saveTraining(workoutStore.lastSubmitPayload)
+    workoutStore.setCompletedSummary({
+      ...result,
+      trainingName: workoutStore.lastSubmitPayload.trainingName,
+      startedAt: workoutStore.lastSubmitPayload.startedAt,
+      endedAt: workoutStore.lastSubmitPayload.endedAt,
+      activeTemplateId: workoutStore.lastSubmitPayload.templateId,
+      activePlanId: workoutStore.lastSubmitPayload.planId,
+      activePlanDayId: workoutStore.lastSubmitPayload.planDayId,
+      plannedItems: workoutStore.activeExercises.map((exercise) => ({
+        exerciseId: exercise.id,
+        targetSets: exercise.sets.length
+      })),
+      comparisons: buildWorkoutComparisons()
+    })
+    workoutStore.finishWorkout()
+    trainingStore.invalidateCache()
+    emitTrainingChanged()
+    uni.redirectTo({ url: `${routes.cultivationSettlement}?id=${result.trainingId}` })
+  } catch (err) {
+    console.error('[training] retry failed save failed', err)
+    uni.showToast({ title: '重新提交失败，请稍后再试', icon: 'none' })
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(() => {
   void initializeWorkout()
 
@@ -671,7 +1057,13 @@ onMounted(() => {
 })
 
 onHide(() => {
+  if (restTimer) clearInterval(restTimer)
+  restTimer = null
   workoutStore.persistDraft()
+})
+
+onShow(() => {
+  restoreRestFromClock()
 })
 
 onUnmounted(() => {
@@ -685,7 +1077,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <view class="workout-active">
+  <view class="workout-active" :class="themeStore.themeClass">
     <view class="workout-active__top">
       <view class="workout-active__close btn-press" @tap="closePage">×</view>
       <view class="workout-active__title-wrap">
@@ -693,21 +1085,34 @@ onUnmounted(() => {
         <view class="workout-active__title">{{ workoutStore.activeTemplateName }}</view>
         <view class="workout-active__timer">{{ formatSeconds(workoutStore.elapsedSeconds) }}</view>
       </view>
-      <view
-        class="workout-active__done btn-press"
-        :class="{ 'workout-active__done--disabled': submitting }"
-        @tap="handleFinishTap"
-      >
-        {{ submitting ? '保存中' : '完成训练' }}
-      </view>
+      <view class="workout-active__top-spacer" />
     </view>
 
     <view class="workout-active__progress">
-      <view class="space-between">
-        <view class="muted">{{ workoutStore.doneSets }}/{{ workoutStore.totalSets }} 组已完成</view>
-        <view class="workout-active__percent">{{ Math.round(workoutStore.progress * 100) }}%</view>
+      <view class="workout-active__progress-head">
+        <view>
+          <view class="muted">{{ workoutStore.doneSets }}/{{ workoutStore.totalSets }} 组已完成</view>
+          <view class="workout-active__percent">{{ Math.round(workoutStore.progress * 100) }}%</view>
+        </view>
+        <view
+          class="workout-active__done btn-press"
+          :class="{ 'workout-active__done--disabled': submitting }"
+          @tap="handleFinishTap"
+        >
+          {{ submitting ? '保存中' : '完成训练' }}
+        </view>
       </view>
       <ProgressBar :value="workoutStore.progress" />
+    </view>
+
+    <view v-if="workoutStore.hasSaveFailedDraft" class="workout-active__save-failed">
+      <view>
+        <view class="workout-active__save-failed-title">训练已保存在本机</view>
+        <view class="workout-active__save-failed-sub">上次提交失败，可以继续训练或重新提交。</view>
+      </view>
+      <view class="workout-active__save-failed-action btn-press" @tap="retrySaveFailedDraft">
+        重新提交
+      </view>
     </view>
 
     <view class="workout-active__stats">
@@ -788,6 +1193,9 @@ onUnmounted(() => {
                 :class="{ 'workout-active__card-title--ended': isExerciseCompleted(exercise) }"
               >
                 <text class="workout-active__card-title-text">{{ exercise.name }}</text>
+                <text v-if="exercise.supersetGroupId" class="workout-active__superset-badge"
+                  >超级组</text
+                >
               </view>
               <view class="workout-active__card-sub">
                 {{ exerciseSummaryText(exercise) }}
@@ -808,10 +1216,23 @@ onUnmounted(() => {
               <view class="workout-active__menu-item" @tap="openExerciseDetail(exercise.id)"
                 >查看动作详情</view
               >
-              <view class="workout-active__menu-item" @tap="addSet(exerciseIndex)">添加一组</view>
-              <view class="workout-active__menu-item" @tap="deleteLastSet(exerciseIndex)"
-                >删除最后一组</view
+              <view class="workout-active__menu-item" @tap="openReplacementPicker(exerciseIndex)">
+                替换动作
+              </view>
+              <view
+                v-if="canToggleSuperset(exerciseIndex)"
+                class="workout-active__menu-item"
+                @tap="toggleSuperset(exerciseIndex)"
               >
+                {{ exercise.supersetGroupId ? '取消组合训练' : '与下一动作组合训练' }}
+              </view>
+              <view
+                v-if="isBarbellExercise(exercise)"
+                class="workout-active__menu-item"
+                @tap="openPlateCalculator(exerciseIndex)"
+              >
+                杠铃片计算
+              </view>
               <view
                 class="workout-active__menu-item workout-active__menu-item--danger"
                 @tap="deleteExercise(exerciseIndex)"
@@ -828,6 +1249,34 @@ onUnmounted(() => {
           </view>
           <view class="workout-active__last-reference">
             {{ lastSetText(exercise, currentSetIndex) }}
+          </view>
+
+          <ProgressionRecommendation
+            :recommendation="workoutStore.recommendationMap[exercise.id]"
+            @apply="applyRecommendation(exerciseIndex)"
+            @keep="keepCurrentRecommendation(exerciseIndex)"
+            @upgrade="showProgressionMembership"
+          />
+
+          <view v-if="!exercise.ended" class="workout-active__quick-tools">
+            <view
+              class="workout-active__quick-tool btn-press"
+              @tap="applyLastPerformance(exerciseIndex)"
+            >
+              沿用上次
+            </view>
+            <view
+              v-if="!isBodyweightExercise(exercise) && !isDurationExercise(exercise)"
+              class="workout-active__quick-tool btn-press"
+              @tap="generateWarmups(exerciseIndex)"
+            >
+              {{
+                hasWarmupSets(exercise) ? `热身组 ${warmupSetCount(exercise)}组 ▾` : '生成热身组'
+              }}
+            </view>
+          </view>
+          <view v-if="toolFeedback" class="workout-active__tool-feedback">
+            {{ toolFeedback }}
           </view>
 
           <view
@@ -860,7 +1309,13 @@ onUnmounted(() => {
                 'workout-active__set--duration': isDurationExercise(exercise)
               }"
             >
-              <view class="workout-active__set-index">{{ setIndex + 1 }}</view>
+              <view
+                class="workout-active__set-index btn-press"
+                :class="{ 'workout-active__set-index--typed': setTypeText(set.setType) }"
+                @tap.stop="chooseSetType(exerciseIndex, setIndex)"
+              >
+                {{ setTypeText(set.setType) || setIndex + 1 }}
+              </view>
               <view
                 class="workout-active__stepper"
                 :class="{ 'workout-active__stepper--static': isBodyweightExercise(exercise) }"
@@ -960,12 +1415,6 @@ onUnmounted(() => {
             >
               + 添加一组
             </view>
-            <view
-              class="glass-card workout-active__action btn-press"
-              @tap.stop="deleteLastSet(currentExerciseIndex)"
-            >
-              删除最后一组
-            </view>
           </view>
           <view
             class="gradient-fire workout-active__finish-exercise btn-press"
@@ -1050,6 +1499,7 @@ onUnmounted(() => {
     </view>
 
     <ExercisePicker
+      :class="themeStore.themeClass"
       :visible="pickerVisible"
       title="添加训练动作"
       subtitle="搜索并加入本次训练"
@@ -1057,14 +1507,102 @@ onUnmounted(() => {
       @close="closeExercisePicker"
       @select="addExerciseFromPicker"
     />
+    <EffortPicker
+      :visible="Boolean(effortTarget)"
+      @close="effortTarget = null"
+      @select="selectEffort"
+    />
+    <PlateCalculator
+      :visible="plateCalculatorVisible"
+      :target-weight="plateCalculatorTarget"
+      :default-bar-weight="profileStore.barWeightKg"
+      @close="plateCalculatorVisible = false"
+    />
+    <view v-if="warmupPreviewIndex !== null" class="workout-active__overlay" @tap="closeWarmupPreview">
+      <view class="workout-active__sheet workout-active__warmup-sheet" @tap.stop>
+        <view class="workout-active__sheet-handle" />
+        <view class="title-lg">建议热身组</view>
+        <view class="muted workout-active__sheet-sub">
+          根据 {{ warmupPreviewExercise?.name || '当前动作' }} 的第一个正式组计算，热身组不计入容量、完成率和进阶判断。
+        </view>
+        <view class="workout-active__warmup-list">
+          <view
+            v-for="(item, index) in warmupPreviewSets"
+            :key="`${item.weight}-${item.reps}-${index}`"
+            class="workout-active__warmup-row"
+          >
+            <view class="workout-active__warmup-index">{{ index + 1 }}</view>
+            <view>
+              <view class="workout-active__warmup-value">
+                {{ formatWeight(item.weight, unit, 1) }} {{ unit }} × {{ item.reps }}
+              </view>
+              <view class="muted workout-active__warmup-desc">插入后可继续手动调整</view>
+            </view>
+          </view>
+        </view>
+        <view class="gradient-fire workout-active__sheet-btn btn-press" @tap="insertWarmupPreview">
+          插入热身组
+        </view>
+        <view class="glass-card workout-active__sheet-btn btn-press" @tap="closeWarmupPreview">
+          取消
+        </view>
+      </view>
+    </view>
+    <AppActionSheet
+      :visible="warmupManagerIndex !== null"
+      title="管理热身组"
+      subtitle="热身组不会计入正式训练统计"
+      :items="[
+        {
+          key: 'regenerate',
+          label: '按正式组重新生成',
+          description: '删除当前热身组，并按首个正式组重量重新计算'
+        },
+        { key: 'remove', label: '删除全部热身组', danger: true }
+      ]"
+      @close="warmupManagerIndex = null"
+      @select="handleWarmupManagerAction"
+    />
+    <AppActionSheet
+      :visible="supersetIntroIndex !== null"
+      title="组合训练"
+      subtitle="两个动作会交替进行，完成一轮后再开始休息。"
+      :items="[
+        {
+          key: 'start',
+          label: '与下一动作开始组合',
+          description: '完成当前组后自动切换到配对动作',
+          primary: true
+        }
+      ]"
+      @close="supersetIntroIndex = null"
+      @select="startSupersetFromIntro"
+    />
+    <AppActionSheet
+      :visible="pendingReplacement !== null"
+      title="替换动作？"
+      subtitle="当前动作已有完成组，替换后这些完成组会被移除。"
+      :items="[{ key: 'confirm', label: '确认替换', danger: true }]"
+      @close="cancelReplacement"
+      @select="confirmReplacement"
+    />
+    <AppActionSheet
+      :visible="pendingDeleteIndex !== null"
+      title="删除动作？"
+      :subtitle="`${workoutStore.activeExercises[pendingDeleteIndex ?? -1]?.name || '当前动作'} 已有完成组，删除后本次训练不会提交这些组。`"
+      :items="[{ key: 'confirm', label: '确认删除', danger: true }]"
+      @close="pendingDeleteIndex = null"
+      @select="confirmDeleteExercise()"
+    />
   </view>
 </template>
 
 <style lang="scss" scoped>
 .workout-active {
   min-height: 100vh;
-  background: #0a0a0e;
-  padding: calc(env(safe-area-inset-top) + 24rpx) 32rpx calc(env(safe-area-inset-bottom) + 148rpx);
+  background: var(--app-bg);
+  padding: calc(var(--status-bar-height, 0px) + env(safe-area-inset-top) + 24rpx) 32rpx
+    calc(env(safe-area-inset-bottom) + 148rpx);
   display: flex;
   flex-direction: column;
 
@@ -1094,15 +1632,25 @@ onUnmounted(() => {
   }
 
   &__close {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
     font-size: 34rpx;
   }
 
+  &__top-spacer {
+    width: 72rpx;
+    height: 72rpx;
+    flex-shrink: 0;
+  }
+
   &__done {
+    min-width: 168rpx;
+    min-height: 68rpx;
     padding: 0 24rpx;
+    border-radius: 24rpx;
     background: linear-gradient(135deg, #ff501e, #ffa03c);
     color: #fff;
+    font-size: 24rpx;
     font-weight: 800;
 
     &--disabled {
@@ -1122,14 +1670,14 @@ onUnmounted(() => {
 
   &__source {
     margin-bottom: 4rpx;
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 20rpx;
     font-weight: 800;
   }
 
   &__timer,
   &__percent {
-    color: #ff501e;
+    color: var(--app-accent);
     font-weight: 800;
   }
 
@@ -1142,19 +1690,62 @@ onUnmounted(() => {
     margin-top: 24rpx;
   }
 
+  &__progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+    margin-bottom: 8rpx;
+  }
+
   &__stats {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 16rpx;
-    margin: 24rpx 0 16rpx;
+    gap: 12rpx;
+    margin: 18rpx 0 14rpx;
+  }
+
+  &__save-failed {
+    margin-top: 18rpx;
+    padding: 20rpx;
+    border: 1rpx solid rgba(255, 100, 24, 0.2);
+    border-radius: 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+    background: linear-gradient(135deg, rgba(255, 246, 239, 0.98), rgba(255, 255, 255, 0.94));
+  }
+
+  &__save-failed-title {
+    color: var(--app-text);
+    font-size: 24rpx;
+    font-weight: 900;
+  }
+
+  &__save-failed-sub {
+    margin-top: 6rpx;
+    color: var(--app-text-muted);
+    font-size: 20rpx;
+    line-height: 1.4;
+  }
+
+  &__save-failed-action {
+    flex-shrink: 0;
+    padding: 12rpx 18rpx;
+    border-radius: 999rpx;
+    color: #fff;
+    background: var(--app-accent);
+    font-size: 21rpx;
+    font-weight: 900;
   }
 
   &__stat {
-    padding: 22rpx;
+    padding: 18rpx 20rpx;
   }
 
   &__stat-label {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
@@ -1165,7 +1756,7 @@ onUnmounted(() => {
   }
 
   &__focus {
-    padding: 24rpx;
+    padding: 20rpx 22rpx;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1174,22 +1765,22 @@ onUnmounted(() => {
   }
 
   &__focus-label {
-    color: #ff9b58;
+    color: var(--app-accent);
     font-size: 21rpx;
     font-weight: 800;
   }
 
   &__focus-title {
     margin-top: 8rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 30rpx;
-    font-weight: 900;
+    font-weight: 800;
     line-height: 1.35;
   }
 
   &__focus-sub {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.45;
   }
@@ -1198,8 +1789,8 @@ onUnmounted(() => {
     flex-shrink: 0;
     padding: 12rpx 18rpx;
     border-radius: 999rpx;
-    background: rgba(255, 80, 30, 0.14);
-    color: #ff9b58;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     font-size: 22rpx;
     font-weight: 900;
   }
@@ -1209,23 +1800,23 @@ onUnmounted(() => {
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     gap: 16rpx;
-    margin: 16rpx 0 20rpx;
+    margin: 12rpx 0 16rpx;
   }
 
   &__switch {
     padding: 18rpx 20rpx;
     text-align: center;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 24rpx;
     line-height: 1.35;
 
     &--disabled {
-      opacity: 0.46;
+      opacity: 0.72;
     }
   }
 
   &__switch-index {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
@@ -1234,14 +1825,13 @@ onUnmounted(() => {
   }
 
   &__empty {
-    flex: 1;
+    flex: 0 0 auto;
+    min-height: 360rpx;
     margin-top: 24rpx;
-    padding: 48rpx 32rpx;
-    border-radius: 36rpx;
-    background:
-      radial-gradient(circle at 30% 10%, rgba(255, 80, 30, 0.16), transparent 38%),
-      rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 40rpx 32rpx;
+    border-radius: 28rpx;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1250,7 +1840,7 @@ onUnmounted(() => {
   }
 
   &__empty-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 34rpx;
     font-weight: 900;
   }
@@ -1258,7 +1848,7 @@ onUnmounted(() => {
   &__empty-sub {
     max-width: 520rpx;
     margin-top: 14rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 24rpx;
     line-height: 1.7;
   }
@@ -1278,8 +1868,8 @@ onUnmounted(() => {
 
   &__card {
     position: relative;
-    padding: 24rpx;
-    margin-bottom: 20rpx;
+    padding: 20rpx;
+    margin-bottom: 14rpx;
     overflow: visible !important;
 
     &--current {
@@ -1292,8 +1882,8 @@ onUnmounted(() => {
     }
 
     &--ended {
-      border-color: rgba(255, 255, 255, 0.06);
-      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--app-border);
+      background: var(--app-surface);
     }
 
     &--menu-open {
@@ -1320,9 +1910,9 @@ onUnmounted(() => {
     width: 52rpx;
     height: 52rpx;
     border-radius: 999rpx;
-    background: rgba(255, 80, 30, 0.16);
+    background: var(--app-accent-soft);
     border: 1px solid rgba(255, 80, 30, 0.28);
-    color: #ff7a32;
+    color: var(--app-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1331,10 +1921,10 @@ onUnmounted(() => {
     font-weight: 900;
 
     &--current {
-      background: linear-gradient(135deg, #ff501e, #ffa03c);
+      background: var(--app-accent);
       border-color: transparent;
       color: #fff;
-      box-shadow: 0 0 24rpx rgba(255, 80, 30, 0.28);
+      box-shadow: none;
     }
   }
 
@@ -1344,14 +1934,14 @@ onUnmounted(() => {
 
   &__card-title {
     font-size: 30rpx;
-    font-weight: 800;
+    font-weight: 700;
 
     &-text {
       display: inline;
     }
 
     &--ended {
-      color: #828296;
+      color: var(--app-text-muted);
 
       .workout-active__card-title-text {
         text-decoration: line-through;
@@ -1361,18 +1951,29 @@ onUnmounted(() => {
     }
   }
 
+  &__superset-badge {
+    display: inline-block;
+    margin-left: 10rpx;
+    padding: 4rpx 10rpx;
+    border-radius: 999rpx;
+    background: rgba(47, 125, 247, 0.1);
+    color: var(--app-info, #2f7df7);
+    font-size: 18rpx;
+    vertical-align: middle;
+  }
+
   &__card-sub {
     margin-top: 8rpx;
     font-size: 22rpx;
-    color: #828296;
+    color: var(--app-text-muted);
   }
 
   &__resume {
     min-width: 112rpx;
     min-height: 56rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.08);
-    color: #b8b8c8;
+    background: var(--app-surface);
+    color: var(--app-text-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1387,7 +1988,7 @@ onUnmounted(() => {
   &__menu-btn {
     min-width: 58rpx;
     min-height: 44rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     text-align: right;
     font-size: 32rpx;
     line-height: 36rpx;
@@ -1400,15 +2001,15 @@ onUnmounted(() => {
     width: 220rpx;
     padding: 10rpx;
     border-radius: 24rpx;
-    background: #20202a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface-raised);
+    border: 1px solid var(--app-border);
     z-index: 60;
     box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.36);
   }
 
   &__menu-item {
     padding: 18rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 24rpx;
 
     &--danger {
@@ -1433,25 +2034,58 @@ onUnmounted(() => {
 
   &__current {
     margin: 8rpx 0 8rpx;
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 24rpx;
     font-weight: 700;
   }
 
+  &__quick-tools {
+    display: flex;
+    gap: 12rpx;
+    margin-bottom: 16rpx;
+  }
+
+  &__quick-tool {
+    padding: 12rpx 18rpx;
+    border-radius: 999rpx;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    color: var(--app-text-secondary);
+    font-size: 21rpx;
+    font-weight: 800;
+
+    &--disabled {
+      color: var(--app-text-muted);
+      background: var(--app-surface-subtle);
+      opacity: 0.72;
+    }
+  }
+
+  &__tool-feedback {
+    margin: -4rpx 0 16rpx;
+    padding: 14rpx 18rpx;
+    border-radius: 18rpx;
+    background: var(--app-accent-soft);
+    border: 1px solid rgba(255, 100, 24, 0.16);
+    color: var(--app-text-secondary);
+    font-size: 21rpx;
+    line-height: 1.45;
+  }
+
   &__last-reference {
     margin-bottom: 16rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
   &__set {
     display: grid;
     grid-template-columns: 58rpx 1fr 1fr 64rpx;
-    gap: 16rpx;
+    gap: 12rpx;
     align-items: center;
-    padding: 18rpx 8rpx;
-    border-radius: 24rpx;
-    margin-bottom: 12rpx;
+    padding: 12rpx 8rpx;
+    border-radius: 20rpx;
+    margin-bottom: 10rpx;
     border: 1px solid transparent;
 
     &--current {
@@ -1460,7 +2094,7 @@ onUnmounted(() => {
     }
 
     &--done {
-      opacity: 0.78;
+      opacity: 1;
     }
 
     &--duration {
@@ -1469,53 +2103,66 @@ onUnmounted(() => {
   }
 
   &__set-index {
-    color: #f5f5fa;
+    color: var(--app-text);
     text-align: center;
     font-size: 30rpx;
     font-weight: 800;
+
+    &--typed {
+      width: 48rpx;
+      height: 48rpx;
+      margin: 0 auto;
+      border-radius: 999rpx;
+      background: var(--app-accent-soft);
+      color: var(--app-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20rpx;
+    }
   }
 
   &__stepper {
     display: grid;
     grid-template-columns: 60rpx 1fr 60rpx;
     align-items: center;
-    min-height: 84rpx;
-    border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: 76rpx;
+    border-radius: 18rpx;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
     overflow: hidden;
 
     &--static {
       grid-template-columns: 1fr;
-      background: rgba(255, 255, 255, 0.035);
+      background: var(--app-bg);
     }
   }
 
   &__stepper-btn {
-    height: 84rpx;
+    height: 76rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #f5f5fa;
+    color: var(--app-text-secondary);
     font-size: 32rpx;
     font-weight: 700;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--app-bg);
 
     &:active {
       background: rgba(255, 80, 30, 0.15);
-      color: #ff501e;
+      color: var(--app-accent);
     }
   }
 
   &__input {
-    height: 84rpx;
-    color: #f5f5fa;
+    height: 76rpx;
+    color: var(--app-text);
     text-align: center;
     font-size: 32rpx;
     font-weight: 800;
 
     &--locked {
-      color: #8b8b9a;
+      color: var(--app-text-muted);
     }
   }
 
@@ -1523,17 +2170,17 @@ onUnmounted(() => {
     width: 56rpx;
     height: 56rpx;
     border-radius: 18rpx;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #a5a5b8;
+    color: var(--app-text-secondary);
     font-size: 28rpx;
     font-weight: 800;
 
     &--done {
-      background: linear-gradient(135deg, #ff501e, #ffa03c);
+      background: var(--app-success);
       border-color: transparent;
       color: #fff;
     }
@@ -1543,7 +2190,7 @@ onUnmounted(() => {
     display: grid;
     grid-template-columns: 58rpx 1fr 1fr 64rpx;
     gap: 16rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
     text-align: center;
     padding: 0 8rpx 12rpx;
@@ -1555,7 +2202,7 @@ onUnmounted(() => {
 
   &__actions {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: 16rpx;
     margin-top: 10rpx;
   }
@@ -1565,7 +2212,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 24rpx;
     font-weight: 700;
   }
@@ -1584,13 +2231,13 @@ onUnmounted(() => {
   }
 
   &__finish-exercise--done {
-    background: rgba(255, 255, 255, 0.08);
-    color: #b8b8c8;
+    background: var(--app-surface);
+    color: var(--app-text-secondary);
   }
 
   &__add-exercise {
     margin-bottom: 32rpx;
-    color: #ff7a32;
+    color: var(--app-accent);
   }
 
   &__rest {
@@ -1601,10 +2248,10 @@ onUnmounted(() => {
     z-index: 100;
     padding: 32rpx;
     border-radius: 40rpx;
-    background: rgba(20, 20, 28, 0.95);
+    background: var(--app-surface-raised);
     border: 1px solid rgba(255, 80, 30, 0.4);
     backdrop-filter: blur(20px);
-    color: #fff;
+    color: var(--app-text);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1615,7 +2262,7 @@ onUnmounted(() => {
   }
 
   &__rest-title {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--app-text-muted);
     font-size: 22rpx;
     font-weight: 600;
     text-transform: uppercase;
@@ -1626,7 +2273,7 @@ onUnmounted(() => {
     margin-top: 8rpx;
     font-size: 44rpx;
     font-weight: 900;
-    color: #ff501e;
+    color: var(--app-accent);
     text-shadow: 0 0 20rpx rgba(255, 80, 30, 0.4);
   }
 
@@ -1638,12 +2285,13 @@ onUnmounted(() => {
   &__rest-btn {
     padding: 16rpx 20rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     font-size: 22rpx;
 
     &--primary {
-      background: #fff;
-      color: #ff501e;
+      background: var(--app-accent);
+      color: #fff;
       font-weight: 800;
     }
   }
@@ -1659,15 +2307,15 @@ onUnmounted(() => {
 
   &__sheet {
     width: 100%;
-    background: #14141c;
+    background: var(--app-surface-raised);
     border-radius: 36rpx 36rpx 0 0;
     padding: 28rpx 32rpx calc(env(safe-area-inset-bottom) + 28rpx);
 
     &--confirm {
       margin: 0 24rpx calc(env(safe-area-inset-bottom) + 24rpx);
       border-radius: 34rpx;
-      background: rgba(20, 20, 28, 0.96);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--app-surface-raised);
+      border: 1px solid var(--app-border);
       box-shadow: 0 -24rpx 80rpx rgba(0, 0, 0, 0.52);
       backdrop-filter: blur(18rpx);
     }
@@ -1676,13 +2324,59 @@ onUnmounted(() => {
   &__sheet-handle {
     width: 80rpx;
     height: 8rpx;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--app-border-strong);
     border-radius: 999rpx;
     margin: 0 auto 24rpx;
   }
 
   &__sheet-sub {
     margin: 16rpx 0 24rpx;
+  }
+
+  &__warmup-sheet {
+    border: 1px solid var(--app-border);
+    box-shadow: var(--app-shadow-floating);
+  }
+
+  &__warmup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14rpx;
+    margin-bottom: 22rpx;
+  }
+
+  &__warmup-row {
+    min-height: 92rpx;
+    padding: 18rpx 20rpx;
+    border-radius: 24rpx;
+    display: flex;
+    align-items: center;
+    gap: 18rpx;
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
+  }
+
+  &__warmup-index {
+    width: 54rpx;
+    height: 54rpx;
+    border-radius: 18rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+    font-weight: 900;
+  }
+
+  &__warmup-value {
+    color: var(--app-text);
+    font-size: 30rpx;
+    font-weight: 900;
+  }
+
+  &__warmup-desc {
+    margin-top: 4rpx;
+    font-size: 22rpx;
   }
 
   &__sheet-btn {
@@ -1702,7 +2396,7 @@ onUnmounted(() => {
   }
 
   &__confirm-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 34rpx;
     font-weight: 900;
   }
@@ -1719,7 +2413,7 @@ onUnmounted(() => {
     border-radius: 22rpx;
     background: rgba(255, 125, 25, 0.12);
     border: 1px solid rgba(255, 125, 25, 0.18);
-    color: #c7c0d6;
+    color: var(--app-text-secondary);
     font-size: 23rpx;
     line-height: 1.5;
   }
@@ -1737,7 +2431,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #f5f5fa;
+    color: var(--app-text-secondary);
     font-size: 28rpx;
     font-weight: 900;
 

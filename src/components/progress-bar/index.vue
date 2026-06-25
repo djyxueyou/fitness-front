@@ -23,8 +23,8 @@ defineProps<{
   height: 14rpx;
   border-radius: 999rpx;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
+  background: var(--app-border);
+  box-shadow: inset 0 1rpx 3rpx rgba(31, 49, 72, 0.12);
 
   &__fill {
     height: 100%;

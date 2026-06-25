@@ -6,8 +6,10 @@ import AppHeader from '@/components/app-header/index.vue'
 import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
+import ShareCardSheet from '@/components/share-card-sheet/index.vue'
 import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
+import { fetchTemplateSharePreview, type SharePreviewResponse } from '@/api/share'
 import type { TemplateDetailResponse } from '@/api/template'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
@@ -16,6 +18,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useProfileStore } from '@/stores/profile'
+import { useThemeStore } from '@/stores/theme'
 import { formatWeight } from '@/utils/unit'
 
 interface ActionSheetItem {
@@ -30,6 +33,7 @@ const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const profileStore = useProfileStore()
+const themeStore = useThemeStore()
 const templateId = ref<number | null>(null)
 const detail = ref<TemplateDetailResponse | null>(null)
 const loading = ref(false)
@@ -38,6 +42,9 @@ const copying = ref(false)
 const saving = ref(false)
 const sheetVisible = ref(false)
 const sheetItems = ref<ActionSheetItem[]>([])
+const shareVisible = ref(false)
+const shareLoading = ref(false)
+const sharePreview = ref<SharePreviewResponse | null>(null)
 
 const isSystemTemplate = computed(() => detail.value?.templateType === 'SYSTEM')
 const totalSets = computed(
@@ -293,11 +300,42 @@ async function copyTemplate() {
     copying.value = false
   }
 }
+
+async function openTemplateShareCard() {
+  if (!templateId.value || !detail.value) return
+  shareVisible.value = true
+  shareLoading.value = true
+  try {
+    sharePreview.value = await fetchTemplateSharePreview(templateId.value)
+  } catch (err) {
+    shareVisible.value = false
+    uni.showToast({ title: '分享预览生成失败', icon: 'none' })
+    console.error('[share] template preview failed', err)
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+function closeShareCard() {
+  shareVisible.value = false
+}
+
+function copyShareText() {
+  const text = sharePreview.value?.copyText
+  if (!text) return
+  uni.setClipboardData({
+    data: text,
+    success: () => uni.showToast({ title: '已复制分享文案', icon: 'none' })
+  })
+}
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell template-detail safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view
+      class="page-shell template-detail operation-page safe-bottom"
+      :class="themeStore.themeClass"
+    >
       <AppHeader title="模板详情" subtitle="查看动作安排后开始训练" show-back @back="goBack" />
 
       <view v-if="detail" class="template-detail__content">
@@ -309,6 +347,9 @@ async function copyTemplate() {
           <view class="template-detail__title">{{ detail.name }}</view>
           <view class="template-detail__desc">
             {{ detail.description || '按模板动作顺序完成训练，可在训练中调整重量、次数和组数。' }}
+          </view>
+          <view class="template-detail__hero-actions">
+            <view class="template-detail__share btn-press" @tap="openTemplateShareCard">分享模板</view>
           </view>
           <view class="template-detail__stats">
             <view class="template-detail__stat">
@@ -358,15 +399,26 @@ async function copyTemplate() {
       </view>
     </view>
   </scroll-view>
-  <WorkoutDraftFab @open="openDraftFab" />
+  <WorkoutDraftFab
+    :variant="themeStore.resolvedTheme === 'light' ? 'light' : 'default'"
+    @open="openDraftFab"
+  />
   <WorkoutDraftPrompt />
   <AppActionSheet
+    :class="themeStore.themeClass"
     :visible="sheetVisible"
     title="更多模板操作"
     :subtitle="detail?.name || ''"
     :items="sheetItems"
     @close="closeTemplateMoreSheet"
     @select="handleTemplateMoreAction"
+  />
+  <ShareCardSheet
+    :visible="shareVisible"
+    :preview="sharePreview"
+    :loading="shareLoading"
+    @close="closeShareCard"
+    @copy="copyShareText"
   />
   <MembershipRequiredModal />
 </template>
@@ -426,6 +478,25 @@ async function copyTemplate() {
     color: #a6a6b8;
     font-size: 24rpx;
     line-height: 1.7;
+  }
+
+  &__hero-actions {
+    display: flex;
+    gap: 14rpx;
+    margin-top: 22rpx;
+  }
+
+  &__share {
+    min-height: 62rpx;
+    padding: 0 22rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 80, 30, 0.14);
+    color: #ff501e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23rpx;
+    font-weight: 900;
   }
 
   &__stats {

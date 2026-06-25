@@ -93,11 +93,11 @@ const workoutStore = useWorkoutStore()
     bottom: calc(28rpx + env(safe-area-inset-bottom));
     padding: 28rpx;
     border-radius: 36rpx;
-    border: 1px solid rgba(255, 80, 30, 0.28);
+    border: 1px solid var(--app-border);
     background:
-      radial-gradient(circle at 18% 0%, rgba(255, 80, 30, 0.28), transparent 48%),
-      rgba(18, 18, 26, 0.98);
-    box-shadow: 0 30rpx 80rpx rgba(0, 0, 0, 0.5);
+      radial-gradient(circle at 18% 0%, rgba(255, 100, 24, 0.12), transparent 48%),
+      var(--app-surface-raised);
+    box-shadow: var(--app-shadow-focus);
   }
 
   &__handle {
@@ -105,11 +105,11 @@ const workoutStore = useWorkoutStore()
     height: 8rpx;
     margin: 0 auto 24rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--app-border-strong);
   }
 
   &__eyebrow {
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 22rpx;
     font-weight: 900;
     letter-spacing: 2rpx;
@@ -117,7 +117,7 @@ const workoutStore = useWorkoutStore()
 
   &__title {
     margin-top: 12rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 40rpx;
     font-weight: 900;
   }
@@ -130,14 +130,14 @@ const workoutStore = useWorkoutStore()
     align-items: center;
     gap: 18rpx;
     background:
-      radial-gradient(circle at 0% 0%, rgba(255, 80, 30, 0.22), transparent 44%),
-      rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+      radial-gradient(circle at 0% 0%, rgba(255, 100, 24, 0.1), transparent 44%),
+      var(--app-surface);
+    border: 1px solid var(--app-border);
   }
 
   &__section-label {
     margin-top: 22rpx;
-    color: #8d8da0;
+    color: var(--app-text-muted);
     font-size: 20rpx;
     font-weight: 800;
   }
@@ -149,7 +149,7 @@ const workoutStore = useWorkoutStore()
     display: flex;
     align-items: center;
     gap: 18rpx;
-    background: rgba(255, 80, 30, 0.1);
+    background: var(--app-accent-soft);
     border: 1px solid rgba(255, 80, 30, 0.24);
   }
 
@@ -160,8 +160,8 @@ const workoutStore = useWorkoutStore()
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff8a3d;
-    background: rgba(255, 80, 30, 0.14);
+    color: var(--app-accent);
+    background: var(--app-surface);
     font-size: 34rpx;
     font-weight: 800;
   }
@@ -186,7 +186,7 @@ const workoutStore = useWorkoutStore()
   }
 
   &__summary-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 28rpx;
     font-weight: 900;
     overflow: hidden;
@@ -196,14 +196,14 @@ const workoutStore = useWorkoutStore()
 
   &__summary-sub {
     margin-top: 8rpx;
-    color: #a5a5b8;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.4;
   }
 
   &__desc {
     margin-top: 14rpx;
-    color: #b8b8c8;
+    color: var(--app-text-secondary);
     font-size: 26rpx;
     line-height: 1.65;
   }
@@ -227,13 +227,13 @@ const workoutStore = useWorkoutStore()
 
   &__danger {
     margin-top: 16rpx;
-    color: #ff6b4a;
+    color: var(--app-danger);
     background: rgba(255, 107, 74, 0.12);
     border: 1px solid rgba(255, 107, 74, 0.18);
   }
 
   &__eyebrow--danger {
-    color: #ff6b4a;
+    color: var(--app-danger);
   }
 
   &__confirm-actions {
@@ -249,8 +249,8 @@ const workoutStore = useWorkoutStore()
 
   &__cancel {
     margin-top: 16rpx;
-    color: #d8d8e6;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
   }
 }
 </style>

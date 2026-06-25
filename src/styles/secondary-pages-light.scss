@@ -1,0 +1,490 @@
+.theme-light.secondary-page {
+  color: var(--app-text);
+
+  .glass-card {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+    backdrop-filter: none;
+  }
+
+  .app-header__back {
+    border-color: var(--app-border);
+    color: var(--app-text);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  .empty-state {
+    color: var(--app-text);
+
+    &__desc {
+      color: var(--app-text-muted);
+    }
+  }
+}
+
+.theme-light.analysis.secondary-page {
+  .analysis {
+    &__empty,
+    &__hero-label,
+    &__section-sub,
+    &__muted,
+    &__stat-sub,
+    &__bar-meta,
+    &__metric-label {
+      color: var(--app-text-muted);
+    }
+
+    &__hero-title,
+    &__stat-value,
+    &__section-title,
+    &__plan-title,
+    &__bar-label,
+    &__muscle-name,
+    &__metric-value {
+      color: var(--app-text);
+    }
+
+    &__stat,
+    &__metric {
+      border-color: var(--app-border);
+      background: var(--app-bg);
+    }
+
+    &__plan-progress,
+    &__bar-track,
+    &__muscle-track {
+      background: var(--app-border);
+    }
+
+    &__link {
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+    }
+  }
+}
+
+.theme-light.exercise-detail.secondary-page {
+  .exercise-detail {
+    &__preview {
+      border-color: rgba(255, 100, 24, 0.2);
+      background: var(--app-surface-warm);
+    }
+
+    &__section-title,
+    &__tip-text,
+    &__alternative,
+    &__template-cta {
+      color: var(--app-text);
+    }
+
+    &__alternative,
+    &__record {
+      border-color: var(--app-border);
+      background: var(--app-bg);
+    }
+
+    &__alternative-meta {
+      color: var(--app-text-muted);
+    }
+
+    &__template-cta {
+      color: var(--app-accent);
+    }
+  }
+
+  .tag-chip {
+    border-color: var(--app-border);
+    color: var(--app-text-secondary) !important;
+    background: var(--app-surface);
+  }
+}
+
+.theme-light.profile-edit {
+  .profile-edit {
+    &__hero-title,
+    &__group-title,
+    &__field-input,
+    &__link-title,
+    &__prompt-title {
+      color: var(--app-text);
+    }
+
+    &__hero-sub,
+    &__field-label,
+    &__choice-label,
+    &__field-meta,
+    &__placeholder,
+    &__segment,
+    &__link-sub,
+    &__prompt-note {
+      color: var(--app-text-muted);
+    }
+
+    &__editor,
+    &__links,
+    &__save-bar,
+    &__prompt-card {
+      border-color: var(--app-border);
+      background: var(--app-surface);
+      box-shadow: var(--app-shadow-card);
+    }
+
+    &__field,
+    &__segments,
+    &__chip,
+    &__prompt-secondary {
+      border-color: var(--app-border);
+      color: var(--app-text-secondary);
+      background: var(--app-bg);
+    }
+
+    &__field-input,
+    &__divider,
+    &__link-row + .profile-edit__link-row {
+      border-color: var(--app-border);
+    }
+
+    &__divider {
+      background: var(--app-border);
+    }
+
+    &__segment--active {
+      border-color: rgba(255, 100, 24, 0.34);
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+    }
+
+    &__chip--active,
+    &__prompt-primary {
+      color: #fff;
+    }
+
+    &__prompt-mask {
+      background: rgba(22, 34, 53, 0.32);
+    }
+
+    &__prompt-desc {
+      color: var(--app-text-secondary);
+    }
+  }
+}
+
+.theme-light.body-metrics,
+.theme-light.body-history,
+.theme-light.metric-trend {
+  .surface-card,
+  .field-panel,
+  .metric-trend__summary-card {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  .field-input {
+    border-color: var(--app-border);
+    color: var(--app-text);
+    background: var(--app-bg);
+  }
+}
+
+.theme-light.body-metrics {
+  .body-metrics {
+    &__hero-title,
+    &__history-date {
+      color: var(--app-text);
+    }
+
+    &__hero-sub,
+    &__latest,
+    &__placeholder,
+    &__empty {
+      color: var(--app-text-muted);
+    }
+
+    &__history-row,
+    &__history-chip,
+    &__empty {
+      border-color: var(--app-border);
+      background: var(--app-bg);
+    }
+
+    &__history-chip {
+      color: var(--app-text-secondary);
+    }
+  }
+
+  .bottom-action-bar {
+    border-color: var(--app-border);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 -12rpx 40rpx rgba(31, 49, 72, 0.1);
+  }
+}
+
+.theme-light.body-history {
+  .body-history {
+    &__hero-title,
+    &__date {
+      color: var(--app-text);
+    }
+
+    &__hero-sub,
+    &__empty {
+      color: var(--app-text-muted);
+    }
+
+    &__filter,
+    &__day,
+    &__chip,
+    &__empty {
+      border-color: var(--app-border);
+      background: var(--app-surface);
+    }
+
+    &__filter,
+    &__chip {
+      color: var(--app-text-secondary);
+    }
+
+    &__filter--active {
+      border-color: rgba(255, 100, 24, 0.34);
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+    }
+
+    &__load-more {
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+    }
+
+    &__load-more[disabled] {
+      color: var(--app-text-muted);
+      background: var(--app-bg);
+    }
+  }
+}
+
+.theme-light.metric-trend {
+  .metric-trend {
+    &__hero-title,
+    &__summary-value,
+    &__stat-value {
+      color: var(--app-text);
+    }
+
+    &__hero-sub,
+    &__summary-label,
+    &__summary-meta,
+    &__stat-label,
+    &__empty {
+      color: var(--app-text-muted);
+    }
+
+    &__summary-card,
+    &__stat,
+    &__record,
+    &__empty,
+    &__range {
+      border-color: var(--app-border);
+      background: var(--app-surface);
+    }
+
+    &__record-date,
+    &__range {
+      color: var(--app-text-secondary);
+    }
+
+    &__range--active {
+      border-color: rgba(255, 100, 24, 0.34);
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+    }
+  }
+}
+
+.theme-light.membership {
+  .membership {
+    &__status {
+      border-color: rgba(255, 100, 24, 0.24);
+      background:
+        radial-gradient(circle at 16% 8%, rgba(255, 100, 24, 0.14), transparent 42%),
+        var(--app-surface-warm);
+    }
+
+    &__status-title,
+    &__section,
+    &__benefit-title,
+    &__plan-name {
+      color: var(--app-text);
+    }
+
+    &__status-sub,
+    &__benefit-desc,
+    &__plan-sub,
+    &__note,
+    &__empty {
+      color: var(--app-text-muted);
+    }
+  }
+}
+
+.theme-light.about-page {
+  .about {
+    &__section-title,
+    &__feature-title {
+      color: var(--app-text);
+    }
+
+    &__feature-desc,
+    &__arrow {
+      color: var(--app-text-muted);
+    }
+
+    &__feature-icon {
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+    }
+  }
+}
+
+.theme-light.favorites-page {
+  .empty-state {
+    color: var(--app-text);
+
+    &__desc {
+      color: var(--app-text-muted);
+    }
+  }
+}
+
+.theme-light.workout-summary {
+  .workout-summary {
+    &__hero {
+      border-color: rgba(255, 100, 24, 0.24);
+      background:
+        radial-gradient(circle at 18% 8%, rgba(255, 160, 60, 0.2), transparent 36%),
+        var(--app-surface-warm);
+      box-shadow: var(--app-shadow-focus);
+    }
+
+    &__badge {
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+    }
+
+    &__title,
+    &__value,
+    &__insight-title,
+    &__compare-name,
+    &__pr-name,
+    &__note-title {
+      color: var(--app-text);
+    }
+
+    &__sub,
+    &__label,
+    &__insight-copy,
+    &__compare-sub,
+    &__compare-value,
+    &__pr-type,
+    &__note-copy {
+      color: var(--app-text-muted);
+    }
+
+    &__insight {
+      border-color: rgba(114, 191, 130, 0.26);
+      background: rgba(114, 191, 130, 0.09);
+    }
+
+    &__insight-label,
+    &__compare-value--up {
+      color: #39985d;
+    }
+
+    &__compare-row {
+      border: 1rpx solid var(--app-border);
+      background: var(--app-bg);
+    }
+
+    &__compare-value--down {
+      color: var(--app-danger);
+    }
+
+    &__pr {
+      border: 1rpx solid rgba(255, 100, 24, 0.2);
+      background: var(--app-accent-soft);
+    }
+
+    &__pr-value {
+      color: var(--app-accent);
+    }
+
+    &__button:not(.gradient-fire) {
+      color: var(--app-text-secondary);
+    }
+  }
+}
+
+.theme-light.cultivation-settlement {
+  .cultivation-settlement {
+    &__hero {
+      border-color: rgba(255, 100, 24, 0.26);
+      background:
+        radial-gradient(circle at 50% 14%, rgba(255, 106, 42, 0.18), transparent 42%),
+        var(--app-surface-warm);
+      box-shadow: var(--app-shadow-focus);
+    }
+
+    &__badge {
+      background: var(--app-accent-soft);
+    }
+
+    &__core {
+      border-color: rgba(255, 255, 255, 0.5);
+      background:
+        radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.28), transparent 34%),
+        radial-gradient(circle, var(--cultivation-theme), var(--cultivation-accent));
+    }
+
+    &__realm,
+    &__stat-value,
+    &__rule-title {
+      color: var(--app-text);
+    }
+
+    &__message,
+    &__progress-top,
+    &__next,
+    &__stat-label,
+    &__rule-copy {
+      color: var(--app-text-muted);
+    }
+
+    &__track {
+      background: var(--app-border);
+    }
+
+    &__grid {
+      border-color: var(--app-border);
+      background: var(--app-surface);
+      box-shadow: var(--app-shadow-card);
+    }
+
+    &__stat {
+      border-color: var(--app-border);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255, 106, 42, 0.12), transparent 48%),
+        var(--app-bg);
+    }
+
+    &__stat-value--gain {
+      color: #39985d;
+      text-shadow: none;
+    }
+
+    &__button:not(.gradient-fire) {
+      color: var(--app-text-secondary);
+    }
+  }
+}

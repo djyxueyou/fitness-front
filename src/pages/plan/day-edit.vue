@@ -6,6 +6,7 @@ import MembershipRequiredModal from '@/components/membership-required-modal/inde
 import PrimaryButton from '@/components/primary-button/index.vue'
 import { usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
+import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
@@ -22,6 +23,7 @@ const weekdays = [
 
 const planStore = usePlanStore()
 const templateStore = useTemplateStore()
+const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
 const dayId = ref<number | null>(null)
 const planCycleWeeks = ref(4)
@@ -167,8 +169,11 @@ async function saveDay() {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell plan-day-edit safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view
+      class="page-shell plan-day-edit operation-page safe-bottom"
+      :class="themeStore.themeClass"
+    >
       <AppHeader
         :title="pageTitle"
         subtitle="选择训练日位置和使用的模板"
@@ -296,7 +301,7 @@ async function saveDay() {
   }
 
   &__locked {
-    color: #3dd9a2;
+    color: var(--app-success);
     border-color: rgba(80, 220, 180, 0.2);
   }
 
@@ -308,7 +313,7 @@ async function saveDay() {
   &__section-title,
   &__section-head,
   &__group-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 24rpx;
     font-weight: 900;
   }
@@ -322,14 +327,15 @@ async function saveDay() {
     min-height: 76rpx;
     padding: 0 22rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.06);
-    color: #f5f5fa;
+    border: 1rpx solid var(--app-border);
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     font-size: 26rpx;
   }
 
   &__placeholder,
   &__muted {
-    color: #828296;
+    color: var(--app-text-muted);
   }
 
   &__week-card {
@@ -341,13 +347,13 @@ async function saveDay() {
     align-items: center;
     justify-content: space-between;
     gap: 18rpx;
-    background: rgba(255, 255, 255, 0.055);
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
   }
 
   &__week-value {
     margin-top: 6rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 900;
   }
@@ -367,8 +373,8 @@ async function saveDay() {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff7a32;
-    background: rgba(255, 80, 30, 0.14);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     font-size: 34rpx;
     font-weight: 900;
 
@@ -377,8 +383,8 @@ async function saveDay() {
     }
 
     &[disabled] {
-      color: #666679;
-      background: rgba(255, 255, 255, 0.05);
+      color: var(--app-text-muted);
+      background: var(--app-bg);
     }
   }
 
@@ -393,13 +399,13 @@ async function saveDay() {
     min-height: 64rpx;
     margin: 0;
     padding: 0;
-    border: 1rpx solid rgba(255, 255, 255, 0.08);
+    border: 1rpx solid var(--app-border);
     border-radius: 999rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #c8c8d4;
-    background: rgba(255, 255, 255, 0.06);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
     font-size: 22rpx;
     font-weight: 900;
 
@@ -408,15 +414,15 @@ async function saveDay() {
     }
 
     &--active {
-      color: #ff7b3c;
-      background: rgba(255, 80, 30, 0.14);
-      border-color: rgba(255, 80, 30, 0.58);
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+      border-color: rgba(255, 100, 24, 0.32);
     }
   }
 
   &__selected {
     margin-top: 24rpx;
-    color: #ff9b58;
+    color: var(--app-accent);
     font-size: 23rpx;
   }
 
@@ -432,7 +438,7 @@ async function saveDay() {
   }
 
   &__group-title {
-    color: #9d9daf;
+    color: var(--app-text-muted);
     letter-spacing: 3rpx;
     text-transform: uppercase;
   }
@@ -450,11 +456,12 @@ async function saveDay() {
 
     &--active {
       border-color: rgba(255, 80, 30, 0.34);
+      background: var(--app-surface-warm);
     }
   }
 
   &__template-name {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 27rpx;
     font-weight: 900;
   }
@@ -462,12 +469,12 @@ async function saveDay() {
   &__template-meta,
   &__empty {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
   &__template-check {
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 22rpx;
     font-weight: 900;
   }

@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
+import ShareCardSheet from '@/components/share-card-sheet/index.vue'
+import { fetchWorkoutSharePreview, type SharePreviewResponse } from '@/api/share'
 import {
   fetchTrainingReport,
   type TrainingPrResponse,
@@ -14,15 +16,20 @@ import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { formatSeconds } from '@/utils/format'
 import { formatWeight } from '@/utils/unit'
 import { useProfileStore } from '@/stores/profile'
+import { useThemeStore } from '@/stores/theme'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 
 const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
+const themeStore = useThemeStore()
 const templateStore = useTemplateStore()
 const savingTemplate = ref(false)
 const report = ref<TrainingReportResponse | null>(null)
 const loadingReport = ref(false)
+const shareVisible = ref(false)
+const shareLoading = ref(false)
+const sharePreview = ref<SharePreviewResponse | null>(null)
 
 const summary = computed(() => workoutStore.completedSummary)
 const weightUnit = computed(() => profileStore.unit)
@@ -126,7 +133,7 @@ function goDetail() {
 }
 
 function goActivePlan() {
-  const planId = displaySummary.value?.activePlanId
+  const planId = summary.value?.activePlanId
   if (!planId) {
     goHome()
     return
@@ -154,6 +161,38 @@ async function saveAsTemplate() {
   } finally {
     savingTemplate.value = false
   }
+}
+
+async function openShareCard() {
+  const trainingId = displaySummary.value?.trainingId
+  if (!trainingId) {
+    uni.showToast({ title: '训练记录不存在', icon: 'none' })
+    return
+  }
+  shareVisible.value = true
+  shareLoading.value = true
+  try {
+    sharePreview.value = await fetchWorkoutSharePreview(trainingId)
+  } catch (err) {
+    shareVisible.value = false
+    uni.showToast({ title: '分享预览生成失败', icon: 'none' })
+    console.error('[share] workout preview failed', err)
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+function closeShareCard() {
+  shareVisible.value = false
+}
+
+function copyShareText() {
+  const text = sharePreview.value?.copyText
+  if (!text) return
+  uni.setClipboardData({
+    data: text,
+    success: () => uni.showToast({ title: '已复制分享文案', icon: 'none' })
+  })
 }
 
 function prTypeLabel(type: string) {
@@ -191,8 +230,8 @@ function deltaClass(value?: number | null) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell workout-summary safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell workout-summary safe-bottom" :class="themeStore.themeClass">
       <AppHeader title="训练完成" subtitle="本次训练已保存" />
 
       <view class="workout-summary__hero">
@@ -269,6 +308,9 @@ function deltaClass(value?: number | null) {
       <view class="workout-summary__actions">
         <view class="gradient-fire workout-summary__button btn-press" @tap="goHome">返回首页</view>
         <view class="glass-card workout-summary__button btn-press" @tap="goDetail">查看详情</view>
+        <view class="glass-card workout-summary__button btn-press" @tap="openShareCard">
+          生成分享卡
+        </view>
         <view
           v-if="hasPlanContext"
           class="glass-card workout-summary__button btn-press"
@@ -282,6 +324,13 @@ function deltaClass(value?: number | null) {
       </view>
     </view>
   </scroll-view>
+  <ShareCardSheet
+    :visible="shareVisible"
+    :preview="sharePreview"
+    :loading="shareLoading"
+    @close="closeShareCard"
+    @copy="copyShareText"
+  />
   <MembershipRequiredModal />
 </template>
 

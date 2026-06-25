@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
+type ExerciseDifficultyCode = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
 
 const RECORD_TYPE_OPTIONS: Array<{
   label: string
@@ -13,6 +14,15 @@ const RECORD_TYPE_OPTIONS: Array<{
   { label: '计时', value: 'DURATION', description: '平板支撑、靠墙坐等按秒记录' }
 ]
 
+const DIFFICULTY_OPTIONS: Array<{
+  label: string
+  value: ExerciseDifficultyCode
+}> = [
+  { label: '初级', value: 'BEGINNER' },
+  { label: '中级', value: 'INTERMEDIATE' },
+  { label: '高级', value: 'ADVANCED' }
+]
+
 const props = withDefaults(
   defineProps<{
     visible: boolean
@@ -20,22 +30,32 @@ const props = withDefaults(
     confirmText?: string
     initialName?: string
     initialRecordType?: ExerciseRecordType | string
+    initialDifficultyCode?: ExerciseDifficultyCode | string
   }>(),
   {
     title: '新建自定义动作',
     confirmText: '创建',
     initialName: '',
-    initialRecordType: 'BODYWEIGHT_REPS'
+    initialRecordType: 'BODYWEIGHT_REPS',
+    initialDifficultyCode: 'BEGINNER'
   }
 )
 
 const emit = defineEmits<{
   close: []
-  submit: [payload: { name: string; recordType: ExerciseRecordType }]
+  submit: [
+    payload: {
+      name: string
+      recordType: ExerciseRecordType
+      difficultyCode: ExerciseDifficultyCode
+      difficultyName: string
+    }
+  ]
 }>()
 
 const name = ref('')
 const recordType = ref<ExerciseRecordType>('BODYWEIGHT_REPS')
+const difficultyCode = ref<ExerciseDifficultyCode>('BEGINNER')
 
 const canSubmit = computed(() => !!name.value.trim())
 
@@ -45,6 +65,7 @@ watch(
     if (!visible) return
     name.value = props.initialName || ''
     recordType.value = normalizeRecordType(props.initialRecordType)
+    difficultyCode.value = normalizeDifficultyCode(props.initialDifficultyCode)
   },
   { immediate: true }
 )
@@ -56,8 +77,19 @@ function normalizeRecordType(value?: string): ExerciseRecordType {
   return 'BODYWEIGHT_REPS'
 }
 
+function normalizeDifficultyCode(value?: string): ExerciseDifficultyCode {
+  if (value === 'INTERMEDIATE' || value === 'ADVANCED' || value === 'BEGINNER') {
+    return value
+  }
+  return 'BEGINNER'
+}
+
 function selectType(value: ExerciseRecordType) {
   recordType.value = value
+}
+
+function selectDifficulty(value: ExerciseDifficultyCode) {
+  difficultyCode.value = value
 }
 
 function submit() {
@@ -66,7 +98,13 @@ function submit() {
     uni.showToast({ title: '请输入动作名称', icon: 'none' })
     return
   }
-  emit('submit', { name: trimmedName, recordType: recordType.value })
+  const difficulty = DIFFICULTY_OPTIONS.find((item) => item.value === difficultyCode.value)
+  emit('submit', {
+    name: trimmedName,
+    recordType: recordType.value,
+    difficultyCode: difficultyCode.value,
+    difficultyName: difficulty?.label || '初级'
+  })
 }
 </script>
 
@@ -106,6 +144,19 @@ function submit() {
         </view>
       </view>
 
+      <view class="custom-exercise-dialog__label custom-exercise-dialog__label--spaced">难度</view>
+      <view class="custom-exercise-dialog__difficulty">
+        <view
+          v-for="item in DIFFICULTY_OPTIONS"
+          :key="item.value"
+          class="custom-exercise-dialog__difficulty-chip btn-press"
+          :class="{ 'custom-exercise-dialog__difficulty-chip--active': difficultyCode === item.value }"
+          @tap="selectDifficulty(item.value)"
+        >
+          {{ item.label }}
+        </view>
+      </view>
+
       <view class="custom-exercise-dialog__actions">
         <view class="custom-exercise-dialog__cancel btn-press" @tap="emit('close')">取消</view>
         <view
@@ -130,9 +181,9 @@ function submit() {
   transform: translateY(-50%);
   padding: 32rpx;
   border-radius: 34rpx;
-  background: #121219;
-  border: 1px solid rgba(255, 80, 30, 0.18);
-  box-shadow: 0 28rpx 80rpx rgba(0, 0, 0, 0.5);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-focus);
 
   &__mask {
     position: fixed;
@@ -150,7 +201,7 @@ function submit() {
   }
 
   &__title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 34rpx;
     font-weight: 900;
   }
@@ -158,7 +209,7 @@ function submit() {
   &__sub,
   &__type-desc {
     margin-top: 8rpx;
-    color: #8b8ba0;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.45;
   }
@@ -167,8 +218,8 @@ function submit() {
     width: 64rpx;
     height: 64rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.07);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -180,26 +231,30 @@ function submit() {
     margin: 30rpx 0 26rpx;
     padding: 22rpx;
     border-radius: 26rpx;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
   }
 
   &__label {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 24rpx;
     font-weight: 900;
+  }
+
+  &__label--spaced {
+    margin-top: 24rpx;
   }
 
   &__input {
     margin-top: 14rpx;
     min-height: 68rpx;
-    color: #fff;
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 800;
   }
 
   &__placeholder {
-    color: #6f6f82;
+    color: var(--app-text-muted);
   }
 
   &__types {
@@ -212,20 +267,46 @@ function submit() {
   &__type {
     padding: 20rpx 22rpx;
     border-radius: 24rpx;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
 
     &--active {
-      background: rgba(255, 80, 30, 0.14);
+      background: var(--app-accent-soft);
       border-color: rgba(255, 80, 30, 0.52);
       box-shadow: 0 0 24rpx rgba(255, 80, 30, 0.13);
     }
   }
 
   &__type-name {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 26rpx;
     font-weight: 900;
+  }
+
+  &__difficulty {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12rpx;
+    margin-top: 14rpx;
+  }
+
+  &__difficulty-chip {
+    min-height: 64rpx;
+    border-radius: 999rpx;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    color: var(--app-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24rpx;
+    font-weight: 900;
+
+    &--active {
+      background: var(--app-accent-soft);
+      border-color: rgba(255, 80, 30, 0.52);
+      color: var(--app-accent);
+    }
   }
 
   &__actions {
@@ -247,8 +328,8 @@ function submit() {
   }
 
   &__cancel {
-    color: #b8b8c8;
-    background: rgba(255, 255, 255, 0.07);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
   }
 
   &__confirm {

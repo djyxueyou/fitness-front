@@ -5,9 +5,11 @@ import { useWorkoutStore } from '@/stores/workout'
 const props = withDefaults(
   defineProps<{
     visible?: boolean
+    variant?: 'default' | 'light'
   }>(),
   {
-    visible: true
+    visible: true,
+    variant: 'default'
   }
 )
 
@@ -19,7 +21,10 @@ const workoutStore = useWorkoutStore()
 const collapsed = ref(false)
 let collapseTimer: ReturnType<typeof setTimeout> | null = null
 const shouldShow = computed(
-  () => props.visible && workoutStore.hasRecoverableWorkout && workoutStore.draftSummary.exerciseCount > 0
+  () =>
+    props.visible &&
+    workoutStore.hasRecoverableWorkout &&
+    workoutStore.draftSummary.exerciseCount > 0
 )
 
 function clearCollapseTimer() {
@@ -54,7 +59,10 @@ onUnmounted(clearCollapseTimer)
   <view
     v-if="shouldShow"
     class="workout-draft-fab btn-press"
-    :class="{ 'workout-draft-fab--collapsed': collapsed }"
+    :class="{
+      'workout-draft-fab--collapsed': collapsed,
+      'workout-draft-fab--light': variant === 'light'
+    }"
     @tap="emit('open')"
   >
     <view class="workout-draft-fab__rail" />
@@ -82,13 +90,11 @@ onUnmounted(clearCollapseTimer)
   gap: 14rpx;
   overflow: hidden;
   background:
-    radial-gradient(circle at 0% 0%, rgba(255, 80, 30, 0.3), transparent 58%),
-    rgba(18, 18, 26, 0.94);
-  border: 1rpx solid rgba(255, 255, 255, 0.08);
+    radial-gradient(circle at 0% 0%, rgba(255, 100, 24, 0.16), transparent 58%),
+    var(--app-surface-raised);
+  border: 1rpx solid var(--app-border);
   border-right: 0;
-  box-shadow:
-    0 18rpx 46rpx rgba(0, 0, 0, 0.38),
-    0 0 30rpx rgba(255, 80, 30, 0.18);
+  box-shadow: var(--app-shadow-card);
   transition:
     width 0.24s ease,
     min-width 0.24s ease,
@@ -100,6 +106,24 @@ onUnmounted(clearCollapseTimer)
     min-width: 92rpx;
     padding: 14rpx 16rpx 14rpx 22rpx;
     border-radius: 30rpx 0 0 30rpx;
+  }
+
+  &--light {
+    background: var(--app-surface-raised);
+    border-color: var(--app-border);
+    box-shadow: var(--app-shadow-card);
+
+    .workout-draft-fab__rail {
+      box-shadow: none;
+    }
+
+    .workout-draft-fab__title {
+      color: var(--app-text);
+    }
+
+    .workout-draft-fab__sub {
+      color: var(--app-accent);
+    }
   }
 
   &__rail {
@@ -132,7 +156,7 @@ onUnmounted(clearCollapseTimer)
   }
 
   &__title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 24rpx;
     font-weight: 900;
     line-height: 1.1;
@@ -140,7 +164,7 @@ onUnmounted(clearCollapseTimer)
 
   &__sub {
     margin-top: 8rpx;
-    color: #ff9c5c;
+    color: var(--app-accent);
     font-size: 20rpx;
     font-weight: 800;
   }

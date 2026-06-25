@@ -14,6 +14,7 @@ import { usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
+import { useThemeStore } from '@/stores/theme'
 import {
   fetchActiveTrainingPlanSummary,
   fetchPlanActivationOptions,
@@ -33,6 +34,7 @@ const planStore = usePlanStore()
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
+const themeStore = useThemeStore()
 const activeTab = ref<'system' | 'mine'>('system')
 const busyPlanId = ref<number | null>(null)
 const activePlanSummary = ref<ActivePlanSummaryResponse | null>(null)
@@ -66,7 +68,8 @@ const activePlanRecommendationTitle = computed(() => {
   return planStore.recommendation?.title || ''
 })
 const activePlanSubtitle = computed(() => {
-  if (hasActivePlanRecommendation.value) return planStore.recommendation?.subtitle || '按计划推进下一次训练'
+  if (hasActivePlanRecommendation.value)
+    return planStore.recommendation?.subtitle || '按计划推进下一次训练'
   if (isTodayCompletedRecommendation.value) {
     return planStore.recommendation?.reason || '今天的计划训练已经完成'
   }
@@ -97,7 +100,8 @@ const weekProgressPercent = computed(() => {
 const nextTrainingDayText = computed(() => {
   if (!planStore.activePlan) return '待选择'
   if (!activePlanSummary.value) return '--'
-  if (activePlanSummary.value.nextDayOfWeek) return weekdayText(activePlanSummary.value.nextDayOfWeek)
+  if (activePlanSummary.value.nextDayOfWeek)
+    return weekdayText(activePlanSummary.value.nextDayOfWeek)
   return activePlanSummary.value.executionStatus === 'FINISHING' ? '待收尾' : '计划完成'
 })
 
@@ -142,6 +146,10 @@ function goDetail(id: number) {
   uni.navigateTo({ url: `${routes.planDetail}?id=${id}` })
 }
 
+function goCreatePlan() {
+  uni.navigateTo({ url: routes.planCreate })
+}
+
 function goActivePlan() {
   const id = planStore.activePlan?.id
   if (id) goDetail(id)
@@ -159,7 +167,9 @@ async function startNextPlanDay() {
   }
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok) return
-  const canStart = await prepareNewWorkout(recommendation.title || recommendation.planName || '计划训练')
+  const canStart = await prepareNewWorkout(
+    recommendation.title || recommendation.planName || '计划训练'
+  )
   if (!canStart) return
   templateStore.markUsed(recommendation.templateId)
   workoutStore.queueStartWorkout(recommendation.templateId, {
@@ -205,7 +215,10 @@ async function activatePlan(item: TrainingPlanListItemResponse) {
   await openActivationSheet(item)
 }
 
-async function performActivatePlan(item: TrainingPlanListItemResponse, mode: 'THIS_WEEK' | 'NEXT_WEEK') {
+async function performActivatePlan(
+  item: TrainingPlanListItemResponse,
+  mode: 'THIS_WEEK' | 'NEXT_WEEK'
+) {
   busyPlanId.value = item.id
   try {
     await planStore.activate(item.id, mode)
@@ -213,9 +226,10 @@ async function performActivatePlan(item: TrainingPlanListItemResponse, mode: 'TH
     uni.showToast({ title: '已启用训练计划', icon: 'none' })
   } catch (err) {
     uni.showToast({
-      title: err instanceof Error && err.message.includes('at least one training day')
-        ? '请先新增训练日后再启用'
-        : '启用失败',
+      title:
+        err instanceof Error && err.message.includes('at least one training day')
+          ? '请先新增训练日后再启用'
+          : '启用失败',
       icon: 'none'
     })
     console.error('[plan] activate failed', err)
@@ -242,9 +256,10 @@ async function openActivationSheet(item: TrainingPlanListItemResponse) {
     sheetVisible.value = true
   } catch (err) {
     uni.showToast({
-      title: err instanceof Error && err.message.includes('at least one training day')
-        ? '请先新增训练日后再启用'
-        : '加载生效周期失败',
+      title:
+        err instanceof Error && err.message.includes('at least one training day')
+          ? '请先新增训练日后再启用'
+          : '加载生效周期失败',
       icon: 'none'
     })
     console.error('[plan] activation options failed', err)
@@ -288,62 +303,63 @@ function openPlanActions(item: TrainingPlanListItemResponse) {
   sheetTargetPlan.value = item
   sheetTitle.value = item.name
   sheetSubtitle.value = item.planType === 'SYSTEM' ? '系统计划可复制后编辑' : '我的计划'
-  sheetItems.value = item.planType === 'SYSTEM'
-    ? [
-        {
-          key: 'copy',
-          label: '复制到我的计划',
-          description: '复制后可以编辑训练日和计划名称。',
-          primary: true
-        }
-      ]
-    : [
-        {
-          key: 'detail',
-          label: '查看详情',
-          description: '查看和管理训练安排。',
-          primary: true
-        },
-        ...(!item.active
-          ? [
-              {
-                key: 'edit',
-                label: '编辑计划',
-                description: '修改计划名称、目标和难度。'
-              },
-              {
-                key: 'add-day',
-                label: '新增训练日',
-                description: '为计划增加新的周训练安排。'
-              }
-            ]
-          : []),
-        {
-          key: 'copy',
-          label: '复制计划',
-          description: '复制一份新的计划副本。'
-        },
-        ...(item.active
-          ? [
-              {
-                key: 'deactivate',
-                label: '停用计划',
-                description: '首页不再按此计划推荐训练，历史训练记录会保留。',
-                danger: true
-              }
-            ]
-          : []),
-        ...(!item.active
-          ? [
-              {
-                key: 'delete',
-                label: '删除计划',
-                description: '仅删除计划编排，不删除已完成的训练记录。',
-                danger: true
-              }
-            ]
-          : [])
-      ]
+  sheetItems.value =
+    item.planType === 'SYSTEM'
+      ? [
+          {
+            key: 'copy',
+            label: '复制到我的计划',
+            description: '复制后可以编辑训练日和计划名称。',
+            primary: true
+          }
+        ]
+      : [
+          {
+            key: 'detail',
+            label: '查看详情',
+            description: '查看和管理训练安排。',
+            primary: true
+          },
+          ...(!item.active
+            ? [
+                {
+                  key: 'edit',
+                  label: '编辑计划',
+                  description: '修改计划名称、目标和难度。'
+                },
+                {
+                  key: 'add-day',
+                  label: '新增训练日',
+                  description: '为计划增加新的周训练安排。'
+                }
+              ]
+            : []),
+          {
+            key: 'copy',
+            label: '复制计划',
+            description: '复制一份新的计划副本。'
+          },
+          ...(item.active
+            ? [
+                {
+                  key: 'deactivate',
+                  label: '停用计划',
+                  description: '首页不再按此计划推荐训练，历史训练记录会保留。',
+                  danger: true
+                }
+              ]
+            : []),
+          ...(!item.active
+            ? [
+                {
+                  key: 'delete',
+                  label: '删除计划',
+                  description: '仅删除计划编排，不删除已完成的训练记录。',
+                  danger: true
+                }
+              ]
+            : [])
+        ]
   sheetVisible.value = true
 }
 
@@ -422,7 +438,9 @@ function difficultyText(level?: string) {
 
 function weekdayText(dayOfWeek?: number | null) {
   if (!dayOfWeek) return '训练日'
-  return ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][dayOfWeek - 1] || `第 ${dayOfWeek} 天`
+  return (
+    ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][dayOfWeek - 1] || `第 ${dayOfWeek} 天`
+  )
 }
 
 async function openDraftFab() {
@@ -440,8 +458,14 @@ async function openDraftFab() {
 </script>
 
 <template>
-  <scroll-view scroll-y scroll-with-animation class="page-scroll" :scroll-into-view="scrollTarget">
-    <view class="page-shell tab-page plan-page safe-bottom">
+  <scroll-view
+    scroll-y
+    scroll-with-animation
+    class="page-scroll"
+    :class="themeStore.themeClass"
+    :scroll-into-view="scrollTarget"
+  >
+    <view class="page-shell tab-page plan-page safe-bottom" :class="themeStore.themeClass">
       <AppHeader title="训练计划" subtitle="安排接下来怎么练，按计划推进训练进度" />
 
       <view class="glass-card plan-page__hero">
@@ -482,10 +506,7 @@ async function openDraftFab() {
             </view>
           </view>
           <view class="plan-page__progress-track">
-            <view
-              class="plan-page__progress-fill"
-              :style="{ width: `${weekProgressPercent}%` }"
-            />
+            <view class="plan-page__progress-fill" :style="{ width: `${weekProgressPercent}%` }" />
           </view>
         </view>
       </view>
@@ -495,11 +516,9 @@ async function openDraftFab() {
           <view class="section-title">选择计划</view>
           <view class="plan-page__section-sub">系统计划可直接启用，也可以复制后编辑。</view>
         </view>
-        <view
-          v-if="activeTab === 'mine'"
-          class="plan-page__create btn-press"
-          @tap="uni.navigateTo({ url: routes.planCreate })"
-        >+ 新建计划</view>
+        <view v-if="activeTab === 'mine'" class="plan-page__create btn-press" @tap="goCreatePlan"
+          >+ 新建计划</view
+        >
       </view>
 
       <view class="plan-page__tabs">
@@ -568,6 +587,7 @@ async function openDraftFab() {
     </view>
   </scroll-view>
   <AppActionSheet
+    :class="themeStore.themeClass"
     :visible="sheetVisible"
     :title="sheetTitle"
     :subtitle="sheetSubtitle"
@@ -575,7 +595,7 @@ async function openDraftFab() {
     @close="closePlanActions"
     @select="handlePlanAction"
   />
-  <WorkoutDraftFab @open="openDraftFab" />
+  <WorkoutDraftFab :class="themeStore.themeClass" variant="light" @open="openDraftFab" />
   <WorkoutDraftPrompt />
   <MembershipRequiredModal />
 </template>
@@ -595,20 +615,20 @@ async function openDraftFab() {
   }
 
   &__active-label {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
   &__active-name {
     margin-top: 8rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 32rpx;
-    font-weight: 900;
+    font-weight: 800;
   }
 
   &__active-next {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.4;
   }
@@ -616,9 +636,9 @@ async function openDraftFab() {
   &__next-card {
     margin-top: 20rpx;
     padding: 20rpx;
-    border-radius: 24rpx;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1rpx solid rgba(255, 255, 255, 0.07);
+    border-radius: 20rpx;
+    background: var(--app-surface-subtle);
+    border: 1rpx solid var(--app-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -631,23 +651,23 @@ async function openDraftFab() {
   }
 
   &__next-label {
-    color: #ff9b58;
+    color: var(--app-accent);
     font-size: 21rpx;
     font-weight: 800;
   }
 
   &__next-title {
     margin-top: 8rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 28rpx;
-    font-weight: 900;
+    font-weight: 800;
   }
 
   &__active-start {
     min-height: 64rpx;
     padding: 0 24rpx;
     border-radius: 999rpx;
-    background: linear-gradient(135deg, #ff501e, #ffa03c);
+    background: var(--app-accent);
     color: #fff;
     font-size: 22rpx;
     font-weight: 900;
@@ -661,8 +681,8 @@ async function openDraftFab() {
   &__tag {
     border-radius: 999rpx;
     padding: 8rpx 16rpx;
-    background: rgba(255, 80, 30, 0.14);
-    color: #ff7a32;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     font-size: 22rpx;
     font-weight: 800;
     flex-shrink: 0;
@@ -672,8 +692,8 @@ async function openDraftFab() {
     margin-top: 18rpx;
     padding: 18rpx 20rpx;
     border-radius: 20rpx;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1rpx solid rgba(255, 255, 255, 0.06);
+    background: var(--app-surface-subtle);
+    border: 1rpx solid var(--app-border);
   }
 
   &__progress-copy {
@@ -685,13 +705,13 @@ async function openDraftFab() {
 
   &__progress-value {
     margin-top: 6rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 23rpx;
     font-weight: 900;
   }
 
   &__progress-label {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
   }
 
@@ -702,7 +722,7 @@ async function openDraftFab() {
 
   &__next-day-value {
     margin-top: 6rpx;
-    color: #ff9b58;
+    color: var(--app-accent);
     font-size: 23rpx;
     font-weight: 900;
   }
@@ -712,7 +732,7 @@ async function openDraftFab() {
     margin-top: 16rpx;
     overflow: hidden;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--app-border);
   }
 
   &__progress-fill {
@@ -729,7 +749,7 @@ async function openDraftFab() {
 
   &__section-sub {
     margin-top: 6rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
@@ -739,25 +759,25 @@ async function openDraftFab() {
     margin: 0 0 20rpx;
     padding: 8rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
   }
 
   &__tab {
     flex: 1;
     min-height: 64rpx;
     border-radius: 999rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24rpx;
-    font-weight: 800;
+    font-weight: 700;
 
     &--active {
-      background: linear-gradient(135deg, #ff501e, #ffa03c);
+      background: var(--app-accent);
       color: #fff;
-      box-shadow: 0 0 24rpx rgba(255, 80, 30, 0.22);
+      box-shadow: var(--app-shadow-cta);
     }
   }
 
@@ -768,23 +788,23 @@ async function openDraftFab() {
   &__list {
     display: flex;
     flex-direction: column;
-    gap: 18rpx;
+    gap: 14rpx;
   }
 
   &__empty {
     padding: 28rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 24rpx;
   }
 
   &__item {
     position: relative;
-    padding: 22rpx;
-    border-color: rgba(255, 255, 255, 0.08);
+    padding: 20rpx;
+    border-color: var(--app-border);
 
     &--active {
       border-color: rgba(255, 80, 30, 0.3);
-      box-shadow: 0 0 28rpx rgba(255, 80, 30, 0.1);
+      box-shadow: var(--app-shadow-focus);
     }
   }
 
@@ -806,14 +826,14 @@ async function openDraftFab() {
   &__name {
     margin-top: 14rpx;
     padding-right: 76rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 30rpx;
-    font-weight: 900;
+    font-weight: 800;
   }
 
   &__meta {
     margin-top: 10rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 23rpx;
     line-height: 1.5;
   }
@@ -828,19 +848,18 @@ async function openDraftFab() {
     min-height: 58rpx;
     padding: 0 22rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.07);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 23rpx;
-    font-weight: 900;
+    font-weight: 800;
 
     &--primary {
-      background: linear-gradient(135deg, #ff501e, #ffa03c);
+      background: var(--app-accent);
       color: #fff;
     }
-
   }
 
   &__more {
@@ -850,8 +869,8 @@ async function openDraftFab() {
     width: 64rpx;
     height: 64rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.07);
-    color: #ff9b58;
+    background: var(--app-bg);
+    color: var(--app-accent);
     display: flex;
     align-items: center;
     justify-content: center;

@@ -7,7 +7,7 @@ withDefaults(
   }>(),
   {
     active: false,
-    color: '#ffffff'
+    color: 'var(--app-text-secondary)'
   }
 )
 </script>
@@ -34,8 +34,8 @@ withDefaults(
   min-height: 64rpx;
   padding: 0 32rpx;
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface);
+  border: 1rpx solid var(--app-border);
   font-size: 24rpx;
   font-weight: 800;
   transition: all 0.2s ease;

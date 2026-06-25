@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onMounted, ref, watch } from 'vue'
 import type { BodyMetricTrendPoint } from '@/api/user'
+import { useThemeStore } from '@/stores/theme'
 
 const props = withDefaults(
   defineProps<{
@@ -16,6 +17,7 @@ const props = withDefaults(
 )
 
 const instance = getCurrentInstance()
+const themeStore = useThemeStore()
 const canvasWidth = ref(320)
 const canvasHeight = computed(() => props.height)
 const selectedIndex = ref<number | null>(null)
@@ -24,9 +26,26 @@ const selectedPoint = computed(() => {
   if (selectedIndex.value === null) return null
   return props.points[selectedIndex.value] || null
 })
+const chartColors = computed(() =>
+  themeStore.resolvedTheme === 'dark'
+    ? {
+        accent: '#ff7138',
+        accentSoft: 'rgba(255, 113, 56, 0.28)',
+        pointActive: '#f5f6f8',
+        grid: 'rgba(255, 255, 255, 0.08)',
+        muted: '#9399a6'
+      }
+    : {
+        accent: '#ff6418',
+        accentSoft: 'rgba(255, 100, 24, 0.22)',
+        pointActive: '#ffffff',
+        grid: 'rgba(31, 49, 72, 0.1)',
+        muted: '#8491a3'
+      }
+)
 
 watch(
-  () => [props.points, selectedIndex.value, props.height],
+  () => [props.points, selectedIndex.value, props.height, themeStore.resolvedTheme],
   () => {
     nextTick(drawChart)
   },
@@ -72,7 +91,7 @@ function drawChart() {
   drawGrid(ctx, width, padding, chartHeight)
 
   if (points.length < 2) {
-    ctx.setFillStyle('#828296')
+    ctx.setFillStyle(chartColors.value.muted)
     ctx.setFontSize(13)
     ctx.setTextAlign('center')
     ctx.fillText('记录 2 次后生成趋势', width / 2, height / 2)
@@ -90,7 +109,7 @@ function drawChart() {
     return { x, y }
   })
 
-  ctx.setStrokeStyle('rgba(255, 80, 30, 0.28)')
+  ctx.setStrokeStyle(chartColors.value.accentSoft)
   ctx.setLineWidth(8)
   ctx.setLineCap('round')
   ctx.beginPath()
@@ -100,7 +119,7 @@ function drawChart() {
   })
   ctx.stroke()
 
-  ctx.setStrokeStyle('#ff7b3c')
+  ctx.setStrokeStyle(chartColors.value.accent)
   ctx.setLineWidth(3)
   ctx.beginPath()
   coordinates.forEach((point, index) => {
@@ -112,7 +131,7 @@ function drawChart() {
   coordinates.forEach((point, index) => {
     const active = selectedIndex.value === index
     ctx.beginPath()
-    ctx.setFillStyle(active ? '#f7f7fb' : '#ff7b3c')
+    ctx.setFillStyle(active ? chartColors.value.pointActive : chartColors.value.accent)
     ctx.arc(point.x, point.y, active ? 5 : 3, 0, Math.PI * 2)
     ctx.fill()
   })
@@ -127,7 +146,7 @@ function drawGrid(
   padding: { top: number; right: number; bottom: number; left: number },
   chartHeight: number
 ) {
-  ctx.setStrokeStyle('rgba(255, 255, 255, 0.08)')
+  ctx.setStrokeStyle(chartColors.value.grid)
   ctx.setLineWidth(1)
   for (let i = 0; i < 4; i += 1) {
     const y = padding.top + (chartHeight * i) / 3
@@ -147,7 +166,7 @@ function drawAxisLabels(
   minValue: number,
   maxValue: number
 ) {
-  ctx.setFillStyle('#828296')
+  ctx.setFillStyle(chartColors.value.muted)
   ctx.setFontSize(10)
   ctx.setTextAlign('right')
   ctx.fillText(`${Number(maxValue.toFixed(1))}`, padding.left - 8, padding.top + 4)
@@ -213,8 +232,8 @@ function handleTouch(event: TouchEvent) {
     display: inline-flex;
     align-items: center;
     gap: 12rpx;
-    color: #f7f7fb;
-    background: rgba(255, 80, 30, 0.14);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     border: 1rpx solid rgba(255, 80, 30, 0.28);
     font-size: 22rpx;
     font-weight: 800;

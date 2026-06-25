@@ -5,6 +5,7 @@ import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
 import { usePlanStore } from '@/stores/plan'
+import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
@@ -25,6 +26,7 @@ const difficultyOptions = [
 ]
 
 const planStore = usePlanStore()
+const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
 const name = ref('')
 const goal = ref('')
@@ -106,8 +108,8 @@ async function savePlan() {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell plan-edit safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell plan-edit operation-page safe-bottom" :class="themeStore.themeClass">
       <AppHeader title="编辑计划" subtitle="只支持编辑复制到我的计划" show-back @back="goBack" />
 
       <view class="glass-card plan-edit__form">
@@ -171,7 +173,7 @@ async function savePlan() {
   }
 
   &__label {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 24rpx;
     font-weight: 900;
   }
@@ -181,8 +183,9 @@ async function savePlan() {
     min-height: 76rpx;
     padding: 0 22rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.06);
-    color: #f5f5fa;
+    border: 1rpx solid var(--app-border);
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     font-size: 26rpx;
   }
 
@@ -200,16 +203,16 @@ async function savePlan() {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: #b8b8c8;
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
+    color: var(--app-text-secondary);
     font-size: 24rpx;
     font-weight: 900;
 
     &--active {
-      background: rgba(255, 80, 30, 0.16);
-      border-color: rgba(255, 80, 30, 0.56);
-      color: #ff7a32;
+      background: var(--app-accent-soft);
+      border-color: rgba(255, 100, 24, 0.36);
+      color: var(--app-accent);
     }
   }
 

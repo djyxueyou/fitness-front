@@ -12,6 +12,8 @@ export interface TrainingHistoryItemResponse {
   templateId?: number
   trainingName: string
   templateName?: string
+  coverUrl?: string
+  coverRecordType?: string
   startedAt: string
   endedAt: string
   durationSeconds: number
@@ -44,6 +46,9 @@ export interface TrainingItemDetailResponse {
   previousMaxWeightKg?: number | null
   maxWeightDeltaKg?: number | null
   firstRecord?: boolean
+  thumbnailSource?: string
+  thumbnailPath?: string
+  thumbnailUrl?: string
   sets: TrainingSetResponse[]
 }
 
@@ -127,6 +132,13 @@ export interface SaveTrainingSetRequest {
   weightKg?: number
   reps?: number
   durationSeconds?: number
+  setType?: 'NORMAL' | 'WARMUP' | 'DROP' | 'FAILURE'
+  effort?: 'RIR_4_PLUS' | 'RIR_2_3' | 'RIR_1' | 'RIR_0' | 'FAILED'
+  plannedWeightKg?: number
+  plannedReps?: number
+  plannedDurationSeconds?: number
+  targetSource?: 'PLAN' | 'TEMPLATE' | 'LAST_PERFORMANCE' | 'PROGRESSION_RECOMMENDATION' | 'MANUAL'
+  sourceRecommendationId?: string
 }
 
 export interface SaveTrainingItemRequest {

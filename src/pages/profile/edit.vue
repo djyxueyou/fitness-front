@@ -10,10 +10,12 @@ import {
   uploadAvatar
 } from '@/api/user'
 import { useProfileStore } from '@/stores/profile'
+import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 
 const profileStore = useProfileStore()
+const themeStore = useThemeStore()
 const saving = ref(false)
 const nickname = ref('')
 const avatarUrl = ref('')
@@ -321,8 +323,8 @@ function navigateToPage(url: string) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell profile-edit safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell profile-edit safe-bottom" :class="themeStore.themeClass">
       <AppHeader title="编辑资料" subtitle="完善个人信息与训练偏好" show-back @back="goBack" />
 
       <view class="profile-edit__hero">

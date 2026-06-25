@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import type { Template } from '@/types/template'
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
 
 defineProps<{
   template: Template
@@ -15,7 +18,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <view class="glass-card template-item btn-press" @tap="emit('detail', template.id)">
+  <view
+    class="glass-card template-item btn-press"
+    :class="themeStore.themeClass"
+    @tap="emit('detail', template.id)"
+  >
     <view class="template-item__top">
       <view
         class="template-item__badge"
@@ -103,14 +110,14 @@ const emit = defineEmits<{
     padding: 6rpx 12rpx;
     border-radius: 999rpx;
     background: rgba(255, 80, 30, 0.14);
-    color: #ff501e;
+    color: var(--app-accent);
     font-size: 18rpx;
     flex-shrink: 0;
   }
 
   &__meta {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
@@ -124,8 +131,8 @@ const emit = defineEmits<{
   &__edit {
     padding: 16rpx 20rpx;
     border-radius: 18rpx;
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     font-size: 22rpx;
   }
 

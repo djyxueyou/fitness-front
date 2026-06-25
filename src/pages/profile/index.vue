@@ -11,12 +11,14 @@ import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import { useProfileStore } from '@/stores/profile'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
+import { useThemeStore } from '@/stores/theme'
 import { formatCompactWeight } from '@/utils/unit'
 import { fetchCultivationProfile, type CultivationProfileResponse } from '@/api/cultivation'
 
 const profileStore = useProfileStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
+const themeStore = useThemeStore()
 const authChecking = ref(true)
 const cultivation = ref<CultivationProfileResponse | null>(null)
 const showCultivationDetail = ref(false)
@@ -29,7 +31,9 @@ const profileSubtitle = computed(() => {
   return `${goal} · ${level}`
 })
 const cultivationTitle = computed(() =>
-  cultivation.value ? `${cultivation.value.realmName} · ${cultivation.value.stageName}` : '炼体期 · 一重'
+  cultivation.value
+    ? `${cultivation.value.realmName} · ${cultivation.value.stageName}`
+    : '炼体期 · 一重'
 )
 const cultivationProgressText = computed(() =>
   cultivation.value
@@ -172,7 +176,11 @@ onShow(async () => {
     uni.switchTab({ url: routes.home })
     return
   }
-  await Promise.all([profileStore.refreshProfile(), profileStore.refreshSummary(), refreshCultivation()])
+  await Promise.all([
+    profileStore.refreshProfile(),
+    profileStore.refreshSummary(),
+    refreshCultivation()
+  ])
   authChecking.value = false
   authFlowRunning = false
 })
@@ -268,8 +276,8 @@ function isRealmUnlocked(index: number) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell tab-page safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell tab-page profile-page safe-bottom" :class="themeStore.themeClass">
       <view v-if="authChecking && !getToken()" class="profile__auth-state muted">
         正在打开登录授权...
       </view>
@@ -288,10 +296,7 @@ function isRealmUnlocked(index: number) {
             <view class="profile__settings btn-press" @tap="openPage(routes.settings)">⚙</view>
           </view>
 
-          <view
-            class="profile__cultivation btn-press"
-            @tap="openCultivationDetail"
-          >
+          <view class="profile__cultivation btn-press" @tap="openCultivationDetail">
             <view class="profile__cultivation-main">
               <view class="profile__cultivation-label">当前境界</view>
               <view class="profile__cultivation-title">{{ cultivationTitle }}</view>
@@ -345,7 +350,9 @@ function isRealmUnlocked(index: number) {
             class="profile__menu-item btn-press"
             @tap="openPage(item.path)"
           >
-            <view class="profile__menu-icon" :style="{ background: getToneBg(item.tone) }">{{ item.icon }}</view>
+            <view class="profile__menu-icon" :style="{ background: getToneBg(item.tone) }">{{
+              item.icon
+            }}</view>
             <view class="profile__menu-body">
               <view class="profile__menu-title">{{ item.label }}</view>
               <view class="profile__menu-sub">{{ item.sub }}</view>
@@ -358,7 +365,11 @@ function isRealmUnlocked(index: number) {
       </template>
     </view>
   </scroll-view>
-  <view v-if="showCultivationDetail" class="profile__cultivation-overlay" @tap="closeCultivationDetail">
+  <view
+    v-if="showCultivationDetail"
+    class="profile__cultivation-overlay"
+    @tap="closeCultivationDetail"
+  >
     <view class="profile__cultivation-sheet" :style="cultivationCardStyle" @tap.stop>
       <view class="profile__cultivation-handle" />
       <view class="profile__cultivation-sheet-top">
@@ -412,7 +423,13 @@ function isRealmUnlocked(index: number) {
             />
             <view class="profile__realm-item-name">{{ item.label }}</view>
             <view class="profile__realm-item-state">
-              {{ isRealmCurrent(item.visualKey) ? '当前' : isRealmUnlocked(index) ? item.aura : '未解锁' }}
+              {{
+                isRealmCurrent(item.visualKey)
+                  ? '当前'
+                  : isRealmUnlocked(index)
+                    ? item.aura
+                    : '未解锁'
+              }}
             </view>
           </view>
         </view>
@@ -425,16 +442,27 @@ function isRealmUnlocked(index: number) {
       </view>
 
       <view class="profile__cultivation-actions">
-        <view class="gradient-fire profile__cultivation-action btn-press" @tap="goTrainFromCultivation">
+        <view
+          class="gradient-fire profile__cultivation-action btn-press"
+          @tap="goTrainFromCultivation"
+        >
           去训练
         </view>
-        <view class="glass-card profile__cultivation-action btn-press" @tap="goAnalysisFromCultivation">
+        <view
+          class="glass-card profile__cultivation-action btn-press"
+          @tap="goAnalysisFromCultivation"
+        >
           查看训练分析
         </view>
       </view>
     </view>
   </view>
-  <WorkoutDraftFab :visible="!showCultivationDetail" @open="openDraftFab" />
+  <WorkoutDraftFab
+    :class="themeStore.themeClass"
+    :visible="!showCultivationDetail"
+    variant="light"
+    @open="openDraftFab"
+  />
   <WorkoutDraftPrompt />
 </template>
 
@@ -678,8 +706,7 @@ function isRealmUnlocked(index: number) {
       height: 520rpx;
       margin: 0 0 -18rpx;
       background:
-        radial-gradient(circle at 50% 38%, var(--cultivation-theme), transparent 52%),
-        transparent;
+        radial-gradient(circle at 50% 38%, var(--cultivation-theme), transparent 52%), transparent;
     }
 
     :deep(.cultivation-figure--immersive .cultivation-figure__image) {
@@ -711,8 +738,7 @@ function isRealmUnlocked(index: number) {
     margin: 0;
     padding: 22rpx 20rpx 24rpx;
     border-radius: 32rpx 32rpx 0 0;
-    background:
-      linear-gradient(180deg, rgba(24, 25, 29, 0.94), rgba(10, 10, 14, 0.9));
+    background: linear-gradient(180deg, rgba(24, 25, 29, 0.94), rgba(10, 10, 14, 0.9));
     border-bottom: 1rpx solid rgba(255, 255, 255, 0.06);
     color: #f5f5fa;
     text-align: center;
@@ -866,9 +892,9 @@ function isRealmUnlocked(index: number) {
     grid-template-columns: repeat(3, 1fr);
     margin-top: 16rpx;
     overflow: hidden;
-    border-radius: 24rpx;
-    background: rgba(255, 255, 255, 0.035);
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    border-radius: 22rpx;
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
   }
 
   &__stat {
@@ -886,7 +912,7 @@ function isRealmUnlocked(index: number) {
       top: 22rpx;
       bottom: 22rpx;
       width: 1rpx;
-      background: rgba(255, 255, 255, 0.07);
+      background: var(--app-border);
     }
   }
 
@@ -895,7 +921,7 @@ function isRealmUnlocked(index: number) {
   }
 
   &__stat-value {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 25rpx;
     font-weight: 900;
   }
@@ -909,24 +935,24 @@ function isRealmUnlocked(index: number) {
   }
 
   &__section-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 29rpx;
-    font-weight: 900;
+    font-weight: 800;
   }
 
   &__quick-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14rpx;
+    gap: 12rpx;
   }
 
   &__quick-item {
-    min-height: 164rpx;
-    padding: 22rpx;
+    min-height: 144rpx;
+    padding: 20rpx;
     border-radius: 24rpx;
-    background:
-      linear-gradient(155deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.025));
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
+    box-shadow: none;
   }
 
   &__quick-icon {
@@ -941,14 +967,14 @@ function isRealmUnlocked(index: number) {
 
   &__quick-title {
     margin-top: 16rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 26rpx;
-    font-weight: 900;
+    font-weight: 800;
   }
 
   &__quick-sub {
     margin-top: 7rpx;
-    color: #858598;
+    color: var(--app-text-muted);
     font-size: 20rpx;
     line-height: 1.35;
   }
@@ -956,19 +982,20 @@ function isRealmUnlocked(index: number) {
   &__menu {
     overflow: hidden;
     border-radius: 24rpx;
-    background: rgba(255, 255, 255, 0.032);
-    border: 1rpx solid rgba(255, 255, 255, 0.07);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
+    box-shadow: none;
   }
 
   &__menu-item {
     display: flex;
     align-items: center;
     gap: 18rpx;
-    min-height: 104rpx;
-    padding: 18rpx 22rpx;
+    min-height: 96rpx;
+    padding: 16rpx 22rpx;
 
     & + & {
-      border-top: 1rpx solid rgba(255, 255, 255, 0.065);
+      border-top: 1rpx solid var(--app-border);
     }
   }
 
@@ -976,7 +1003,7 @@ function isRealmUnlocked(index: number) {
     width: 56rpx;
     height: 56rpx;
     border-radius: 18rpx;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--app-accent-soft);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -987,26 +1014,26 @@ function isRealmUnlocked(index: number) {
   }
 
   &__menu-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 25rpx;
-    font-weight: 900;
+    font-weight: 800;
   }
 
   &__menu-sub {
     margin-top: 5rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
   }
 
   &__menu-arrow {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 28rpx;
   }
 
   &__logout {
     margin-top: 26rpx;
     padding: 22rpx 24rpx;
-    color: #ff6b4a;
+    color: var(--app-danger);
     text-align: center;
     font-size: 24rpx;
     font-weight: 800;

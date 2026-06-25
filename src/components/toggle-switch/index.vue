@@ -18,7 +18,7 @@ const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
   width: 84rpx;
   height: 48rpx;
   border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--app-border-strong);
   padding: 4rpx;
   transition: all 0.25s ease;
 

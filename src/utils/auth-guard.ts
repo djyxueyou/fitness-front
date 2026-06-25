@@ -1,5 +1,5 @@
 import { getToken } from '@/api/http'
-import { bootstrapAuth } from '@/utils/auth-bootstrap'
+import { bootstrapAuth } from '@/utils/auth-session'
 import { emitAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
 

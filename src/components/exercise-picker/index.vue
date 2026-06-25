@@ -13,6 +13,7 @@ import {
 } from '@/api/exercise'
 import { getToken } from '@/api/http'
 import { useExerciseStore } from '@/stores/exercise'
+import { useThemeStore } from '@/stores/theme'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 
 type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
@@ -39,6 +40,7 @@ const emit = defineEmits<{
 }>()
 
 const exerciseStore = useExerciseStore()
+const themeStore = useThemeStore()
 const categoryOptions = ref<Array<{ code: string; name: string }>>([{ code: '', name: '全部' }])
 const quickFilter = ref('all')
 const activeCategoryCode = ref('')
@@ -235,6 +237,8 @@ async function submitCustomExercise(payload: { name: string; recordType: Exercis
       primaryMuscle: '',
       equipment: '',
       difficultyLevel: 'BEGINNER',
+      difficultyCode: 'BEGINNER',
+      difficultyName: '初级',
       recordType: payload.recordType,
       exerciseType: 'USER'
     }
@@ -255,7 +259,7 @@ function isSelected(exerciseId: number) {
 </script>
 
 <template>
-  <view v-if="visible" class="exercise-picker__mask">
+  <view v-if="visible" class="exercise-picker__mask" :class="themeStore.themeClass">
     <view class="exercise-picker">
       <view class="exercise-picker__head">
         <view>
@@ -375,8 +379,9 @@ function isSelected(exerciseId: number) {
   z-index: 31;
   padding: 28rpx;
   border-radius: 36rpx 36rpx 0 0;
-  background: #101018;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-focus);
 
   &__mask {
     position: fixed;
@@ -392,7 +397,7 @@ function isSelected(exerciseId: number) {
   }
 
   &__title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 34rpx;
     font-weight: 800;
   }
@@ -401,7 +406,7 @@ function isSelected(exerciseId: number) {
   &__meta,
   &__footer {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
@@ -412,8 +417,8 @@ function isSelected(exerciseId: number) {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text);
     font-size: 36rpx;
   }
 
@@ -423,12 +428,12 @@ function isSelected(exerciseId: number) {
   }
 
   &__search-input {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 26rpx;
   }
 
   &__placeholder {
-    color: #828296;
+    color: var(--app-text-muted);
   }
 
   &__quick {
@@ -440,13 +445,13 @@ function isSelected(exerciseId: number) {
   &__quick-item {
     padding: 14rpx 22rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.06);
-    color: #b8b8c8;
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     font-size: 22rpx;
 
     &--active {
       background: rgba(255, 80, 30, 0.16);
-      color: #ff7a32;
+      color: var(--app-accent);
       font-weight: 800;
     }
   }
@@ -465,8 +470,8 @@ function isSelected(exerciseId: number) {
   &__category {
     padding: 14rpx 22rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.08);
-    color: #f5f5fa;
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
     font-size: 24rpx;
 
     &--active {
@@ -496,20 +501,20 @@ function isSelected(exerciseId: number) {
   }
 
   &__custom-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 26rpx;
     font-weight: 800;
   }
 
   &__custom-sub {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
   &__custom-action {
     flex-shrink: 0;
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 24rpx;
     font-weight: 800;
   }
@@ -527,7 +532,7 @@ function isSelected(exerciseId: number) {
     align-items: center;
     justify-content: center;
     background: rgba(255, 80, 30, 0.14);
-    color: #ff501e;
+    color: var(--app-accent);
     font-size: 30rpx;
     font-weight: 800;
   }
@@ -538,18 +543,18 @@ function isSelected(exerciseId: number) {
   }
 
   &__name {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 28rpx;
     font-weight: 700;
   }
 
   &__action {
-    color: #ff501e;
+    color: var(--app-accent);
     font-size: 24rpx;
     font-weight: 700;
 
     &--selected {
-      color: #828296;
+      color: var(--app-text-muted);
     }
   }
 

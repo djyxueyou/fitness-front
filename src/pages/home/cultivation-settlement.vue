@@ -7,8 +7,10 @@ import {
   settleTrainingCultivation,
   type CultivationSettlementResponse
 } from '@/api/cultivation'
+import { useThemeStore } from '@/stores/theme'
 import { routes } from '@/utils/navigation'
 
+const themeStore = useThemeStore()
 const trainingId = ref(0)
 const loading = ref(false)
 const settlement = ref<CultivationSettlementResponse | null>(null)
@@ -90,8 +92,8 @@ function goHome() {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell cultivation-settlement safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell cultivation-settlement safe-bottom" :class="themeStore.themeClass">
       <AppHeader title="修炼结算" subtitle="训练已保存，查看本次修为增长" />
 
       <view class="cultivation-settlement__hero" :style="settlementStyle">

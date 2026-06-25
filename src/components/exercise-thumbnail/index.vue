@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { exerciseDefaultImageUrl } from '@/utils/static-assets'
 
 const props = defineProps<{
   name: string
@@ -18,9 +19,9 @@ watch(
 )
 
 const fallbackSource = computed(() => {
-  if (props.recordType === 'DURATION') return '/static/exercise-defaults/duration.jpg'
-  if (props.recordType === 'BODYWEIGHT_REPS') return '/static/exercise-defaults/bodyweight-reps.jpg'
-  return '/static/exercise-defaults/weight-reps.jpg'
+  if (props.recordType === 'DURATION') return exerciseDefaultImageUrl('duration.jpg')
+  if (props.recordType === 'BODYWEIGHT_REPS') return exerciseDefaultImageUrl('bodyweight-reps.jpg')
+  return exerciseDefaultImageUrl('weight-reps.jpg')
 })
 </script>
 

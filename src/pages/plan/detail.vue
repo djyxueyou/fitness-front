@@ -5,6 +5,7 @@ import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
+import ShareCardSheet from '@/components/share-card-sheet/index.vue'
 import TemplateCover from '@/components/template-cover/index.vue'
 import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
@@ -15,6 +16,8 @@ import { usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
+import { useThemeStore } from '@/stores/theme'
+import { fetchPlanDaySharePreview, type SharePreviewResponse } from '@/api/share'
 import type { TrainingPlanDayResponse, TrainingPlanDetailResponse } from '@/api/plan'
 import {
   fetchPlanActivationOptions,
@@ -35,6 +38,7 @@ const planStore = usePlanStore()
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
+const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
 const detail = ref<TrainingPlanDetailResponse | null>(null)
 const loading = ref(false)
@@ -45,6 +49,9 @@ const sheetSubtitle = ref('')
 const sheetItems = ref<ActionSheetItem[]>([])
 const sheetTargetDay = ref<TrainingPlanDayResponse | null>(null)
 const copiedPlanId = ref<number | null>(null)
+const shareVisible = ref(false)
+const shareLoading = ref(false)
+const sharePreview = ref<SharePreviewResponse | null>(null)
 
 const weeks = computed(() => {
   const grouped = new Map<number, TrainingPlanDayResponse[]>()
@@ -70,9 +77,7 @@ const sortedDays = computed(() =>
     (a, b) => a.weekIndex - b.weekIndex || a.dayOfWeek - b.dayOfWeek || a.sortOrder - b.sortOrder
   )
 )
-const nextPlanDay = computed(
-  () => sortedDays.value.find((day) => canStartDay(day)) || null
-)
+const nextPlanDay = computed(() => sortedDays.value.find((day) => canStartDay(day)) || null)
 const canEditPlan = computed(() => detail.value?.planType !== 'SYSTEM')
 const canEditSchedule = computed(() => canEditPlan.value && !detail.value?.active)
 const hasPlanDays = computed(() => Boolean(detail.value?.days.length))
@@ -178,9 +183,10 @@ async function performActivatePlan(mode: 'THIS_WEEK' | 'NEXT_WEEK') {
     uni.showToast({ title: '已启用训练计划', icon: 'none' })
   } catch (err) {
     uni.showToast({
-      title: err instanceof Error && err.message.includes('at least one training day')
-        ? '请先新增训练日后再启用'
-        : '启用失败',
+      title:
+        err instanceof Error && err.message.includes('at least one training day')
+          ? '请先新增训练日后再启用'
+          : '启用失败',
       icon: 'none'
     })
     console.error('[plan] activate failed', err)
@@ -212,9 +218,10 @@ async function openActivationSheet() {
     sheetVisible.value = true
   } catch (err) {
     uni.showToast({
-      title: err instanceof Error && err.message.includes('at least one training day')
-        ? '请先新增训练日后再启用'
-        : '加载生效周期失败',
+      title:
+        err instanceof Error && err.message.includes('at least one training day')
+          ? '请先新增训练日后再启用'
+          : '加载生效周期失败',
       icon: 'none'
     })
     console.error('[plan] activation options failed', err)
@@ -253,6 +260,34 @@ async function copyPlan() {
   } finally {
     busy.value = false
   }
+}
+
+async function openPlanDayShareCard(day: TrainingPlanDayResponse) {
+  if (!detail.value) return
+  shareVisible.value = true
+  shareLoading.value = true
+  try {
+    sharePreview.value = await fetchPlanDaySharePreview(detail.value.id, day.id)
+  } catch (err) {
+    shareVisible.value = false
+    uni.showToast({ title: '分享预览生成失败', icon: 'none' })
+    console.error('[share] plan day preview failed', err)
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+function closeShareCard() {
+  shareVisible.value = false
+}
+
+function copyShareText() {
+  const text = sharePreview.value?.copyText
+  if (!text) return
+  uni.setClipboardData({
+    data: text,
+    success: () => uni.showToast({ title: '已复制分享文案', icon: 'none' })
+  })
 }
 
 function openCopiedPlanSheet(id: number, name: string) {
@@ -390,6 +425,11 @@ function openDayActions(day: TrainingPlanDayResponse) {
         label: '查看训练记录',
         description: '查看这个训练日已完成的训练详情。',
         primary: true
+      },
+      {
+        key: 'share-day',
+        label: '分享训练日',
+        description: '生成这个训练日的动作安排分享图。'
       }
     ]
   } else if (detail.value?.active && canStartDay(day)) {
@@ -399,6 +439,11 @@ function openDayActions(day: TrainingPlanDayResponse) {
         label: actionText(day),
         description: '完成后会记录到当前计划执行进度。',
         primary: true
+      },
+      {
+        key: 'share-day',
+        label: '分享训练日',
+        description: '生成这个训练日的动作安排分享图。'
       },
       {
         key: 'skip-day',
@@ -414,6 +459,11 @@ function openDayActions(day: TrainingPlanDayResponse) {
         label: '恢复为待训练',
         description: '恢复后将重新按日期判断待训练或待补练状态。',
         primary: true
+      },
+      {
+        key: 'share-day',
+        label: '分享训练日',
+        description: '生成这个训练日的动作安排分享图。'
       }
     ]
   } else if (canEditSchedule.value) {
@@ -423,6 +473,11 @@ function openDayActions(day: TrainingPlanDayResponse) {
         label: '编辑训练日',
         description: '调整周次、周几或替换使用的模板。',
         primary: true
+      },
+      {
+        key: 'share-day',
+        label: '分享训练日',
+        description: '生成这个训练日的动作安排分享图。'
       },
       {
         key: 'delete-day',
@@ -482,6 +537,10 @@ async function handleSheetSelect(item: ActionSheetItem) {
     return
   }
   if (!day) return
+  if (item.key === 'share-day') {
+    await openPlanDayShareCard(day)
+    return
+  }
   if (item.key === 'start-day') {
     await startPlanDay(day)
     return
@@ -633,7 +692,9 @@ function planDayStatusText(day: TrainingPlanDayResponse) {
   }
   const status = labels[day.status || ''] || '未训练'
   const suffix = day.status === 'SKIPPED' ? ' · 不计入本次进度' : ''
-  return day.scheduledDate ? `${formatPlanDate(day.scheduledDate)} · ${status}${suffix}` : `${status}${suffix}`
+  return day.scheduledDate
+    ? `${formatPlanDate(day.scheduledDate)} · ${status}${suffix}`
+    : `${status}${suffix}`
 }
 
 function actionText(day: TrainingPlanDayResponse) {
@@ -646,7 +707,10 @@ function actionText(day: TrainingPlanDayResponse) {
 }
 
 function canStartDay(day: TrainingPlanDayResponse) {
-  return Boolean(detail.value?.active) && ['START_EARLY', 'START', 'MAKE_UP'].includes(day.actionType || '')
+  return (
+    Boolean(detail.value?.active) &&
+    ['START_EARLY', 'START', 'MAKE_UP'].includes(day.actionType || '')
+  )
 }
 
 function formatPlanDate(value: string) {
@@ -727,8 +791,8 @@ function difficultyText(level?: string) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell plan-detail safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell plan-detail secondary-page safe-bottom" :class="themeStore.themeClass">
       <AppHeader
         title="计划详情"
         subtitle="按周查看训练日，也可以直接开始单日训练"
@@ -755,10 +819,7 @@ function difficultyText(level?: string) {
               <text>{{ progressPercent }}%</text>
             </view>
             <view class="plan-detail__progress-track">
-              <view
-                class="plan-detail__progress-fill"
-                :style="{ width: `${progressPercent}%` }"
-              />
+              <view class="plan-detail__progress-fill" :style="{ width: `${progressPercent}%` }" />
             </view>
           </view>
         </view>
@@ -839,10 +900,10 @@ function difficultyText(level?: string) {
                     </view>
                   </template>
                 </view>
-                </view>
               </view>
             </view>
           </view>
+        </view>
 
         <view v-else class="glass-card plan-detail__empty">
           <view>
@@ -876,14 +937,22 @@ function difficultyText(level?: string) {
       </view>
     </view>
   </scroll-view>
-  <WorkoutDraftFab @open="openDraftFab" />
+  <WorkoutDraftFab :class="themeStore.themeClass" variant="light" @open="openDraftFab" />
   <AppActionSheet
+    :class="themeStore.themeClass"
     :visible="sheetVisible"
     :title="sheetTitle"
     :subtitle="sheetSubtitle"
     :items="sheetItems"
     @close="closeSheet"
     @select="handleSheetSelect"
+  />
+  <ShareCardSheet
+    :visible="shareVisible"
+    :preview="sharePreview"
+    :loading="shareLoading"
+    @close="closeShareCard"
+    @copy="copyShareText"
   />
   <WorkoutDraftPrompt />
   <MembershipRequiredModal />
@@ -911,8 +980,8 @@ function difficultyText(level?: string) {
     width: 64rpx;
     height: 64rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.07);
-    color: #ff9b58;
+    background: var(--app-bg);
+    color: var(--app-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -931,28 +1000,28 @@ function difficultyText(level?: string) {
     display: inline-flex;
     padding: 8rpx 18rpx;
     border-radius: 999rpx;
-    background: rgba(255, 80, 30, 0.14);
-    color: #ff7a32;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     font-size: 22rpx;
     font-weight: 800;
 
     &--active {
       background: rgba(80, 220, 180, 0.14);
-      color: #3dd9a2;
+      color: var(--app-success);
     }
   }
 
   &__title {
     margin-top: 22rpx;
     padding-right: 76rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 42rpx;
     font-weight: 900;
   }
 
   &__meta {
     margin-top: 12rpx;
-    color: #a6a6b8;
+    color: var(--app-text-muted);
     font-size: 24rpx;
   }
 
@@ -963,7 +1032,7 @@ function difficultyText(level?: string) {
   &__progress-head {
     display: flex;
     justify-content: space-between;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 22rpx;
     font-weight: 800;
   }
@@ -973,7 +1042,7 @@ function difficultyText(level?: string) {
     margin-top: 12rpx;
     overflow: hidden;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--app-border);
   }
 
   &__progress-fill {
@@ -988,7 +1057,7 @@ function difficultyText(level?: string) {
   }
 
   &__next-label {
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 21rpx;
     font-weight: 900;
   }
@@ -1006,14 +1075,14 @@ function difficultyText(level?: string) {
   }
 
   &__next-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 27rpx;
     font-weight: 900;
   }
 
   &__next-sub {
     margin-top: 7rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 21rpx;
     line-height: 1.45;
   }
@@ -1026,15 +1095,15 @@ function difficultyText(level?: string) {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: #ff7a32;
-    background: rgba(255, 80, 30, 0.14);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     font-size: 21rpx;
     font-weight: 900;
   }
 
   &__week-title {
     margin: 10rpx 0 16rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 900;
   }
@@ -1064,8 +1133,8 @@ function difficultyText(level?: string) {
     width: 58rpx;
     height: 58rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.07);
-    color: #ff9b58;
+    background: var(--app-bg);
+    color: var(--app-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1090,8 +1159,8 @@ function difficultyText(level?: string) {
     width: 82rpx;
     height: 72rpx;
     border-radius: 22rpx;
-    background: rgba(255, 80, 30, 0.16);
-    color: #ff7a32;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1106,14 +1175,14 @@ function difficultyText(level?: string) {
   }
 
   &__day-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 28rpx;
     font-weight: 900;
   }
 
   &__day-sub {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
   }
 
@@ -1124,11 +1193,11 @@ function difficultyText(level?: string) {
     justify-content: space-between;
     gap: 16rpx;
     padding-top: 14rpx;
-    border-top: 1rpx solid rgba(255, 255, 255, 0.055);
+    border-top: 1rpx solid var(--app-border);
   }
 
   &__pending {
-    color: #77778b;
+    color: var(--app-text-muted);
     font-size: 21rpx;
   }
 
@@ -1145,21 +1214,21 @@ function difficultyText(level?: string) {
   }
 
   &__start {
-    background: rgba(255, 80, 30, 0.14);
-    color: #ff7a32;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
   }
 
   &__done {
     width: 100%;
     justify-content: flex-start;
     padding: 0;
-    color: #3dd9a2;
+    color: var(--app-success);
     background: transparent;
   }
 
   &__empty {
     padding: 32rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 24rpx;
     line-height: 1.6;
   }
@@ -1172,7 +1241,7 @@ function difficultyText(level?: string) {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff713d;
+    color: var(--app-accent);
     font-weight: 800;
   }
 

@@ -1,0 +1,475 @@
+.theme-light.operation-page,
+.theme-light .operation-page {
+  color: var(--app-text);
+  background: var(--app-bg);
+
+  .glass-card {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+    backdrop-filter: none;
+  }
+
+  .app-header__back {
+    border-color: var(--app-border);
+    color: var(--app-text);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+  }
+}
+
+.theme-light.select-template {
+  .select-template__create,
+  .select-template__empty-action {
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+  }
+
+  .select-template__search,
+  .select-template__tabs {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  .select-template__search-input,
+  .select-template__resume-title,
+  .select-template__empty-title {
+    color: var(--app-text);
+  }
+
+  .select-template__plan-hint,
+  .select-template__placeholder,
+  .select-template__search-icon,
+  .select-template__search-clear,
+  .select-template__tab,
+  .select-template__resume-sub,
+  .select-template__empty {
+    color: var(--app-text-muted);
+  }
+
+  .select-template__tab--active {
+    color: #fff;
+  }
+}
+
+.theme-light.template-detail {
+  .template-detail__hero-more,
+  .template-detail__stat {
+    border-color: var(--app-border);
+    background: var(--app-bg);
+  }
+
+  .template-detail__title,
+  .template-detail__stat-value,
+  .template-detail__section-title,
+  .template-detail__item-name {
+    color: var(--app-text);
+  }
+
+  .template-detail__desc,
+  .template-detail__stat-label,
+  .template-detail__item-meta,
+  .template-detail__empty {
+    color: var(--app-text-muted);
+  }
+}
+
+.theme-light.template-edit {
+  background: var(--app-bg);
+
+  .template-edit__form,
+  .template-edit__item,
+  .template-edit__target,
+  .template-edit__footer,
+  .duration-editor {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  .template-edit__label,
+  .template-edit__section-title,
+  .template-edit__name,
+  .template-edit__target-value,
+  .template-edit__empty-title,
+  .duration-editor__title,
+  .duration-editor__input {
+    color: var(--app-text);
+  }
+
+  .template-edit__name-count,
+  .template-edit__section-sub,
+  .template-edit__meta,
+  .template-edit__target-label,
+  .template-edit__sort-label,
+  .template-edit__empty-sub,
+  .duration-editor__sub,
+  .duration-editor__unit {
+    color: var(--app-text-muted);
+  }
+
+  .template-edit__input,
+  .template-edit__step,
+  .template-edit__target-step,
+  .template-edit__mini,
+  .duration-editor__field,
+  .duration-editor__close,
+  .duration-editor__cancel {
+    border-color: var(--app-border);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
+  }
+
+  .duration-editor__mask {
+    background: rgba(22, 34, 53, 0.32);
+  }
+}
+
+.theme-light.template-manager-page {
+  background: var(--app-bg);
+
+  .template-manager__toolbar-title,
+  .template-manager__name,
+  .template-manager__helper-title {
+    color: var(--app-text);
+  }
+
+  .template-manager__toolbar-sub,
+  .template-manager__tab,
+  .template-manager__meta,
+  .template-manager__desc,
+  .template-manager__helper-sub,
+  .template-manager__empty {
+    color: var(--app-text-muted);
+  }
+
+  .template-manager__tabs,
+  .template-manager__item,
+  .template-manager__menu,
+  .template-manager__small-btn {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  .template-manager__tab--active,
+  .template-manager__small-btn--primary {
+    color: #fff;
+  }
+
+  .template-manager__menu,
+  .template-manager__small-btn {
+    color: var(--app-text-secondary);
+  }
+
+  .template-manager__helper {
+    border-color: rgba(255, 100, 24, 0.22);
+    background: var(--app-accent-soft);
+  }
+
+  .template-manager__arrow {
+    border-color: var(--app-text-muted);
+  }
+}
+
+.theme-light.template-item {
+  .template-item__name {
+    color: var(--app-text);
+  }
+
+  .template-item__meta {
+    color: var(--app-text-muted);
+  }
+
+  .template-item__edit {
+    border: 1rpx solid var(--app-border);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
+  }
+}
+
+.theme-light.exercise-picker__mask {
+  background: rgba(22, 34, 53, 0.32);
+
+  .exercise-picker {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-focus);
+  }
+
+  .exercise-picker__title,
+  .exercise-picker__custom-title,
+  .exercise-picker__name {
+    color: var(--app-text);
+  }
+
+  .exercise-picker__sub,
+  .exercise-picker__meta,
+  .exercise-picker__footer,
+  .exercise-picker__custom-sub,
+  .exercise-picker__placeholder {
+    color: var(--app-text-muted);
+  }
+
+  .exercise-picker__close,
+  .exercise-picker__quick-item,
+  .exercise-picker__category {
+    border-color: var(--app-border);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
+  }
+
+  .exercise-picker__quick-item--active {
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+  }
+
+  .exercise-picker__category--active {
+    color: #fff;
+  }
+}
+
+.theme-light.app-action-sheet__mask {
+  background: rgba(22, 34, 53, 0.32);
+
+  .app-action-sheet {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-focus);
+  }
+
+  .app-action-sheet__handle {
+    background: var(--app-border-strong);
+  }
+
+  .app-action-sheet__title,
+  .app-action-sheet__item-label {
+    color: var(--app-text);
+  }
+
+  .app-action-sheet__subtitle,
+  .app-action-sheet__item-desc,
+  .app-action-sheet__item-arrow {
+    color: var(--app-text-muted);
+  }
+
+  .app-action-sheet__close,
+  .app-action-sheet__item,
+  .app-action-sheet__cancel {
+    border-color: var(--app-border);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
+  }
+
+  .app-action-sheet__item--primary {
+    border-color: rgba(255, 100, 24, 0.28);
+    background: var(--app-accent-soft);
+  }
+
+  .app-action-sheet__item--danger {
+    border-color: rgba(227, 75, 75, 0.24);
+    background: rgba(227, 75, 75, 0.08);
+  }
+}
+
+.theme-light.workout-active {
+  color: var(--app-text);
+  background: var(--app-bg);
+
+  .glass-card {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+    box-shadow: 0 5rpx 18rpx rgba(31, 49, 72, 0.055);
+    backdrop-filter: none;
+  }
+
+  .progress-bar {
+    background: var(--app-border);
+    box-shadow: none;
+  }
+
+  .progress-bar__fill {
+    box-shadow: none;
+  }
+
+  .muted,
+  .workout-active__source,
+  .workout-active__stat-label,
+  .workout-active__focus-label,
+  .workout-active__focus-sub,
+  .workout-active__card-sub,
+  .workout-active__last-reference,
+  .workout-active__set-labels,
+  .workout-active__empty-sub,
+  .workout-active__sheet-sub,
+  .workout-active__confirm-desc {
+    color: var(--app-text-muted);
+  }
+
+  .workout-active__title,
+  .workout-active__timer,
+  .workout-active__stat-value,
+  .workout-active__focus-title,
+  .workout-active__switch-index,
+  .workout-active__card-title,
+  .workout-active__menu-item,
+  .workout-active__input,
+  .workout-active__empty-title,
+  .workout-active__confirm-title,
+  .title-lg {
+    color: var(--app-text);
+  }
+
+  .workout-active__close,
+  .workout-active__resume,
+  .workout-active__stepper,
+  .workout-active__set-toggle,
+  .workout-active__finish-exercise--done {
+    border-color: var(--app-border);
+    color: var(--app-text-secondary);
+    background: var(--app-surface);
+  }
+
+  .workout-active__close {
+    box-shadow: 0 6rpx 18rpx rgba(31, 49, 72, 0.08);
+  }
+
+  .workout-active__focus,
+  .workout-active__card--current {
+    border-color: rgba(255, 100, 24, 0.3);
+    background: var(--app-surface-warm);
+    box-shadow: 0 8rpx 24rpx rgba(31, 49, 72, 0.07);
+  }
+
+  .workout-active__focus-pill,
+  .workout-active__current,
+  .workout-active__card-index {
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+  }
+
+  .workout-active__card-index--current {
+    color: #fff;
+    background: var(--app-accent);
+  }
+
+  .workout-active__card--ended {
+    border-color: var(--app-border);
+    background: var(--app-surface);
+  }
+
+  .workout-active__card-title--ended {
+    color: var(--app-text-muted);
+  }
+
+  .workout-active__menu {
+    border-color: var(--app-border);
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-focus);
+  }
+
+  .workout-active__menu-item + .workout-active__menu-item {
+    border-color: var(--app-border);
+  }
+
+  .workout-active__set {
+    border-color: var(--app-border);
+    background: var(--app-surface-subtle);
+  }
+
+  .workout-active__set--current {
+    border-color: rgba(255, 100, 24, 0.52);
+    background: var(--app-surface-selected);
+  }
+
+  .workout-active__set--done {
+    border-color: rgba(114, 191, 130, 0.3);
+    background: rgba(114, 191, 130, 0.08);
+  }
+
+  .workout-active__set--done .workout-active__input,
+  .workout-active__set--done .workout-active__set-index,
+  .workout-active__set--done .workout-active__stepper-btn {
+    color: var(--app-text-secondary);
+  }
+
+  .workout-active__stepper-btn,
+  .workout-active__input--locked {
+    color: var(--app-text-secondary);
+    background: var(--app-surface);
+  }
+
+  .workout-active__stepper {
+    border-color: var(--app-border-strong);
+  }
+
+  .workout-active__stepper-btn {
+    color: var(--app-text-secondary);
+  }
+
+  .workout-active__set-toggle {
+    border-color: var(--app-border-strong);
+    color: var(--app-text-secondary);
+  }
+
+  .workout-active__set-toggle--done {
+    border-color: transparent;
+    color: #fff;
+    background: var(--app-success);
+  }
+
+  .workout-active__switch--disabled {
+    border-color: var(--app-border);
+    color: var(--app-text-muted);
+    background: #eef2f6;
+  }
+
+  .workout-active__action,
+  .workout-active__add-exercise,
+  .workout-active__sheet-btn:not(.gradient-fire),
+  .workout-active__confirm-btn:not(.gradient-fire) {
+    color: var(--app-text-secondary);
+  }
+
+  .workout-active__rest {
+    border-color: rgba(255, 100, 24, 0.3);
+    color: var(--app-text);
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-focus);
+  }
+
+  .workout-active__rest-title {
+    color: var(--app-text-secondary);
+  }
+
+  .workout-active__rest-btn {
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+  }
+
+  .workout-active__rest-btn--primary {
+    color: #fff;
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
+  }
+
+  .workout-active__overlay {
+    background: rgba(22, 34, 53, 0.32);
+  }
+
+  .workout-active__sheet {
+    border-color: var(--app-border);
+    background: var(--app-surface-raised);
+    box-shadow: var(--app-shadow-focus);
+  }
+
+  .workout-active__sheet-handle {
+    background: var(--app-border-strong);
+  }
+
+  .workout-active__confirm-hint {
+    border-color: rgba(255, 100, 24, 0.2);
+    color: var(--app-text-secondary);
+    background: var(--app-accent-soft);
+  }
+}

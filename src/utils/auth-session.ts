@@ -7,7 +7,7 @@ import {
   updateUserProfile
 } from '@/api/user'
 
-const LOGIN_TIMEOUT_MS = 2500
+const DEFAULT_LOGIN_TIMEOUT_MS = 10000
 let loginInFlight: Promise<void> | null = null
 let authRunSeq = 0
 
@@ -39,14 +39,19 @@ function isMockWechatCode(code: string) {
   return !normalized || normalized.includes('mock') || normalized.includes('the code is a mock one')
 }
 
+function getLoginTimeoutMs() {
+  const configured = Number(import.meta.env.VITE_WECHAT_LOGIN_TIMEOUT_MS)
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_LOGIN_TIMEOUT_MS
+}
+
 async function tryGetWechatCodeWithTimeout(): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false
     const timer = setTimeout(() => {
       if (settled) return
       settled = true
-      reject(new Error('uni.login timeout'))
-    }, LOGIN_TIMEOUT_MS)
+      reject(new Error('微信登录超时，请重试'))
+    }, getLoginTimeoutMs())
 
     try {
       uni.login({
@@ -97,8 +102,19 @@ function isLatestRun(runId: number) {
   return runId === authRunSeq
 }
 
+function shouldUseRealWechatLogin() {
+  let isWechatMiniProgram = false
+  // #ifdef MP-WEIXIN
+  isWechatMiniProgram = true
+  // #endif
+  return (
+    isWechatMiniProgram &&
+    String(import.meta.env.VITE_WECHAT_REAL_LOGIN || '').toLowerCase() === 'true'
+  )
+}
+
 async function runLogin(runId: number, options: BootstrapAuthOptions = {}) {
-  const useRealLogin = String(import.meta.env.VITE_WECHAT_REAL_LOGIN || '').toLowerCase() === 'true'
+  const useRealLogin = shouldUseRealWechatLogin()
   let code = mockCode()
 
   if (useRealLogin) {

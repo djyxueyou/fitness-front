@@ -10,6 +10,7 @@ import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import { fetchTrainingHistory, type TrainingHistoryItemResponse } from '@/api/training'
 import { usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
+import { useThemeStore } from '@/stores/theme'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
@@ -18,6 +19,7 @@ import { routes } from '@/utils/navigation'
 import type { Template } from '@/types/template'
 
 const templateStore = useTemplateStore()
+const themeStore = useThemeStore()
 const planStore = usePlanStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
@@ -174,8 +176,11 @@ async function prepareNewWorkout(nextTitle?: string) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view
+      class="page-shell select-template operation-page safe-bottom"
+      :class="themeStore.themeClass"
+    >
       <AppHeader
         title="选择训练模板"
         subtitle="选择一套动作安排，或直接自由训练"
@@ -281,7 +286,10 @@ async function prepareNewWorkout(nextTitle?: string) {
       </view>
     </view>
   </scroll-view>
-  <WorkoutDraftFab @open="openDraftFab" />
+  <WorkoutDraftFab
+    :variant="themeStore.resolvedTheme === 'light' ? 'light' : 'default'"
+    @open="openDraftFab"
+  />
   <WorkoutDraftPrompt />
   <MembershipRequiredModal />
 </template>

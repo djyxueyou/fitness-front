@@ -12,6 +12,10 @@ export interface UserProfileResponse {
   currentWeightKg?: number
   weightUnit: 'kg' | 'lb' | string
   restSeconds: number
+  weightStepKg: number
+  weightStepLb: number
+  repsStep: number
+  durationStepSeconds: number
 }
 
 export interface UpdateUserProfileRequest {
@@ -88,6 +92,10 @@ export interface AvatarUploadResponse {
 export interface UpdateUserSettingRequest {
   weightUnit: 'kg' | 'lb'
   restSeconds: number
+  weightStepKg: number
+  weightStepLb: number
+  repsStep: number
+  durationStepSeconds: number
 }
 
 export interface UserSummaryResponse {

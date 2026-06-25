@@ -9,6 +9,7 @@
     "dev:mp-weixin": "uni -p mp-weixin --mode mp-weixin",
     "build:h5": "uni build",
     "build:mp-weixin": "uni build -p mp-weixin --mode mp-weixin && node scripts/sync-mp-weixin-appid.mjs",
+    "build:mp-weixin:prod": "uni build -p mp-weixin --mode mp-weixin-prod && node scripts/sync-mp-weixin-appid.mjs",
     "build:app-plus": "uni build -p app-plus",
     "format": "prettier --write \"src/**/*.{vue,ts,js,scss,json}\" \"*.{ts,js,json}\"",
     "format:check": "prettier --check \"src/**/*.{vue,ts,js,scss,json}\" \"*.{ts,js,json}\"",

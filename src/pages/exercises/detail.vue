@@ -9,6 +9,7 @@ import { fetchExerciseLastPerformance, type ExerciseLastPerformanceResponse } fr
 import { useExerciseStore } from '@/stores/exercise'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
+import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
@@ -18,6 +19,7 @@ import type { Exercise } from '@/types/exercise'
 const exerciseStore = useExerciseStore()
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
+const themeStore = useThemeStore()
 const exerciseId = ref(0)
 const loading = ref(true)
 const isAdded = ref(false)
@@ -191,8 +193,12 @@ async function addToTemplate() {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view v-if="exercise" class="page-shell exercise-detail safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view
+      v-if="exercise"
+      class="page-shell exercise-detail secondary-page safe-bottom"
+      :class="themeStore.themeClass"
+    >
       <AppHeader
         :title="exercise.name"
         :subtitle="`${exercise.muscle} · ${exercise.category}`"
@@ -324,7 +330,7 @@ async function addToTemplate() {
         添加到模板
       </view>
     </view>
-    <view v-else class="page-shell safe-bottom">
+    <view v-else class="page-shell secondary-page safe-bottom" :class="themeStore.themeClass">
       <view class="muted exercise-detail__empty">
         {{ loading ? '加载中...' : '动作不存在' }}
       </view>

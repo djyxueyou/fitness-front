@@ -11,8 +11,39 @@ import {
   updateUserSettings
 } from '@/api/user'
 
+const TRAINING_PREFERENCES_KEY = 'FITFORGE_TRAINING_PREFERENCES'
+
+interface TrainingPreferences {
+  weightStepKg: number
+  weightStepLb: number
+  repsStep: number
+  durationStepSeconds: number
+  barWeightKg: number
+  restVibration: boolean
+  restSound: boolean
+}
+
+const defaultTrainingPreferences: TrainingPreferences = {
+  weightStepKg: 2.5,
+  weightStepLb: 5,
+  repsStep: 1,
+  durationStepSeconds: 10,
+  barWeightKg: 20,
+  restVibration: true,
+  restSound: false
+}
+
+function getCachedTrainingPreferences(): TrainingPreferences {
+  const cached = uni.getStorageSync(TRAINING_PREFERENCES_KEY) as Partial<TrainingPreferences> | undefined
+  return {
+    ...defaultTrainingPreferences,
+    ...(cached || {})
+  }
+}
+
 export const useProfileStore = defineStore('profile', () => {
   const cached = getCachedUserProfile()
+  const cachedTrainingPreferences = getCachedTrainingPreferences()
   const userId = ref<number | null>(cached?.userId ?? null)
   const nickname = ref(cached?.nickname || 'LiftLog User')
   const avatarUrl = ref(cached?.avatarUrl || '')
@@ -25,6 +56,13 @@ export const useProfileStore = defineStore('profile', () => {
   const darkMode = ref(true)
   const unit = ref<'kg' | 'lb'>(cached?.weightUnit === 'lb' ? 'lb' : 'kg')
   const restSeconds = ref<number>(cached?.restSeconds ?? 60)
+  const weightStepKg = ref(cached?.weightStepKg ?? defaultTrainingPreferences.weightStepKg)
+  const weightStepLb = ref(cached?.weightStepLb ?? defaultTrainingPreferences.weightStepLb)
+  const repsStep = ref(cached?.repsStep ?? defaultTrainingPreferences.repsStep)
+  const durationStepSeconds = ref(cached?.durationStepSeconds ?? defaultTrainingPreferences.durationStepSeconds)
+  const barWeightKg = ref(cachedTrainingPreferences.barWeightKg)
+  const restVibration = ref(cachedTrainingPreferences.restVibration)
+  const restSound = ref(cachedTrainingPreferences.restSound)
   const totalSessions = ref(0)
   const totalVolumeKg = ref(0)
   const currentStreakDays = ref(0)
@@ -41,6 +79,10 @@ export const useProfileStore = defineStore('profile', () => {
       currentWeightKg.value = profile.currentWeightKg ?? null
       unit.value = profile.weightUnit === 'lb' ? 'lb' : 'kg'
       restSeconds.value = profile.restSeconds
+      weightStepKg.value = profile.weightStepKg
+      weightStepLb.value = profile.weightStepLb
+      repsStep.value = profile.repsStep
+      durationStepSeconds.value = profile.durationStepSeconds
       setCachedUserProfile(profile)
     } catch (err) {
       console.error('[profile] refresh failed', err)
@@ -58,10 +100,22 @@ export const useProfileStore = defineStore('profile', () => {
     }
   }
 
-  async function saveSettings(next: { weightUnit: 'kg' | 'lb'; restSeconds: number }) {
-    await updateUserSettings(next)
+  async function saveSettings(next: { weightUnit: 'kg' | 'lb'; restSeconds: number } & Partial<TrainingPreferences>) {
+    const payload = {
+      weightUnit: next.weightUnit,
+      restSeconds: next.restSeconds,
+      weightStepKg: Math.max(0.01, Number(next.weightStepKg ?? weightStepKg.value)),
+      weightStepLb: Math.max(0.01, Number(next.weightStepLb ?? weightStepLb.value)),
+      repsStep: Math.max(1, Math.round(Number(next.repsStep ?? repsStep.value))),
+      durationStepSeconds: Math.max(1, Math.round(Number(next.durationStepSeconds ?? durationStepSeconds.value)))
+    }
+    await updateUserSettings(payload)
     unit.value = next.weightUnit
     restSeconds.value = next.restSeconds
+    weightStepKg.value = payload.weightStepKg
+    weightStepLb.value = payload.weightStepLb
+    repsStep.value = payload.repsStep
+    durationStepSeconds.value = payload.durationStepSeconds
     setCachedUserProfile({
       userId: userId.value || 0,
       nickname: nickname.value,
@@ -71,8 +125,43 @@ export const useProfileStore = defineStore('profile', () => {
       experienceLevel: experienceLevel.value || undefined,
       currentWeightKg: currentWeightKg.value ?? undefined,
       weightUnit: unit.value,
-      restSeconds: restSeconds.value
+      restSeconds: restSeconds.value,
+      weightStepKg: weightStepKg.value,
+      weightStepLb: weightStepLb.value,
+      repsStep: repsStep.value,
+      durationStepSeconds: durationStepSeconds.value
     })
+  }
+
+  async function saveTrainingPreferences(next: Partial<TrainingPreferences>) {
+    const merged = {
+      weightStepKg: Math.max(0.5, Number(next.weightStepKg ?? weightStepKg.value)),
+      weightStepLb: Math.max(1, Number(next.weightStepLb ?? weightStepLb.value)),
+      repsStep: Math.max(1, Math.round(Number(next.repsStep ?? repsStep.value))),
+      durationStepSeconds: Math.max(
+        1,
+        Math.round(Number(next.durationStepSeconds ?? durationStepSeconds.value))
+      ),
+      barWeightKg: Math.max(0, Number(next.barWeightKg ?? barWeightKg.value)),
+      restVibration: next.restVibration ?? restVibration.value,
+      restSound: next.restSound ?? restSound.value
+    }
+
+    const changesProgressionStep = next.weightStepKg !== undefined
+      || next.weightStepLb !== undefined
+      || next.repsStep !== undefined
+      || next.durationStepSeconds !== undefined
+    if (changesProgressionStep) {
+      await saveSettings({
+        weightUnit: unit.value,
+        restSeconds: restSeconds.value,
+        ...merged
+      })
+    }
+    barWeightKg.value = merged.barWeightKg
+    restVibration.value = merged.restVibration
+    restSound.value = merged.restSound
+    uni.setStorageSync(TRAINING_PREFERENCES_KEY, merged)
   }
 
   async function saveProfile(next: {
@@ -102,6 +191,14 @@ export const useProfileStore = defineStore('profile', () => {
     currentWeightKg.value = null
     unit.value = 'kg'
     restSeconds.value = 60
+    weightStepKg.value = defaultTrainingPreferences.weightStepKg
+    weightStepLb.value = defaultTrainingPreferences.weightStepLb
+    repsStep.value = defaultTrainingPreferences.repsStep
+    durationStepSeconds.value = defaultTrainingPreferences.durationStepSeconds
+    barWeightKg.value = defaultTrainingPreferences.barWeightKg
+    restVibration.value = defaultTrainingPreferences.restVibration
+    restSound.value = defaultTrainingPreferences.restSound
+    uni.setStorageSync(TRAINING_PREFERENCES_KEY, defaultTrainingPreferences)
     totalSessions.value = 0
     totalVolumeKg.value = 0
     currentStreakDays.value = 0
@@ -121,6 +218,13 @@ export const useProfileStore = defineStore('profile', () => {
     darkMode,
     unit,
     restSeconds,
+    weightStepKg,
+    weightStepLb,
+    repsStep,
+    durationStepSeconds,
+    barWeightKg,
+    restVibration,
+    restSound,
     totalSessions,
     totalVolumeKg,
     currentStreakDays,
@@ -128,6 +232,7 @@ export const useProfileStore = defineStore('profile', () => {
     refreshSummary,
     saveProfile,
     saveSettings,
+    saveTrainingPreferences,
     resetProfile
   }
 })

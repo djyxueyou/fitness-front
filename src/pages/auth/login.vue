@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
-import { bootstrapAuth } from '@/utils/auth-bootstrap'
+import { clearToken, getToken, setToken } from '@/api/http'
+import { wechatLogin } from '@/api/auth'
+import {
+  clearCachedUserProfile,
+  fetchUserProfile,
+  setCachedUserProfile,
+  updateUserProfile
+} from '@/api/user'
 import { emitAuthChanged } from '@/utils/auth-events'
 import { openPrivacyPolicy } from '@/utils/privacy'
 import { openUserAgreement } from '@/utils/user-agreement'
+import { useThemeStore } from '@/stores/theme'
 
+const DEFAULT_LOGIN_TIMEOUT_MS = 10000
+const PERSISTENT_MOCK_KEY = 'LIFTLOG_MOCK_OPENID'
+
+const themeStore = useThemeStore()
 const loading = ref(false)
 const agreed = ref(false)
 let emitted = false
@@ -70,6 +82,116 @@ async function getWechatProfile() {
   }
 }
 
+function getPersistentMockCode() {
+  const stored = uni.getStorageSync(PERSISTENT_MOCK_KEY)
+  if (stored) return String(stored)
+  const code = `mock-${Date.now()}`
+  uni.setStorageSync(PERSISTENT_MOCK_KEY, code)
+  return code
+}
+
+function isMockWechatCode(code: string) {
+  const normalized = String(code || '')
+    .trim()
+    .toLowerCase()
+  return !normalized || normalized.includes('mock') || normalized.includes('the code is a mock one')
+}
+
+function getLoginTimeoutMs() {
+  const configured = Number(import.meta.env.VITE_WECHAT_LOGIN_TIMEOUT_MS)
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_LOGIN_TIMEOUT_MS
+}
+
+function shouldUseRealWechatLogin() {
+  let isWechatMiniProgram = false
+  // #ifdef MP-WEIXIN
+  isWechatMiniProgram = true
+  // #endif
+  return (
+    isWechatMiniProgram &&
+    String(import.meta.env.VITE_WECHAT_REAL_LOGIN || '').toLowerCase() === 'true'
+  )
+}
+
+async function getWechatCodeWithTimeout(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      reject(new Error('微信登录超时，请重试'))
+    }, getLoginTimeoutMs())
+
+    try {
+      uni.login({
+        provider: 'weixin',
+        success: (res) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          if (res.code) {
+            resolve(res.code)
+            return
+          }
+          reject(new Error('No wechat code'))
+        },
+        fail: (err) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          reject(err)
+        }
+      })
+    } catch (err) {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      reject(err)
+    }
+  })
+}
+
+async function ensureTokenValid() {
+  if (!getToken()) return false
+  try {
+    const profile = await fetchUserProfile()
+    setCachedUserProfile(profile)
+    return true
+  } catch {
+    clearToken()
+    clearCachedUserProfile()
+    return false
+  }
+}
+
+async function loginWithWechat() {
+  if (await ensureTokenValid()) return
+
+  let code = getPersistentMockCode()
+  if (shouldUseRealWechatLogin()) {
+    code = await getWechatCodeWithTimeout()
+    if (isMockWechatCode(code)) {
+      throw new Error('微信返回了模拟 code，请关闭游客模式并使用绑定 AppID 的账号调试')
+    }
+  }
+
+  const loginRes = await wechatLogin({ code })
+  setToken(loginRes.token)
+
+  if (loginRes.newUser && loginRes.profileInitializedByDefault) {
+    const wechatProfile = await getWechatProfile()
+    if (wechatProfile.nickname || wechatProfile.avatarUrl) {
+      await updateUserProfile({
+        nickname: wechatProfile.nickname || loginRes.nickname,
+        avatarUrl: wechatProfile.avatarUrl || loginRes.avatarUrl
+      })
+    }
+  }
+
+  const profile = await fetchUserProfile()
+  setCachedUserProfile(profile)
+}
+
 async function confirmLogin() {
   if (loading.value) return
   if (!agreed.value) {
@@ -79,9 +201,7 @@ async function confirmLogin() {
 
   loading.value = true
   try {
-    await bootstrapAuth({
-      shouldUseWechatProfile: getWechatProfile
-    })
+    await loginWithWechat()
     emitAuthChanged()
     uni.showToast({ title: '登录成功', icon: 'none' })
     emitResult(true)
@@ -97,7 +217,7 @@ async function confirmLogin() {
 </script>
 
 <template>
-  <view class="auth-login">
+  <view class="auth-login" :class="themeStore.themeClass">
     <view class="auth-login__close btn-press" @tap="closeWithoutLogin">×</view>
 
     <view class="auth-login__content">
@@ -132,8 +252,10 @@ async function confirmLogin() {
 <style lang="scss" scoped>
 .auth-login {
   min-height: 100vh;
-  background: #f7f7f8;
-  color: #25252b;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 100, 24, 0.08), transparent 34%),
+    var(--app-bg);
+  color: var(--app-text);
   position: relative;
   display: flex;
   justify-content: center;
@@ -145,8 +267,10 @@ async function confirmLogin() {
     width: 64rpx;
     height: 64rpx;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.06);
-    color: #6b6b76;
+    border: 1rpx solid var(--app-border);
+    background: var(--app-surface);
+    color: var(--app-text-secondary);
+    box-shadow: var(--app-shadow-card);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -171,7 +295,7 @@ async function confirmLogin() {
 
   &__name {
     margin-top: 34rpx;
-    color: #3a3a40;
+    color: var(--app-text);
     font-size: 34rpx;
     font-weight: 700;
   }
@@ -209,7 +333,7 @@ async function confirmLogin() {
     height: 32rpx;
     margin-right: 14rpx;
     border-radius: 6rpx;
-    border: 2rpx solid #b8b8c2;
+    border: 2rpx solid var(--app-border-strong);
     color: #fff;
     display: flex;
     align-items: center;
@@ -224,12 +348,12 @@ async function confirmLogin() {
   }
 
   &__agreement-text {
-    color: #9a9aa5;
+    color: var(--app-text-muted);
     font-size: 24rpx;
   }
 
   &__link {
-    color: #ff701c;
+    color: var(--app-accent);
     font-size: 24rpx;
     text-decoration: underline;
   }

@@ -12,6 +12,12 @@ const promptStore = useMembershipPromptStore()
       <view class="membership-modal__badge">PRO</view>
       <view class="membership-modal__title">{{ promptStore.title }}</view>
       <view class="membership-modal__desc">{{ promptStore.description }}</view>
+      <view v-if="promptStore.bullets.length" class="membership-modal__bullets">
+        <view v-for="item in promptStore.bullets" :key="item" class="membership-modal__bullet">
+          <text class="membership-modal__bullet-dot">✓</text>
+          <text>{{ item }}</text>
+        </view>
+      </view>
       <view class="membership-modal__actions">
         <view class="membership-modal__secondary btn-press" @tap="promptStore.close(false)">
           暂不开通
@@ -20,7 +26,7 @@ const promptStore = useMembershipPromptStore()
           class="gradient-fire membership-modal__primary btn-press"
           @tap="promptStore.goMembership"
         >
-          开通会员
+          {{ promptStore.primaryActionText || '开通会员' }}
         </view>
       </view>
     </view>
@@ -47,13 +53,11 @@ const promptStore = useMembershipPromptStore()
     bottom: calc(28rpx + env(safe-area-inset-bottom));
     padding: 28rpx;
     border-radius: 36rpx;
-    border: 1px solid rgba(255, 80, 30, 0.32);
+    border: 1px solid var(--app-border);
     background:
-      radial-gradient(circle at 18% 0%, rgba(255, 80, 30, 0.3), transparent 48%),
-      linear-gradient(180deg, rgba(32, 18, 18, 0.98), rgba(18, 18, 26, 0.98));
-    box-shadow:
-      0 30rpx 80rpx rgba(0, 0, 0, 0.48),
-      0 0 48rpx rgba(255, 80, 30, 0.18);
+      radial-gradient(circle at 18% 0%, rgba(255, 100, 24, 0.12), transparent 48%),
+      var(--app-surface-raised);
+    box-shadow: var(--app-shadow-focus);
   }
 
   &__handle {
@@ -61,15 +65,15 @@ const promptStore = useMembershipPromptStore()
     height: 8rpx;
     margin: 0 auto 24rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--app-border-strong);
   }
 
   &__badge {
     width: fit-content;
     padding: 8rpx 18rpx;
     border-radius: 999rpx;
-    background: rgba(255, 80, 30, 0.18);
-    color: #ff8a3d;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     font-size: 22rpx;
     font-weight: 900;
     letter-spacing: 1rpx;
@@ -77,16 +81,46 @@ const promptStore = useMembershipPromptStore()
 
   &__title {
     margin-top: 18rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 40rpx;
     font-weight: 900;
   }
 
   &__desc {
     margin-top: 14rpx;
-    color: #c7c7d6;
+    color: var(--app-text-secondary);
     font-size: 26rpx;
     line-height: 1.65;
+  }
+
+  &__bullets {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    margin-top: 22rpx;
+  }
+
+  &__bullet {
+    display: flex;
+    gap: 12rpx;
+    align-items: flex-start;
+    color: var(--app-text);
+    font-size: 24rpx;
+    line-height: 1.5;
+  }
+
+  &__bullet-dot {
+    width: 34rpx;
+    height: 34rpx;
+    border-radius: 999rpx;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20rpx;
+    font-weight: 900;
+    flex-shrink: 0;
   }
 
   &__actions {
@@ -108,9 +142,9 @@ const promptStore = useMembershipPromptStore()
   }
 
   &__secondary {
-    color: #d8d8e6;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
   }
 
   &__primary {

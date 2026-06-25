@@ -5,12 +5,14 @@ const props = withDefaults(
     full?: boolean
     disabled?: boolean
     loading?: boolean
+    variant?: 'default' | 'light'
   }>(),
   {
     text: '',
     full: true,
     disabled: false,
-    loading: false
+    loading: false,
+    variant: 'default'
   }
 )
 
@@ -29,7 +31,8 @@ function handleTap() {
     class="primary-button gradient-fire glow-primary btn-press"
     :class="{
       'primary-button--full': full,
-      'primary-button--disabled': disabled || loading
+      'primary-button--disabled': disabled || loading,
+      'primary-button--light': variant === 'light'
     }"
     @tap="handleTap"
   >
@@ -61,6 +64,11 @@ function handleTap() {
   &--disabled {
     opacity: 0.56;
     filter: grayscale(0.25);
+  }
+
+  &--light {
+    background: var(--app-accent);
+    box-shadow: var(--app-shadow-cta);
   }
 
   &__dot {

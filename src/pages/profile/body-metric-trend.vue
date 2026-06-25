@@ -6,6 +6,9 @@ import MetricTrendChart from '@/components/metric-trend-chart/index.vue'
 import { fetchBodyMetricTrend, type BodyMetricTrendPoint, type BodyMetricType } from '@/api/user'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
 
 type MetricOption = {
   type: BodyMetricType
@@ -116,8 +119,8 @@ function decodeQueryTitle(value: unknown, fallback: string) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell metric-trend safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell metric-trend safe-bottom" :class="themeStore.themeClass">
       <AppHeader :title="`${title}趋势`" subtitle="身体指标变化分析" show-back @back="goBack" />
 
       <view class="metric-trend__hero surface-card">
@@ -237,7 +240,7 @@ function decodeQueryTitle(value: unknown, fallback: string) {
 
   &__hero-title {
     margin-top: 6rpx;
-    color: #f7f7fb;
+    color: var(--app-text);
     font-size: 42rpx;
     font-weight: 900;
     line-height: 1.15;
@@ -245,7 +248,7 @@ function decodeQueryTitle(value: unknown, fallback: string) {
 
   &__hero-sub {
     margin-top: 10rpx;
-    color: #9d9daf;
+    color: var(--app-text-muted);
     font-size: 23rpx;
     line-height: 1.45;
   }
@@ -261,27 +264,27 @@ function decodeQueryTitle(value: unknown, fallback: string) {
     min-height: 150rpx;
     padding: 24rpx;
     border-radius: 26rpx;
-    background: rgba(255, 255, 255, 0.055);
-    border: 1rpx solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
   }
 
   &__summary-label,
   &__summary-meta,
   &__stat-label {
-    color: #8c8ca0;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     font-weight: 700;
   }
 
   &__summary-value {
     margin-top: 12rpx;
-    color: #f7f7fb;
+    color: var(--app-text);
     font-size: 32rpx;
     font-weight: 900;
     line-height: 1.2;
 
     &--accent {
-      color: #ff7b3c;
+      color: var(--app-accent);
       font-size: 28rpx;
     }
   }
@@ -306,13 +309,13 @@ function decodeQueryTitle(value: unknown, fallback: string) {
     min-height: 54rpx;
     margin: 0;
     padding: 0 18rpx;
-    border: 1rpx solid rgba(255, 255, 255, 0.08);
+    border: 1rpx solid var(--app-border);
     border-radius: 999rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #c8c8d4;
-    background: rgba(255, 255, 255, 0.06);
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
     font-size: 22rpx;
     font-weight: 900;
 
@@ -321,8 +324,8 @@ function decodeQueryTitle(value: unknown, fallback: string) {
     }
 
     &--active {
-      color: #ff7b3c;
-      background: rgba(255, 80, 30, 0.14);
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
       border-color: rgba(255, 80, 30, 0.58);
     }
   }
@@ -336,13 +339,13 @@ function decodeQueryTitle(value: unknown, fallback: string) {
   &__stat {
     padding: 20rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
   }
 
   &__stat-value {
     margin-top: 10rpx;
-    color: #f7f7fb;
+    color: var(--app-text);
     font-size: 28rpx;
     font-weight: 900;
   }
@@ -360,18 +363,18 @@ function decodeQueryTitle(value: unknown, fallback: string) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
   }
 
   &__record-date {
-    color: #c8c8d4;
+    color: var(--app-text-secondary);
     font-size: 23rpx;
     font-weight: 800;
   }
 
   &__record-value {
-    color: #ff7b3c;
+    color: var(--app-accent);
     font-size: 24rpx;
     font-weight: 900;
   }
@@ -379,8 +382,8 @@ function decodeQueryTitle(value: unknown, fallback: string) {
   &__empty {
     padding: 24rpx;
     border-radius: 22rpx;
-    color: #828296;
-    background: rgba(255, 255, 255, 0.045);
+    color: var(--app-text-muted);
+    background: var(--app-bg);
     font-size: 23rpx;
     line-height: 1.5;
   }

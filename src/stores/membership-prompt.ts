@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
+import { fetchMembershipValue } from '@/api/membership'
 import { routes } from '@/utils/navigation'
 
 let resolver: ((value: boolean) => void) | null = null
@@ -30,12 +31,32 @@ export const useMembershipPromptStore = defineStore('membershipPrompt', () => {
   const visible = ref(false)
   const title = ref('会员功能')
   const description = ref('')
+  const bullets = ref<string[]>([])
+  const primaryActionText = ref('开通会员')
+  const entryPoint = ref('')
 
-  function open(featureName: string, customDescription?: string) {
+  function open(featureName: string, customDescription?: string, valueEntryPoint?: string) {
     resolver?.(false)
     title.value = '会员功能'
     description.value = customDescription || defaultDescription(featureName)
+    bullets.value = []
+    primaryActionText.value = '开通会员'
+    entryPoint.value = valueEntryPoint || ''
     visible.value = true
+
+    if (valueEntryPoint) {
+      void fetchMembershipValue(valueEntryPoint)
+        .then((value) => {
+          if (!visible.value || entryPoint.value !== valueEntryPoint) return
+          title.value = value.title
+          description.value = value.description
+          bullets.value = value.bullets || []
+          primaryActionText.value = value.primaryActionText || primaryActionText.value
+        })
+        .catch((err) => {
+          console.error('[membership] value explanation failed', err)
+        })
+    }
 
     return new Promise<boolean>((resolve) => {
       resolver = resolve
@@ -44,19 +65,25 @@ export const useMembershipPromptStore = defineStore('membershipPrompt', () => {
 
   function close(result = false) {
     visible.value = false
+    bullets.value = []
+    entryPoint.value = ''
     resolver?.(result)
     resolver = null
   }
 
   function goMembership() {
+    const targetEntry = entryPoint.value
     close(false)
-    uni.navigateTo({ url: routes.membership })
+    const query = targetEntry ? `?entry=${encodeURIComponent(targetEntry)}` : ''
+    uni.navigateTo({ url: `${routes.membership}${query}` })
   }
 
   return {
     visible,
     title,
     description,
+    bullets,
+    primaryActionText,
     open,
     close,
     goMembership

@@ -9,6 +9,7 @@ export const routes = {
   workoutSummary: '/pages/home/workout-summary',
   cultivationSettlement: '/pages/home/cultivation-settlement',
   workoutCalendar: '/pages/home/workout-calendar',
+  weeklyReview: '/pages/home/weekly-review',
   volumeTrend: '/pages/home/volume-trend',
   historyDetail: '/pages/home/history-detail',
   planIndex: '/pages/plan/index',
@@ -27,8 +28,11 @@ export const routes = {
   favorites: '/pages/profile/favorites',
   authLogin: '/pages/auth/login',
   settings: '/pages/profile/settings',
+  dataPrivacy: '/pages/profile/data-privacy',
   about: '/pages/profile/about',
   membership: '/pages/profile/membership',
+  onboarding: '/pages/onboarding/index',
+  recommendedPlan: '/pages/onboarding/recommended-plan',
   userAgreement: '/pages/agreement/user'
 } as const
 

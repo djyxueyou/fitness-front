@@ -45,12 +45,12 @@ const emit = defineEmits<{
     width: 72rpx;
     height: 72rpx;
     border-radius: 24rpx;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 46rpx;
     line-height: 1;
     flex-shrink: 0;
@@ -61,17 +61,17 @@ const emit = defineEmits<{
   }
 
   &__title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 42rpx;
     font-weight: 900;
     line-height: 1.2;
-    text-shadow: 0 0 20rpx rgba(255, 255, 255, 0.1);
+    text-shadow: none;
     word-break: break-word;
   }
 
   &__subtitle {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.45;
   }

@@ -9,6 +9,9 @@ import {
 } from '@/api/user'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
 
 type MetricFilter = {
   label: string
@@ -102,8 +105,8 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell body-history safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell body-history safe-bottom" :class="themeStore.themeClass">
       <AppHeader title="身体指标历史" subtitle="查看身体数据变化记录" show-back @back="goBack" />
 
       <view class="body-history__hero surface-card">
@@ -181,7 +184,7 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
 
   &__hero-title {
     margin-top: 6rpx;
-    color: #f7f7fb;
+    color: var(--app-text);
     font-size: 38rpx;
     font-weight: 900;
     line-height: 1.2;
@@ -189,7 +192,7 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
 
   &__hero-sub {
     margin-top: 10rpx;
-    color: #9d9daf;
+    color: var(--app-text-muted);
     font-size: 23rpx;
     line-height: 1.45;
   }
@@ -210,13 +213,13 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
     min-height: 64rpx;
     margin: 0;
     padding: 0 24rpx;
-    border: 1rpx solid rgba(255, 255, 255, 0.08);
+    border: 1rpx solid var(--app-border);
     border-radius: 999rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #c8c8d4;
-    background: rgba(255, 255, 255, 0.06);
+    color: var(--app-text-secondary);
+    background: var(--app-surface);
     font-size: 24rpx;
     font-weight: 800;
 
@@ -225,8 +228,8 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
     }
 
     &--active {
-      color: #ff7b3c;
-      background: rgba(255, 80, 30, 0.14);
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
       border-color: rgba(255, 80, 30, 0.58);
     }
   }
@@ -245,12 +248,12 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
   &__day {
     padding: 20rpx;
     border-radius: 22rpx;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1rpx solid rgba(255, 255, 255, 0.075);
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
   }
 
   &__date {
-    color: #f7f7fb;
+    color: var(--app-text);
     font-size: 26rpx;
     font-weight: 900;
   }
@@ -268,9 +271,9 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
     border-radius: 999rpx;
     display: flex;
     align-items: center;
-    color: #d8d8e0;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1rpx solid rgba(255, 255, 255, 0.08);
+    color: var(--app-text-secondary);
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
     font-size: 21rpx;
     font-weight: 800;
     line-height: 1.2;
@@ -279,8 +282,8 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
   &__empty {
     padding: 24rpx;
     border-radius: 22rpx;
-    color: #828296;
-    background: rgba(255, 255, 255, 0.045);
+    color: var(--app-text-muted);
+    background: var(--app-bg);
     font-size: 23rpx;
     line-height: 1.5;
   }
@@ -294,8 +297,8 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff7b3c;
-    background: rgba(255, 80, 30, 0.12);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     font-size: 24rpx;
     font-weight: 900;
 
@@ -304,8 +307,8 @@ function formatHistoryMetric(metric: BodyMetricHistoryDayResponse['metrics'][num
     }
 
     &[disabled] {
-      color: #828296;
-      background: rgba(255, 255, 255, 0.05);
+      color: var(--app-text-muted);
+      background: var(--app-bg);
     }
   }
 }

@@ -6,6 +6,11 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { openPrivacyPolicy } from '@/utils/privacy'
 import { openUserAgreement } from '@/utils/user-agreement'
+import { checkMiniProgramUpdate, getMiniProgramVersionInfo } from '@/utils/mini-program-update'
+import { useThemeStore } from '@/stores/theme'
+
+const themeStore = useThemeStore()
+const versionInfo = getMiniProgramVersionInfo()
 
 const aboutFeatures = [
   { icon: '📝', title: '训练记录', desc: '记录动作、重量、次数、组数和训练容量。' },
@@ -23,17 +28,22 @@ onShow(async () => {
 function goBack() {
   uni.navigateBack()
 }
+
+function checkUpdate() {
+  checkMiniProgramUpdate()
+}
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell about-page safe-bottom" :class="themeStore.themeClass">
       <AppHeader title="关于" show-back @back="goBack" />
 
       <view class="about__hero">
         <image class="about__logo" src="/static/app-logo.png" mode="aspectFill" />
         <view class="title-lg">FitForge</view>
-        <view class="muted about__version">v1.0.0 · 锻造更强的自己</view>
+        <view class="muted about__version">v{{ versionInfo.version }} · {{ versionInfo.envLabel }}</view>
+        <view class="muted about__slogan">锻造更强的自己</view>
       </view>
 
       <GlassCard>
@@ -46,6 +56,22 @@ function goBack() {
               <view class="about__feature-desc">{{ item.desc }}</view>
             </view>
           </view>
+        </view>
+      </GlassCard>
+
+      <GlassCard>
+        <view class="about__version-card">
+          <view>
+            <view class="about__section-title">版本更新</view>
+            <view class="about__feature-desc">
+              当前小程序会在启动时自动检查更新，也可以手动检查是否有新版本可用。
+            </view>
+          </view>
+          <view class="about__version-meta">
+            <view class="about__version-pill">{{ versionInfo.envLabel }}</view>
+            <view class="about__version-value">v{{ versionInfo.version }}</view>
+          </view>
+          <view class="about__check-button btn-press" @tap="checkUpdate">检查更新</view>
         </view>
       </GlassCard>
 
@@ -98,9 +124,57 @@ function goBack() {
     margin-top: 10rpx;
   }
 
+  &__slogan {
+    margin-top: 4rpx;
+  }
+
   &__feature-card,
+  &__version-card,
   &__privacy-card {
     padding: 24rpx;
+  }
+
+  &__version-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20rpx;
+    align-items: center;
+  }
+
+  &__version-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10rpx;
+  }
+
+  &__version-pill {
+    padding: 8rpx 14rpx;
+    border-radius: 999rpx;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+    font-size: 20rpx;
+    font-weight: 800;
+  }
+
+  &__version-value {
+    color: var(--app-text-secondary);
+    font-size: 22rpx;
+    font-weight: 800;
+  }
+
+  &__check-button {
+    grid-column: 1 / -1;
+    min-height: 76rpx;
+    border-radius: 22rpx;
+    background: var(--app-bg);
+    border: 1px solid var(--app-border);
+    color: var(--app-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 25rpx;
+    font-weight: 900;
   }
 
   &__privacy-card {

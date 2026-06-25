@@ -39,13 +39,23 @@ function toLevelText(level: string): string {
 }
 
 function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exercise {
+  const equipmentName = item.equipmentName || ''
+  const difficultyName = item.difficultyName || toLevelText(item.difficultyCode || '')
   return {
     id: item.id,
     name: item.name,
     category: item.categoryName,
-    muscle: item.primaryMuscle || '-',
-    equipment: item.equipment || '-',
-    level: toLevelText(item.difficultyLevel),
+    muscle: item.primaryMuscleName || '-',
+    primaryMuscleCode: item.primaryMuscleCode,
+    primaryMuscleName: item.primaryMuscleName,
+    secondaryMuscles: item.secondaryMuscles || [],
+    equipment: item.equipmentDetail ? `${equipmentName} · ${item.equipmentDetail}` : equipmentName || '-',
+    equipmentCode: item.equipmentCode,
+    equipmentName: equipmentName || undefined,
+    equipmentDetail: item.equipmentDetail,
+    level: difficultyName || '未知',
+    difficultyCode: item.difficultyCode,
+    difficultyName,
     recordType: item.recordType || 'WEIGHT_REPS',
     exerciseType: item.exerciseType || 'SYSTEM',
     thumbnailUrl: item.thumbnailUrl || item.thumbnailPath
@@ -84,9 +94,9 @@ export const useExerciseStore = defineStore('exercise', () => {
   const activeCategoryCode = ref('')
   const activeKeyword = ref('')
   const activeScope = ref<'ALL' | 'SYSTEM' | 'CUSTOM'>('ALL')
-  const activePrimaryMuscle = ref('')
-  const activeEquipment = ref('')
-  const activeDifficultyLevel = ref('')
+  const activePrimaryMuscleCode = ref('')
+  const activeEquipmentCode = ref('')
+  const activeDifficultyCode = ref('')
   const activeRecordType = ref('')
   const pageNo = ref(0)
   const total = ref(0)
@@ -104,18 +114,18 @@ export const useExerciseStore = defineStore('exercise', () => {
     categoryCode = activeCategoryCode.value,
     keyword = activeKeyword.value,
     scope = activeScope.value,
-    primaryMuscle = activePrimaryMuscle.value,
-    equipment = activeEquipment.value,
-    difficultyLevel = activeDifficultyLevel.value,
+    primaryMuscleCode = activePrimaryMuscleCode.value,
+    equipmentCode = activeEquipmentCode.value,
+    difficultyCode = activeDifficultyCode.value,
     recordType = activeRecordType.value
   ) {
     return [
       scope,
       categoryCode || 'all',
       keyword.trim(),
-      primaryMuscle || 'all',
-      equipment || 'all',
-      difficultyLevel || 'all',
+      primaryMuscleCode || 'all',
+      equipmentCode || 'all',
+      difficultyCode || 'all',
       recordType || 'all'
     ].join('::')
   }
@@ -144,9 +154,9 @@ export const useExerciseStore = defineStore('exercise', () => {
     categoryCode?: string
     keyword?: string
     scope?: 'ALL' | 'SYSTEM' | 'CUSTOM'
-    primaryMuscle?: string
-    equipment?: string
-    difficultyLevel?: string
+    primaryMuscleCode?: string
+    equipmentCode?: string
+    difficultyCode?: string
     recordType?: string
   }) {
     const reset = options?.reset ?? false
@@ -154,26 +164,26 @@ export const useExerciseStore = defineStore('exercise', () => {
     const categoryCode = options?.categoryCode ?? activeCategoryCode.value
     const keyword = options?.keyword ?? activeKeyword.value
     const scope = options?.scope ?? activeScope.value
-    const primaryMuscle = options?.primaryMuscle ?? activePrimaryMuscle.value
-    const equipment = options?.equipment ?? activeEquipment.value
-    const difficultyLevel = options?.difficultyLevel ?? activeDifficultyLevel.value
+    const primaryMuscleCode = options?.primaryMuscleCode ?? activePrimaryMuscleCode.value
+    const equipmentCode = options?.equipmentCode ?? activeEquipmentCode.value
+    const difficultyCode = options?.difficultyCode ?? activeDifficultyCode.value
     const recordType = options?.recordType ?? activeRecordType.value
     const key = queryKey(
       categoryCode,
       keyword,
       scope,
-      primaryMuscle,
-      equipment,
-      difficultyLevel,
+      primaryMuscleCode,
+      equipmentCode,
+      difficultyCode,
       recordType
     )
 
     activeCategoryCode.value = categoryCode
     activeKeyword.value = keyword
     activeScope.value = scope
-    activePrimaryMuscle.value = primaryMuscle
-    activeEquipment.value = equipment
-    activeDifficultyLevel.value = difficultyLevel
+    activePrimaryMuscleCode.value = primaryMuscleCode
+    activeEquipmentCode.value = equipmentCode
+    activeDifficultyCode.value = difficultyCode
     activeRecordType.value = recordType
 
     if (reset && !force && listCache.value[key]) {
@@ -201,9 +211,9 @@ export const useExerciseStore = defineStore('exercise', () => {
         categoryCode: categoryCode || undefined,
         keyword: keyword.trim() || undefined,
         scope,
-        primaryMuscle: primaryMuscle || undefined,
-        equipment: equipment || undefined,
-        difficultyLevel: difficultyLevel || undefined,
+        primaryMuscleCode: primaryMuscleCode || undefined,
+        equipmentCode: equipmentCode || undefined,
+        difficultyCode: difficultyCode || undefined,
         recordType: recordType || undefined
       })
       await fetchFavoriteIdSet()
@@ -469,9 +479,9 @@ export const useExerciseStore = defineStore('exercise', () => {
     loading,
     listError,
     loadedFromServer,
-    activePrimaryMuscle,
-    activeEquipment,
-    activeDifficultyLevel,
+    activePrimaryMuscleCode,
+    activeEquipmentCode,
+    activeDifficultyCode,
     activeRecordType,
     fetchCategories,
     fetchExercises,

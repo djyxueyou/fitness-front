@@ -1,10 +1,14 @@
 @import '@/uni.scss';
+@import '@/styles/themes.scss';
+@import '@/styles/tab-pages-light.scss';
+@import '@/styles/secondary-pages-light.scss';
+@import '@/styles/operation-pages-light.scss';
 
 page {
   min-height: 100vh;
-  background: $color-bg;
-  background-color: $color-bg;
-  color: $color-text;
+  background: var(--app-bg);
+  background-color: var(--app-bg);
+  color: var(--app-text);
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
@@ -14,8 +18,8 @@ uni-page-body,
 uni-page-wrapper,
 .uni-page-body {
   min-height: 100%;
-  background: $color-bg;
-  background-color: $color-bg;
+  background: var(--app-bg);
+  background-color: var(--app-bg);
 }
 
 view,
@@ -31,16 +35,15 @@ input {
   width: 100%;
   padding: calc(var(--status-bar-height, 0px) + env(safe-area-inset-top) + 24rpx) 32rpx
     calc(env(safe-area-inset-bottom) + 32rpx);
-  background:
-    radial-gradient(circle at 50% -10%, rgba(255, 80, 30, 0.12) 0%, transparent 60%), $color-bg;
+  background: var(--app-bg);
 }
 
 .page-scroll {
   height: 100vh;
   min-height: 100vh;
   width: 100%;
-  background: $color-bg;
-  background-color: $color-bg;
+  background: var(--app-bg);
+  background-color: var(--app-bg);
   scrollbar-width: none;
 }
 
@@ -53,10 +56,10 @@ input {
 }
 
 .glass-card {
-  background: $color-card;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(24px);
-  border-radius: $radius-lg;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-card);
   position: relative;
   overflow: hidden;
 
@@ -67,12 +70,10 @@ input {
 }
 
 .surface-card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025)),
-    rgba(255, 255, 255, 0.035);
-  border: 1rpx solid rgba(255, 255, 255, 0.075);
-  border-radius: 24rpx;
-  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.18);
+  background: var(--app-surface);
+  border: 1rpx solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  box-shadow: var(--app-shadow-card);
 }
 
 .section-block {
@@ -88,9 +89,9 @@ input {
 }
 
 .section-title {
-  color: $color-text;
+  color: var(--app-text);
   font-size: 30rpx;
-  font-weight: 900;
+  font-weight: 800;
   line-height: 1.25;
 }
 
@@ -101,7 +102,7 @@ input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: $color-primary-soft;
+  color: var(--app-accent);
   background: rgba(255, 80, 30, 0.12);
   border: 1rpx solid rgba(255, 80, 30, 0.26);
   font-size: 22rpx;
@@ -116,24 +117,24 @@ input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: $color-text;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  color: var(--app-text-secondary);
+  background: var(--app-surface);
+  border: 1rpx solid var(--app-border);
   font-size: 24rpx;
   font-weight: 800;
 }
 
 .field-panel {
   padding: 24rpx;
-  border-radius: 24rpx;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1rpx solid rgba(255, 255, 255, 0.075);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  border: 1rpx solid var(--app-border);
 }
 
 .field-label {
-  color: $color-text;
+  color: var(--app-text);
   font-size: 24rpx;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .field-input {
@@ -142,9 +143,9 @@ input {
   min-height: 82rpx;
   padding: 0 22rpx;
   border-radius: 20rpx;
-  background: rgba(0, 0, 0, 0.22);
-  border: 1rpx solid rgba(255, 255, 255, 0.08);
-  color: $color-text;
+  background: var(--app-bg);
+  border: 1rpx solid var(--app-border);
+  color: var(--app-text);
   font-size: 26rpx;
 }
 
@@ -155,23 +156,24 @@ input {
   margin-top: 28rpx;
   padding: 16rpx;
   border-radius: 30rpx;
-  background: rgba(8, 8, 12, 0.88);
-  border: 1rpx solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
+  background: var(--app-surface-raised);
+  border: 1rpx solid var(--app-border);
+  box-shadow: var(--app-shadow-focus);
+  backdrop-filter: blur(16px);
 }
 
 .neon-box {
-  border: 1px solid $color-primary;
+  border: 1px solid var(--app-accent);
   box-shadow: $shadow-neon-primary;
 }
 
 .text-neon {
-  color: $color-primary;
+  color: var(--app-accent);
   text-shadow: 0 0 12rpx rgba(255, 80, 30, 0.5);
 }
 
 .gradient-fire {
-  background: linear-gradient(135deg, $color-primary 0%, #ff8c00 100%);
+  background: linear-gradient(135deg, var(--app-accent) 0%, #ff8c00 100%);
 }
 
 .glow-primary {
@@ -179,11 +181,11 @@ input {
 }
 
 .text-gradient-fire {
-  color: $color-primary-soft;
+  color: var(--app-accent);
 }
 
 .section-label {
-  color: $color-muted;
+  color: var(--app-text-muted);
   font-size: 22rpx;
   font-weight: 600;
   letter-spacing: 2rpx;
@@ -199,7 +201,7 @@ input {
 }
 
 .muted {
-  color: $color-muted;
+  color: var(--app-text-muted);
 }
 
 .title-xl {

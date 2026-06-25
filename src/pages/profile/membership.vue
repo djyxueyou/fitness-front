@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
+import { fetchMembershipValue, type MembershipValueResponse } from '@/api/membership'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { useMembershipStore } from '@/stores/membership'
+import { useThemeStore } from '@/stores/theme'
 
 const membershipStore = useMembershipStore()
+const themeStore = useThemeStore()
 const payingPlanCode = ref('')
+const entryPoint = ref('default')
+const valueInfo = ref<MembershipValueResponse | null>(null)
 
 const benefits = [
   {
@@ -73,17 +78,34 @@ const expirationWarning = computed(() => {
   return null
 })
 
+onLoad((options) => {
+  const entry = typeof options?.entry === 'string' ? options.entry : ''
+  entryPoint.value = entry || 'default'
+})
+
 onShow(async () => {
   const ok = await ensureFeatureAuth('会员中心')
   if (!ok) {
     uni.switchTab({ url: routes.home })
     return
   }
-  await membershipStore.loadAll().catch((err) => {
-    uni.showToast({ title: '会员信息加载失败', icon: 'none' })
-    console.error('[membership] load failed', err)
-  })
+  await Promise.all([
+    membershipStore.loadAll().catch((err) => {
+      uni.showToast({ title: '会员信息加载失败', icon: 'none' })
+      console.error('[membership] load failed', err)
+    }),
+    loadValueInfo()
+  ])
 })
+
+async function loadValueInfo() {
+  try {
+    valueInfo.value = await fetchMembershipValue(entryPoint.value)
+  } catch (err) {
+    valueInfo.value = null
+    console.error('[membership] value load failed', err)
+  }
+}
 
 function goBack() {
   uni.navigateBack()
@@ -134,8 +156,8 @@ async function buy(planCode: string) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell membership safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell membership safe-bottom" :class="themeStore.themeClass">
       <AppHeader
         title="会员中心"
         subtitle="解锁不限训练记录、训练模板与计划管理和进阶训练分析"
@@ -155,6 +177,18 @@ async function buy(planCode: string) {
         :class="`membership__warning--${expirationWarning.type}`"
       >
         {{ expirationWarning.text }}
+      </view>
+
+      <view v-if="valueInfo" class="glass-card membership__value">
+        <view class="membership__value-kicker">PRO VALUE</view>
+        <view class="membership__value-title">{{ valueInfo.title }}</view>
+        <view class="membership__value-desc">{{ valueInfo.description }}</view>
+        <view class="membership__value-list">
+          <view v-for="item in valueInfo.bullets" :key="item" class="membership__value-item">
+            <text class="membership__value-dot">✓</text>
+            <text>{{ item }}</text>
+          </view>
+        </view>
       </view>
 
       <view class="membership__section">会员权益</view>
@@ -209,38 +243,102 @@ async function buy(planCode: string) {
     border-color: rgba(255, 80, 30, 0.32);
     background:
       radial-gradient(circle at 16% 8%, rgba(255, 80, 30, 0.24), transparent 42%),
-      rgba(255, 255, 255, 0.04);
+      var(--app-surface-warm);
   }
 
   &__badge {
     width: fit-content;
     padding: 8rpx 16rpx;
     border-radius: 999rpx;
-    background: rgba(255, 80, 30, 0.18);
-    color: #ff7a32;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     font-size: 22rpx;
     font-weight: 900;
   }
 
   &__status-title {
     margin-top: 22rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 42rpx;
     font-weight: 900;
   }
 
   &__status-sub {
     margin-top: 12rpx;
-    color: #d8d8e6;
+    color: var(--app-text-secondary);
     font-size: 24rpx;
     line-height: 1.6;
   }
 
   &__section {
     margin: 30rpx 0 16rpx;
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 900;
+  }
+
+  &__value {
+    margin-top: 20rpx;
+    padding: 28rpx;
+    border-color: rgba(255, 80, 30, 0.22);
+    background:
+      radial-gradient(circle at 12% 0%, rgba(255, 80, 30, 0.14), transparent 42%),
+      var(--app-surface-raised);
+  }
+
+  &__value-kicker {
+    width: fit-content;
+    padding: 8rpx 16rpx;
+    border-radius: 999rpx;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+    font-size: 20rpx;
+    font-weight: 900;
+    letter-spacing: 1rpx;
+  }
+
+  &__value-title {
+    margin-top: 18rpx;
+    color: var(--app-text);
+    font-size: 34rpx;
+    font-weight: 900;
+  }
+
+  &__value-desc {
+    margin-top: 10rpx;
+    color: var(--app-text-secondary);
+    font-size: 24rpx;
+    line-height: 1.55;
+  }
+
+  &__value-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12rpx;
+    margin-top: 20rpx;
+  }
+
+  &__value-item {
+    display: flex;
+    gap: 12rpx;
+    align-items: flex-start;
+    color: var(--app-text);
+    font-size: 24rpx;
+    line-height: 1.5;
+  }
+
+  &__value-dot {
+    width: 34rpx;
+    height: 34rpx;
+    border-radius: 999rpx;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20rpx;
+    font-weight: 900;
+    flex-shrink: 0;
   }
 
   &__benefits,
@@ -261,8 +359,8 @@ async function buy(planCode: string) {
     width: 42rpx;
     height: 42rpx;
     border-radius: 999rpx;
-    background: rgba(255, 80, 30, 0.18);
-    color: #ff7a32;
+    background: var(--app-accent-soft);
+    color: var(--app-accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -276,14 +374,14 @@ async function buy(planCode: string) {
   }
 
   &__benefit-title {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 27rpx;
     font-weight: 900;
   }
 
   &__benefit-desc {
     margin-top: 8rpx;
-    color: #9c9caf;
+    color: var(--app-text-muted);
     font-size: 23rpx;
     line-height: 1.5;
   }
@@ -302,14 +400,14 @@ async function buy(planCode: string) {
   }
 
   &__plan-name {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 900;
   }
 
   &__plan-sub {
     margin-top: 8rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 23rpx;
     line-height: 1.4;
   }
@@ -322,7 +420,7 @@ async function buy(planCode: string) {
   }
 
   &__price {
-    color: #ff7a32;
+    color: var(--app-accent);
     font-size: 34rpx;
     font-weight: 900;
   }
@@ -341,7 +439,7 @@ async function buy(planCode: string) {
 
   &__note {
     margin-top: 24rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.6;
   }
@@ -349,7 +447,7 @@ async function buy(planCode: string) {
   &__empty {
     margin-top: 18rpx;
     padding: 26rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 24rpx;
   }
 

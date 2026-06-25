@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { cultivationImageUrl } from '@/utils/static-assets'
 
 const props = withDefaults(
   defineProps<{
@@ -29,12 +30,12 @@ const props = withDefaults(
 )
 
 const imageMap: Record<string, string> = {
-  body: '/static/cultivation/realm-lianti.jpg',
-  qi: '/static/cultivation/realm-lianqi.jpg',
-  foundation: '/static/cultivation/realm-zhuji.jpg',
-  core: '/static/cultivation/realm-jiedan.jpg',
-  spirit: '/static/cultivation/realm-yuanying.jpg',
-  deity: '/static/cultivation/realm-huashen.jpg'
+  body: cultivationImageUrl('realm-lianti.jpg'),
+  qi: cultivationImageUrl('realm-lianqi.jpg'),
+  foundation: cultivationImageUrl('realm-zhuji.jpg'),
+  core: cultivationImageUrl('realm-jiedan.jpg'),
+  spirit: cultivationImageUrl('realm-yuanying.jpg'),
+  deity: cultivationImageUrl('realm-huashen.jpg')
 }
 
 const imageSrc = computed(() => imageMap[props.visualKey || 'body'] || imageMap.body)

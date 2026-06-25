@@ -9,6 +9,7 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
+import { useThemeStore } from '@/stores/theme'
 import type { Template } from '@/types/template'
 
 interface ActionSheetItem {
@@ -20,6 +21,7 @@ interface ActionSheetItem {
 }
 
 const templateStore = useTemplateStore()
+const themeStore = useThemeStore()
 const editingId = ref<number | null>(null)
 const editName = ref('')
 const saving = ref(false)
@@ -174,9 +176,9 @@ function handleTemplateAction(action: ActionSheetItem) {
 </script>
 
 <template>
-  <view class="template-manager-page">
-    <scroll-view scroll-y class="page-scroll">
-      <view class="page-shell template-manager safe-bottom">
+  <view class="template-manager-page operation-page" :class="themeStore.themeClass">
+    <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+      <view class="page-shell template-manager safe-bottom" :class="themeStore.themeClass">
         <AppHeader
           title="模板管理"
           subtitle="管理自己的训练模板，复制系统方案作为起点"
@@ -289,15 +291,12 @@ function handleTemplateAction(action: ActionSheetItem) {
                 />
                 <view class="template-manager__body">
                   <view class="template-manager__name">{{ item.name }}</view>
-                  <view class="template-manager__meta">
-                    {{ item.exercises }} 个动作 · 只读
-                  </view>
+                  <view class="template-manager__meta"> {{ item.exercises }} 个动作 · 只读 </view>
                   <view class="template-manager__desc">
                     {{ item.description || '系统训练方案，复制后可自由调整。' }}
                   </view>
                 </view>
               </view>
-
             </view>
             <view class="template-manager__item-actions">
               <view
@@ -317,6 +316,7 @@ function handleTemplateAction(action: ActionSheetItem) {
     </scroll-view>
 
     <AppActionSheet
+      :class="themeStore.themeClass"
       :visible="actionSheetVisible"
       :title="actionSheetTitle"
       :subtitle="actionSheetSubtitle"

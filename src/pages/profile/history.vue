@@ -1,16 +1,31 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
+import TrainingRecordCard from '@/components/training-record-card/index.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
+import { useThemeStore } from '@/stores/theme'
 import { useTrainingStore } from '@/stores/training'
 
 const trainingStore = useTrainingStore()
+const themeStore = useThemeStore()
 type HistoryFilterKey = 'week' | 'month' | 'lastMonth' | 'year' | 'all'
 
 const historyList = computed(() => trainingStore.history)
+const historyGroups = computed(() => {
+  const groups: Array<{ date: string; items: typeof historyList.value }> = []
+  for (const item of historyList.value) {
+    const date = formatGroupDate(item.startedAt)
+    const group = groups[groups.length - 1]
+    if (group?.date === date) {
+      group.items.push(item)
+    } else {
+      groups.push({ date, items: [item] })
+    }
+  }
+  return groups
+})
 const activeFilter = ref<HistoryFilterKey>('month')
 const filters: Array<{ key: HistoryFilterKey; label: string }> = [
   { key: 'week', label: '本周' },
@@ -96,9 +111,14 @@ function loadMore() {
   fetchHistory(false)
 }
 
-function formatDate(dateText: string) {
+function formatGroupDate(dateText: string) {
   const date = new Date(dateText)
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  if (date.toDateString() === today.toDateString()) return '今天'
+  if (date.toDateString() === yesterday.toDateString()) return '昨天'
+  return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
 function getFilterRange(key: HistoryFilterKey): { startedFrom?: string; startedTo?: string } {
@@ -140,9 +160,21 @@ function toDateString(date: Date) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll" lower-threshold="120" @scrolltolower="loadMore">
-    <view class="page-shell safe-bottom">
-      <AppHeader title="历史记录" :subtitle="subtitle" show-back @back="goBack" />
+  <scroll-view
+    scroll-y
+    class="page-scroll"
+    :class="themeStore.themeClass"
+    lower-threshold="120"
+    @scrolltolower="loadMore"
+  >
+    <view class="page-shell history-page safe-bottom" :class="themeStore.themeClass">
+      <view class="history-page__header">
+        <view class="history-page__back btn-press" @tap="goBack">←</view>
+        <view>
+          <view class="history-page__title">训练记录</view>
+          <view class="history-page__subtitle">{{ subtitle }}</view>
+        </view>
+      </view>
 
       <scroll-view scroll-x class="history-page__filters">
         <view class="history-page__filters-inner">
@@ -177,23 +209,25 @@ function toDateString(date: Date) {
         />
       </view>
 
-      <view v-else class="history-page__list">
-        <app-swipe-action
-          v-for="item in historyList"
-          :key="item.id"
-          @delete="onDeleteHistory(item.id)"
-        >
-          <view class="glass-card history-page__item btn-press" @tap="openDetail(item.id)">
-            <view class="history-page__icon">🏋</view>
-            <view class="history-page__body">
-              <view class="history-page__name">{{ item.trainingName }}</view>
-              <view class="history-page__meta">
-                {{ formatDate(item.startedAt) }} · {{ Math.round(item.durationSeconds / 60) }} min
-              </view>
-            </view>
-            <view class="history-page__arrow">›</view>
+      <view v-else class="history-page__groups">
+        <view v-for="group in historyGroups" :key="group.date" class="history-page__group">
+          <view class="history-page__group-date">{{ group.date }}</view>
+          <view class="history-page__list">
+            <app-swipe-action
+              v-for="item in group.items"
+              :key="item.id"
+              @delete="onDeleteHistory(item.id)"
+            >
+              <TrainingRecordCard
+                :name="item.trainingName"
+                :cover-url="item.coverUrl"
+                :cover-record-type="item.coverRecordType"
+                :meta="`${Math.round(item.durationSeconds / 60)} min · ${item.totalSetCount} 组 · ${Number(item.totalVolumeKg || 0).toFixed(0)} kg`"
+                @tap="openDetail(item.id)"
+              />
+            </app-swipe-action>
           </view>
-        </app-swipe-action>
+        </view>
       </view>
 
       <view v-if="footerText" class="history-page__footer muted">{{ footerText }}</view>
@@ -202,7 +236,49 @@ function toDateString(date: Date) {
 </template>
 
 <style lang="scss" scoped>
+.page-scroll {
+  background: var(--app-bg);
+}
+
 .history-page {
+  min-height: 100vh;
+  color: var(--app-text);
+  background: var(--app-bg);
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+    margin-bottom: 28rpx;
+  }
+
+  &__back {
+    width: 72rpx;
+    height: 72rpx;
+    border: 1rpx solid var(--app-border);
+    border-radius: 22rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--app-text);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-card);
+    font-size: 34rpx;
+    font-weight: 800;
+  }
+
+  &__title {
+    color: var(--app-text);
+    font-size: 42rpx;
+    font-weight: 900;
+  }
+
+  &__subtitle {
+    margin-top: 6rpx;
+    color: var(--app-text-muted);
+    font-size: 22rpx;
+  }
+
   &__filters {
     margin: 8rpx -32rpx 24rpx;
     white-space: nowrap;
@@ -219,8 +295,9 @@ function toDateString(date: Date) {
     min-height: 64rpx;
     padding: 0 24rpx;
     border-radius: 999rpx;
-    background: rgba(255, 255, 255, 0.06);
-    color: #b8b8c8;
+    border: 1rpx solid var(--app-border);
+    background: var(--app-surface);
+    color: var(--app-text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -228,9 +305,10 @@ function toDateString(date: Date) {
     font-weight: 800;
 
     &--active {
-      background: linear-gradient(135deg, #ff501e, #ffa03c);
+      border-color: var(--app-accent);
+      background: var(--app-accent);
       color: #fff;
-      box-shadow: 0 0 24rpx rgba(255, 80, 30, 0.22);
+      box-shadow: 0 8rpx 24rpx rgba(255, 100, 24, 0.2);
     }
   }
 
@@ -257,45 +335,21 @@ function toDateString(date: Date) {
     gap: 16rpx;
   }
 
-  &__item {
-    display: flex;
-    align-items: center;
-    gap: 18rpx;
-    padding: 24rpx;
+  &__groups {
+    display: grid;
+    gap: 30rpx;
   }
 
-  &__icon {
-    width: 68rpx;
-    height: 68rpx;
-    border-radius: 20rpx;
-    background: rgba(255, 80, 30, 0.16);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  &__body {
-    flex: 1;
-  }
-
-  &__name {
-    font-size: 28rpx;
-    font-weight: 700;
-  }
-
-  &__meta {
-    margin-top: 8rpx;
-    color: #828296;
+  &__group-date {
+    margin-bottom: 14rpx;
+    color: var(--app-text-muted);
     font-size: 22rpx;
-  }
-
-  &__arrow {
-    color: #828296;
-    font-size: 32rpx;
+    font-weight: 800;
   }
 
   &__footer {
     padding: 28rpx 0 8rpx;
+    color: var(--app-text-muted);
     text-align: center;
     font-size: 24rpx;
   }

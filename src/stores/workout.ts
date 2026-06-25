@@ -5,13 +5,19 @@ import {
   fetchExerciseLastPerformance,
   type ExerciseLastPerformanceResponse,
   type ExerciseLastPerformanceSetResponse,
+  type SaveTrainingRequest,
   type SaveTrainingResponse
 } from '@/api/training'
 import { useTemplateStore } from '@/stores/template'
+import {
+  fetchProgressionRecommendation,
+  sendProgressionRecommendationFeedback,
+  type ExerciseProgressionRecommendation
+} from '@/api/progression'
 
 const WORKOUT_DRAFT_KEY = 'LIFTLOG_WORKOUT_DRAFT'
 const WORKOUT_DRAFT_VERSION = 3
-const WORKOUT_DRAFT_TTL_MS = 6 * 60 * 60 * 1000
+const WORKOUT_DRAFT_TTL_MS = 48 * 60 * 60 * 1000
 
 export type WorkoutRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
 export type WorkoutSet = {
@@ -19,16 +25,26 @@ export type WorkoutSet = {
   weight: number
   durationSeconds?: number
   setType?: 'NORMAL' | 'WARMUP' | 'DROP' | 'FAILURE'
+  effort?: 'RIR_4_PLUS' | 'RIR_2_3' | 'RIR_1' | 'RIR_0' | 'FAILED'
   note?: string
   done: boolean
   completedAt?: string
+  plannedWeightKg?: number
+  plannedReps?: number
+  plannedDurationSeconds?: number
+  targetSource?: 'PLAN' | 'TEMPLATE' | 'LAST_PERFORMANCE' | 'PROGRESSION_RECOMMENDATION' | 'MANUAL'
+  sourceRecommendationId?: string
 }
+export type WorkoutSetType = NonNullable<WorkoutSet['setType']>
+export type WorkoutEffort = NonNullable<WorkoutSet['effort']>
 export type WorkoutExercise = {
   id: number
   name: string
   muscle: string
+  equipment?: string
   recordType: WorkoutRecordType
   ended?: boolean
+  supersetGroupId?: string
   sets: WorkoutSet[]
 }
 export type CompletedWorkoutSummary = SaveTrainingResponse & {
@@ -55,6 +71,7 @@ export type WorkoutComparison = {
 type WorkoutDraft = {
   version: number
   savedAt: string
+  status?: 'ACTIVE' | 'EXPIRED' | 'SAVE_FAILED'
   activeTemplateId: number | null
   activePlanId?: number | null
   activePlanDayId?: number | null
@@ -66,10 +83,26 @@ type WorkoutDraft = {
   lastActiveExerciseId?: number | null
   lastActiveExerciseIndex?: number | null
   lastActiveSetIndex?: number | null
+  appliedRecommendationSnapshots?: Record<number, AppliedRecommendationSnapshot>
+  lastSubmitPayload?: SaveTrainingRequest
 }
 
 type StoredWorkoutDraft = Omit<WorkoutDraft, 'version'> & {
   version: number
+}
+
+type AppliedRecommendationSetSnapshot = {
+  weight: number
+  reps: number
+  durationSeconds?: number
+}
+
+type AppliedRecommendationSnapshot = {
+  exerciseId: number
+  recommendationId: string
+  appliedSets: AppliedRecommendationSetSnapshot[]
+  dirtyAfterRecommendation: boolean
+  overrideReported: boolean
 }
 
 function createEmptyWorkout() {
@@ -152,8 +185,7 @@ function readWorkoutDraft() {
       return null
     }
     if (isDraftExpired(draft)) {
-      uni.removeStorageSync(WORKOUT_DRAFT_KEY)
-      return null
+      draft.status = 'EXPIRED'
     }
     if (draft.version === 1) {
       return migrateDraftV1(draft)
@@ -219,6 +251,31 @@ function normalizeDraftSets(draft: StoredWorkoutDraft): WorkoutDraft {
   }
 }
 
+function normalSetSnapshots(sets: WorkoutSet[]): AppliedRecommendationSetSnapshot[] {
+  return sets
+    .filter((set) => (set.setType || 'NORMAL') === 'NORMAL')
+    .map((set) => ({
+      weight: Number(set.weight || 0),
+      reps: Number(set.reps || 0),
+      durationSeconds: set.durationSeconds
+    }))
+}
+
+function sameAppliedSnapshot(
+  current: AppliedRecommendationSetSnapshot[],
+  applied: AppliedRecommendationSetSnapshot[]
+) {
+  if (current.length !== applied.length) return false
+  return current.every((set, index) => {
+    const target = applied[index]
+    return (
+      set.weight === target.weight &&
+      set.reps === target.reps &&
+      set.durationSeconds === target.durationSeconds
+    )
+  })
+}
+
 export const useWorkoutStore = defineStore('workout', () => {
   const initialDraft = readWorkoutDraft()
   const activeTemplateId = ref<number | null>(null)
@@ -234,6 +291,8 @@ export const useWorkoutStore = defineStore('workout', () => {
   const lastActiveSetIndex = ref<number | null>(null)
   const completedSummary = ref<CompletedWorkoutSummary | null>(null)
   const lastPerformanceMap = ref<Record<number, ExerciseLastPerformanceResponse>>({})
+  const recommendationMap = ref<Record<number, ExerciseProgressionRecommendation>>({})
+  const appliedRecommendationSnapshots = ref<Record<number, AppliedRecommendationSnapshot>>({})
   const hasPendingStart = ref(false)
   const pendingStartTemplateId = ref<number | null>(null)
   const pendingStartPlanId = ref<number | null>(null)
@@ -241,14 +300,20 @@ export const useWorkoutStore = defineStore('workout', () => {
   const draftSnapshot = ref<WorkoutDraft | null>(initialDraft)
   const hasDraft = ref(Boolean(initialDraft))
   const draftSavedAt = ref(initialDraft?.savedAt || '')
+  const draftStatus = ref<WorkoutDraft['status']>(initialDraft?.status || 'ACTIVE')
+  const lastSubmitPayload = ref<SaveTrainingRequest | null>(initialDraft?.lastSubmitPayload || null)
   const workoutDirty = ref(false)
 
   const totalSets = computed(() =>
-    activeExercises.value.reduce((total, exercise) => total + exercise.sets.length, 0)
+    activeExercises.value.reduce(
+      (total, exercise) => total + exercise.sets.filter((set) => set.setType !== 'WARMUP').length,
+      0
+    )
   )
   const doneSets = computed(() =>
     activeExercises.value.reduce(
-      (total, exercise) => total + exercise.sets.filter((set) => set.done).length,
+      (total, exercise) =>
+        total + exercise.sets.filter((set) => set.done && set.setType !== 'WARMUP').length,
       0
     )
   )
@@ -258,7 +323,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       (sum, exercise) =>
         sum +
         exercise.sets
-          .filter((set) => set.done)
+          .filter((set) => set.done && set.setType !== 'WARMUP')
           .reduce(
             (setSum, set) =>
               setSum + (isDurationRecord(exercise.recordType) ? 0 : set.weight * set.reps),
@@ -268,10 +333,12 @@ export const useWorkoutStore = defineStore('workout', () => {
     )
   )
   const hasActiveWorkout = computed(() => Boolean(startedAt.value && activeExercises.value.length))
-  const hasMeaningfulDraft = computed(
-    () => Boolean(workoutDirty.value && startedAt.value && activeExercises.value.length)
+  const hasMeaningfulDraft = computed(() =>
+    Boolean(workoutDirty.value && startedAt.value && activeExercises.value.length)
   )
   const hasRecoverableWorkout = computed(() => hasMeaningfulDraft.value || hasDraft.value)
+  const hasSaveFailedDraft = computed(() => draftStatus.value === 'SAVE_FAILED' && Boolean(lastSubmitPayload.value))
+  const hasExpiredDraft = computed(() => draftStatus.value === 'EXPIRED')
   const draftSource = computed(() =>
     hasMeaningfulDraft.value
       ? {
@@ -290,7 +357,9 @@ export const useWorkoutStore = defineStore('workout', () => {
         0
       ) || 0
   )
-  const draftElapsedText = computed(() => formatDraftDuration(draftSource.value?.elapsedSeconds || 0))
+  const draftElapsedText = computed(() =>
+    formatDraftDuration(draftSource.value?.elapsedSeconds || 0)
+  )
   const draftSummary = computed(() => ({
     title: draftSource.value?.activeTemplateName || '自由训练',
     durationText: draftElapsedText.value,
@@ -313,6 +382,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     startedAt.value = new Date().toISOString()
     elapsedSeconds.value = 0
     workoutDirty.value = false
+    draftStatus.value = 'ACTIVE'
+    lastSubmitPayload.value = null
     resetDraftFocus()
     activeExercises.value = createEmptyWorkout()
   }
@@ -340,6 +411,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     startedAt.value = new Date().toISOString()
     elapsedSeconds.value = 0
     workoutDirty.value = false
+    draftStatus.value = 'ACTIVE'
+    lastSubmitPayload.value = null
     resetDraftFocus()
 
     if (!templateId) {
@@ -352,21 +425,19 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeTemplateName.value = detail.name
     const exerciseIds = detail.items.map((item) => item.exerciseId)
     await loadLastPerformances(exerciseIds)
+    await loadRecommendations(exerciseIds)
     activeExercises.value = detail.items.map((item) => ({
       id: item.exerciseId,
       name: item.exerciseName,
       muscle: '',
+      equipment: item.equipment,
       recordType: item.recordType || 'WEIGHT_REPS',
       ended: false,
-      sets: createSetsFromTemplateTargets(
-        item.targetSets,
-        item.recordType || 'WEIGHT_REPS',
-        {
-          targetWeightKg: item.targetWeightKg,
-          targetReps: item.targetReps,
-          targetDurationSeconds: item.targetDurationSeconds
-        }
-      )
+      sets: createSetsFromTemplateTargets(item.targetSets, item.recordType || 'WEIGHT_REPS', {
+        targetWeightKg: item.effectiveTargetWeightKg,
+        targetReps: item.effectiveTargetReps,
+        targetDurationSeconds: item.effectiveTargetDurationSeconds
+      })
     }))
     updateDraftFocus(0)
   }
@@ -407,6 +478,327 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   function getLastPerformance(exerciseId: number) {
     return lastPerformanceMap.value[exerciseId]
+  }
+
+  async function loadRecommendations(exerciseIds?: number[]) {
+    const ids = Array.from(new Set(exerciseIds || activeExercises.value.map((item) => item.id)))
+    if (!ids.length) return
+    const results = await Promise.all(
+      ids.map(async (exerciseId) => {
+        try {
+          return [exerciseId, await fetchProgressionRecommendation(exerciseId)] as const
+        } catch {
+          return null
+        }
+      })
+    )
+    recommendationMap.value = results.reduce(
+      (map, result) => (result ? { ...map, [result[0]]: result[1] } : map),
+      { ...recommendationMap.value }
+    )
+  }
+
+  function markRecommendationDirtyIfNeeded(exerciseIndex: number, setsChanged = false) {
+    const exercise = activeExercises.value[exerciseIndex]
+    if (!exercise || !setsChanged) return
+    const snapshot = appliedRecommendationSnapshots.value[exercise.id]
+    if (!snapshot || snapshot.overrideReported) return
+    appliedRecommendationSnapshots.value = {
+      ...appliedRecommendationSnapshots.value,
+      [exercise.id]: { ...snapshot, dirtyAfterRecommendation: true }
+    }
+  }
+
+  async function reportRecommendationOverrideIfNeeded(exerciseIndex: number) {
+    const exercise = activeExercises.value[exerciseIndex]
+    if (!exercise) return false
+    const snapshot = appliedRecommendationSnapshots.value[exercise.id]
+    if (!snapshot || snapshot.overrideReported || !snapshot.dirtyAfterRecommendation) {
+      return false
+    }
+    if (sameAppliedSnapshot(normalSetSnapshots(exercise.sets), snapshot.appliedSets)) {
+      appliedRecommendationSnapshots.value = {
+        ...appliedRecommendationSnapshots.value,
+        [exercise.id]: { ...snapshot, dirtyAfterRecommendation: false }
+      }
+      persistDraft()
+      return false
+    }
+
+    try {
+      await sendProgressionRecommendationFeedback(
+        exercise.id,
+        snapshot.recommendationId,
+        'OVERRIDDEN'
+      )
+    } catch (err) {
+      console.warn('[progression] override feedback failed', err)
+      persistDraft()
+      return false
+    }
+    appliedRecommendationSnapshots.value = {
+      ...appliedRecommendationSnapshots.value,
+      [exercise.id]: { ...snapshot, overrideReported: true }
+    }
+    persistDraft()
+    return true
+  }
+
+  async function reportAllRecommendationOverrides() {
+    for (let index = 0; index < activeExercises.value.length; index += 1) {
+      await reportRecommendationOverrideIfNeeded(index)
+    }
+  }
+
+  function setSetType(exerciseIndex: number, setIndex: number, setType: WorkoutSetType) {
+    updateSet(exerciseIndex, setIndex, { setType })
+  }
+
+  function setEffort(exerciseIndex: number, setIndex: number, effort?: WorkoutEffort) {
+    const exercise = activeExercises.value[exerciseIndex]
+    const set = exercise?.sets[setIndex]
+    if (!set || !set.done) return
+    activeExercises.value = activeExercises.value.map((item, itemIndex) =>
+      itemIndex === exerciseIndex
+        ? {
+            ...item,
+            sets: item.sets.map((target, targetIndex) =>
+              targetIndex === setIndex ? { ...target, effort } : target
+            )
+          }
+        : item
+    )
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  async function applyRecommendation(exerciseIndex: number) {
+    const exercise = activeExercises.value[exerciseIndex]
+    const recommendation = exercise ? recommendationMap.value[exercise.id] : null
+    if (!exercise || !recommendation?.available) return false
+    if (recommendation.recommendationId) {
+      await sendProgressionRecommendationFeedback(
+        exercise.id,
+        recommendation.recommendationId,
+        'APPLIED'
+      )
+    }
+    activeExercises.value = activeExercises.value.map((item, itemIndex) =>
+      itemIndex === exerciseIndex
+        ? {
+            ...item,
+            sets: item.sets.map((set) =>
+              set.done || set.setType === 'WARMUP'
+                ? set
+                : {
+                    ...set,
+                    weight: recommendation.targetWeightKg ?? set.weight,
+                    reps: recommendation.targetReps ?? set.reps,
+                    durationSeconds: recommendation.targetDurationSeconds ?? set.durationSeconds,
+                    plannedWeightKg: recommendation.targetWeightKg ?? set.weight,
+                    plannedReps: recommendation.targetReps ?? set.reps,
+                    plannedDurationSeconds: recommendation.targetDurationSeconds ?? set.durationSeconds,
+                    targetSource: 'PROGRESSION_RECOMMENDATION',
+                    sourceRecommendationId: recommendation.recommendationId
+                  }
+            )
+          }
+        : item
+    )
+    const updatedExercise = activeExercises.value[exerciseIndex]
+    if (updatedExercise && recommendation.recommendationId) {
+      appliedRecommendationSnapshots.value = {
+        ...appliedRecommendationSnapshots.value,
+        [updatedExercise.id]: {
+          exerciseId: updatedExercise.id,
+          recommendationId: recommendation.recommendationId,
+          appliedSets: normalSetSnapshots(updatedExercise.sets),
+          dirtyAfterRecommendation: false,
+          overrideReported: false
+        }
+      }
+    }
+    recommendationMap.value = {
+      ...recommendationMap.value,
+      [exercise.id]: { ...recommendation, available: false }
+    }
+    markWorkoutDirty()
+    persistDraft()
+    return true
+  }
+
+  async function dismissRecommendation(exerciseId: number) {
+    const recommendation = recommendationMap.value[exerciseId]
+    if (!recommendation) return
+    if (recommendation.recommendationId) {
+      await sendProgressionRecommendationFeedback(
+        exerciseId,
+        recommendation.recommendationId,
+        'DISMISSED'
+      )
+    }
+    recommendationMap.value = {
+      ...recommendationMap.value,
+      [exerciseId]: { ...recommendation, available: false }
+    }
+  }
+
+  function applyLastPerformance(exerciseIndex: number) {
+    const exercise = activeExercises.value[exerciseIndex]
+    const performance = exercise ? lastPerformanceMap.value[exercise.id] : null
+    if (!exercise || !performance?.sets?.length) return false
+    activeExercises.value = activeExercises.value.map((item, itemIndex) =>
+      itemIndex === exerciseIndex
+        ? {
+            ...item,
+            sets: item.sets.map((set, setIndex) => {
+              if (set.done || set.setType === 'WARMUP') return set
+              const previous =
+                performance.sets[setIndex] || performance.sets[performance.sets.length - 1]
+              return {
+                ...set,
+                weight: isBodyweightRecord(item.recordType) ? 0 : Number(previous.weightKg || 0),
+                reps: isDurationRecord(item.recordType) ? 1 : previous.reps,
+                durationSeconds: isDurationRecord(item.recordType)
+                  ? previous.durationSeconds || set.durationSeconds
+                  : undefined
+              }
+            })
+          }
+        : item
+    )
+    markWorkoutDirty()
+    persistDraft()
+    return true
+  }
+
+  function generateWarmupSets(exerciseIndex: number) {
+    const exercise = activeExercises.value[exerciseIndex]
+    if (
+      !exercise ||
+      isBodyweightRecord(exercise.recordType) ||
+      isDurationRecord(exercise.recordType)
+    ) {
+      return false
+    }
+    const firstWorkSet = exercise.sets.find((set) => set.setType !== 'WARMUP')
+    if (
+      !firstWorkSet ||
+      firstWorkSet.weight <= 0 ||
+      exercise.sets.some((set) => set.setType === 'WARMUP')
+    ) {
+      return false
+    }
+    const warmups: WorkoutSet[] = [0.5, 0.75].map((ratio) => ({
+      reps: Math.max(5, Math.min(firstWorkSet.reps, 10)),
+      weight: Number((firstWorkSet.weight * ratio).toFixed(2)),
+      setType: 'WARMUP',
+      note: '',
+      done: false
+    }))
+    activeExercises.value = activeExercises.value.map((item, index) =>
+      index === exerciseIndex ? { ...item, sets: [...warmups, ...item.sets] } : item
+    )
+    markWorkoutDirty()
+    persistDraft()
+    return true
+  }
+
+  function insertWarmupSets(
+    exerciseIndex: number,
+    warmups: Array<{ weight: number; reps: number }>
+  ) {
+    const exercise = activeExercises.value[exerciseIndex]
+    if (!exercise || !warmups.length || exercise.sets.some((set) => set.setType === 'WARMUP')) {
+      return false
+    }
+    const warmupSets: WorkoutSet[] = warmups.map((warmup) => ({
+      reps: warmup.reps,
+      weight: warmup.weight,
+      setType: 'WARMUP',
+      note: '',
+      done: false
+    }))
+    activeExercises.value = activeExercises.value.map((item, index) =>
+      index === exerciseIndex ? { ...item, sets: [...warmupSets, ...item.sets] } : item
+    )
+    markWorkoutDirty()
+    persistDraft()
+    return true
+  }
+
+  function removeWarmupSets(exerciseIndex: number) {
+    const exercise = activeExercises.value[exerciseIndex]
+    const warmupSets = exercise?.sets.filter((set) => set.setType === 'WARMUP') || []
+    if (!exercise || !warmupSets.length || warmupSets.some((set) => set.done)) {
+      return false
+    }
+    activeExercises.value = activeExercises.value.map((item, index) =>
+      index === exerciseIndex
+        ? { ...item, sets: item.sets.filter((set) => set.setType !== 'WARMUP') }
+        : item
+    )
+    markWorkoutDirty()
+    updateDraftFocus(exerciseIndex)
+    persistDraft()
+    return true
+  }
+
+  function toggleSupersetWithNext(exerciseIndex: number) {
+    const current = activeExercises.value[exerciseIndex]
+    const next = activeExercises.value[exerciseIndex + 1]
+    if (!current || !next) return false
+    const groupId = `superset-${Date.now()}`
+    activeExercises.value = activeExercises.value.map((exercise, index) =>
+      index === exerciseIndex || index === exerciseIndex + 1
+        ? { ...exercise, supersetGroupId: groupId }
+        : exercise
+    )
+    markWorkoutDirty()
+    persistDraft()
+    return true
+  }
+
+  function removeSuperset(exerciseIndex: number) {
+    const groupId = activeExercises.value[exerciseIndex]?.supersetGroupId
+    if (!groupId) return false
+    activeExercises.value = activeExercises.value.map((exercise) =>
+      exercise.supersetGroupId === groupId ? { ...exercise, supersetGroupId: undefined } : exercise
+    )
+    markWorkoutDirty()
+    persistDraft()
+    return true
+  }
+
+  function replaceExercise(
+    exerciseIndex: number,
+    id: number,
+    name: string,
+    muscle: string,
+    recordType: WorkoutRecordType,
+    equipment?: string
+  ) {
+    if (!activeExercises.value[exerciseIndex] || hasExercise(id)) return false
+    activeExercises.value = activeExercises.value.map((exercise, index) =>
+      index === exerciseIndex
+        ? {
+            id,
+            name,
+            muscle,
+            equipment,
+            recordType,
+            ended: false,
+            supersetGroupId: exercise.supersetGroupId,
+            sets: createSetsFromTemplateTargets(Math.max(1, exercise.sets.length), recordType)
+          }
+        : exercise
+    )
+    markWorkoutDirty()
+    updateDraftFocus(exerciseIndex)
+    persistDraft()
+    void loadLastPerformances([id])
+    void loadRecommendations([id])
+    return true
   }
 
   function resetDraftFocus() {
@@ -479,12 +871,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     if (
       !targetSet ||
       targetSet.done ||
-      !Object.entries(patch).some(
-        ([key, value]) => targetSet[key as keyof WorkoutSet] !== value
-      )
+      !Object.entries(patch).some(([key, value]) => targetSet[key as keyof WorkoutSet] !== value)
     ) {
       return
     }
+    const marksRecommendationDirty =
+      (targetSet.setType || 'NORMAL') === 'NORMAL' &&
+      ['weight', 'reps', 'durationSeconds'].some((key) => key in patch)
     activeExercises.value = activeExercises.value.map((exercise, index) => {
       if (index !== exerciseIndex) return exercise
       return {
@@ -494,6 +887,7 @@ export const useWorkoutStore = defineStore('workout', () => {
         )
       }
     })
+    markRecommendationDirtyIfNeeded(exerciseIndex, marksRecommendationDirty)
     markWorkoutDirty()
     updateDraftFocus(exerciseIndex, setIndex)
     persistDraft()
@@ -544,6 +938,7 @@ export const useWorkoutStore = defineStore('workout', () => {
         sets: [...exercise.sets, { ...lastSet, done: false, completedAt: undefined }]
       }
     })
+    markRecommendationDirtyIfNeeded(exerciseIndex, true)
     markWorkoutDirty()
     updateDraftFocus(exerciseIndex)
     persistDraft()
@@ -559,6 +954,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeExercises.value = activeExercises.value.map((item, index) =>
       index === exerciseIndex ? { ...item, sets: item.sets.slice(0, -1) } : item
     )
+    markRecommendationDirtyIfNeeded(exerciseIndex, (lastSet.setType || 'NORMAL') === 'NORMAL')
     markWorkoutDirty()
     updateDraftFocus(exerciseIndex)
     persistDraft()
@@ -576,6 +972,7 @@ export const useWorkoutStore = defineStore('workout', () => {
         ? { ...item, sets: item.sets.filter((_, idx) => idx !== setIndex) }
         : item
     )
+    markRecommendationDirtyIfNeeded(exerciseIndex, (exercise.sets[setIndex]?.setType || 'NORMAL') === 'NORMAL')
     markWorkoutDirty()
     updateDraftFocus(exerciseIndex)
     persistDraft()
@@ -586,7 +983,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     id: number,
     name: string,
     muscle: string,
-    recordType: WorkoutRecordType = 'WEIGHT_REPS'
+    recordType: WorkoutRecordType = 'WEIGHT_REPS',
+    equipment?: string
   ) {
     ensureWorkoutSession()
     if (hasExercise(id)) {
@@ -596,6 +994,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       id,
       name,
       muscle,
+      equipment,
       recordType,
       ended: false,
       sets: createSetsFromTemplateTargets(1, recordType)
@@ -614,6 +1013,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       .catch((err) => {
         console.error('[workout] last performance fetch failed', { exerciseId: id, err })
       })
+    void loadRecommendations([id])
     return true
   }
 
@@ -657,12 +1057,29 @@ export const useWorkoutStore = defineStore('workout', () => {
     workoutDirty.value = false
     activeExercises.value = createEmptyWorkout()
     lastPerformanceMap.value = {}
+    recommendationMap.value = {}
+    appliedRecommendationSnapshots.value = {}
+    draftStatus.value = 'ACTIVE'
+    lastSubmitPayload.value = null
     resetDraftFocus()
     clearDraft()
   }
 
   function setCompletedSummary(summary: CompletedWorkoutSummary | null) {
     completedSummary.value = summary
+  }
+
+  function markSaveFailed(payload: SaveTrainingRequest) {
+    lastSubmitPayload.value = payload
+    draftStatus.value = 'SAVE_FAILED'
+    workoutDirty.value = true
+    persistDraft()
+  }
+
+  function clearSaveFailure() {
+    lastSubmitPayload.value = null
+    draftStatus.value = 'ACTIVE'
+    persistDraft()
   }
 
   function persistDraft() {
@@ -674,6 +1091,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     const draft: WorkoutDraft = {
       version: WORKOUT_DRAFT_VERSION,
       savedAt: new Date().toISOString(),
+      status: draftStatus.value || 'ACTIVE',
       activeTemplateId: activeTemplateId.value,
       activePlanId: activePlanId.value,
       activePlanDayId: activePlanDayId.value,
@@ -684,7 +1102,9 @@ export const useWorkoutStore = defineStore('workout', () => {
       activeExercises: activeExercises.value,
       lastActiveExerciseId: lastActiveExerciseId.value,
       lastActiveExerciseIndex: lastActiveExerciseIndex.value,
-      lastActiveSetIndex: lastActiveSetIndex.value
+      lastActiveSetIndex: lastActiveSetIndex.value,
+      appliedRecommendationSnapshots: appliedRecommendationSnapshots.value,
+      lastSubmitPayload: lastSubmitPayload.value || undefined
     }
     uni.setStorageSync(WORKOUT_DRAFT_KEY, draft)
     draftSnapshot.value = draft
@@ -697,6 +1117,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     draftSnapshot.value = null
     hasDraft.value = false
     draftSavedAt.value = ''
+    draftStatus.value = 'ACTIVE'
+    lastSubmitPayload.value = null
   }
 
   function refreshDraftState() {
@@ -704,6 +1126,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     draftSnapshot.value = draft
     hasDraft.value = Boolean(draft)
     draftSavedAt.value = draft?.savedAt || ''
+    draftStatus.value = draft?.status || 'ACTIVE'
+    lastSubmitPayload.value = draft?.lastSubmitPayload || null
   }
 
   function restoreDraft() {
@@ -725,6 +1149,9 @@ export const useWorkoutStore = defineStore('workout', () => {
     lastActiveExerciseId.value = draft.lastActiveExerciseId ?? null
     lastActiveExerciseIndex.value = draft.lastActiveExerciseIndex ?? null
     lastActiveSetIndex.value = draft.lastActiveSetIndex ?? null
+    appliedRecommendationSnapshots.value = draft.appliedRecommendationSnapshots || {}
+    draftStatus.value = draft.status || 'ACTIVE'
+    lastSubmitPayload.value = draft.lastSubmitPayload || null
     activeExercises.value = draft.activeExercises.map((exercise) => {
       const recordType = exercise.recordType || 'WEIGHT_REPS'
       return {
@@ -742,6 +1169,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     hasDraft.value = true
     draftSavedAt.value = draft.savedAt
     loadLastPerformances()
+    void loadRecommendations()
     return true
   }
 
@@ -756,6 +1184,10 @@ export const useWorkoutStore = defineStore('workout', () => {
     workoutDirty.value = false
     activeExercises.value = createEmptyWorkout()
     lastPerformanceMap.value = {}
+    recommendationMap.value = {}
+    appliedRecommendationSnapshots.value = {}
+    draftStatus.value = 'ACTIVE'
+    lastSubmitPayload.value = null
     resetDraftFocus()
     clearDraft()
   }
@@ -782,6 +1214,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeExercises,
     completedSummary,
     lastPerformanceMap,
+    recommendationMap,
     lastActiveExerciseId,
     lastActiveExerciseIndex,
     lastActiveSetIndex,
@@ -791,6 +1224,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     pendingStartPlanDayId,
     hasDraft,
     draftSavedAt,
+    draftStatus,
+    lastSubmitPayload,
     draftSummary,
     draftElapsedText,
     draftExerciseCount,
@@ -802,6 +1237,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     hasActiveWorkout,
     hasMeaningfulDraft,
     hasRecoverableWorkout,
+    hasSaveFailedDraft,
+    hasExpiredDraft,
     sourceType,
     queueStartWorkout,
     clearPendingStart,
@@ -811,6 +1248,20 @@ export const useWorkoutStore = defineStore('workout', () => {
     hasExercise,
     loadLastPerformances,
     getLastPerformance,
+    loadRecommendations,
+    setSetType,
+    setEffort,
+    applyRecommendation,
+    dismissRecommendation,
+    applyLastPerformance,
+    generateWarmupSets,
+    insertWarmupSets,
+    removeWarmupSets,
+    reportRecommendationOverrideIfNeeded,
+    reportAllRecommendationOverrides,
+    toggleSupersetWithNext,
+    removeSuperset,
+    replaceExercise,
     updateDraftFocus,
     resolveDraftFocusIndex,
     toggleSet,
@@ -827,6 +1278,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     reopenExercise,
     finishWorkout,
     setCompletedSummary,
+    markSaveFailed,
+    clearSaveFailure,
     persistDraft,
     clearDraft,
     refreshDraftState,

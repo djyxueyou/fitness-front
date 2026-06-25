@@ -20,7 +20,11 @@ export interface TemplateItemResponse {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  effectiveTargetWeightKg?: number
+  effectiveTargetReps?: number
+  effectiveTargetDurationSeconds?: number
   recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
+  equipment?: string
   thumbnailSource?: string
   thumbnailPath?: string
   thumbnailUrl?: string

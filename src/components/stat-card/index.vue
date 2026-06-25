@@ -38,11 +38,11 @@ defineProps<{
     background: rgba(255, 80, 30, 0.1);
     border-radius: 8rpx;
     font-size: 20rpx;
-    color: #ff823c;
+    color: var(--app-accent);
   }
 
   &__label {
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 20rpx;
     font-weight: 600;
     letter-spacing: 1rpx;
@@ -50,10 +50,9 @@ defineProps<{
   }
 
   &__value {
-    color: #f5f5fa;
+    color: var(--app-text);
     font-size: 34rpx;
     font-weight: 900;
-    text-shadow: 0 0 20rpx rgba(255, 255, 255, 0.1);
   }
 
   &__sub {

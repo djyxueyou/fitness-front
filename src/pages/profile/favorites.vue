@@ -8,8 +8,10 @@ import MembershipRequiredModal from '@/components/membership-required-modal/inde
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useExerciseStore } from '@/stores/exercise'
+import { useThemeStore } from '@/stores/theme'
 
 const exerciseStore = useExerciseStore()
+const themeStore = useThemeStore()
 const favorites = computed(() => exerciseStore.favorites)
 
 onShow(async () => {
@@ -31,8 +33,8 @@ function openDetail(id: number) {
 </script>
 
 <template>
-  <scroll-view scroll-y class="page-scroll">
-    <view class="page-shell safe-bottom">
+  <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
+    <view class="page-shell favorites-page safe-bottom" :class="themeStore.themeClass">
       <AppHeader
         title="我的收藏"
         :subtitle="`${favorites.length} 个动作`"

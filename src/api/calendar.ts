@@ -40,6 +40,8 @@ export interface CalendarDateDetailResponse {
     id: number
     trainingName: string
     sourceType: string
+    coverUrl?: string
+    coverRecordType?: string
     startedAt: string
     durationSeconds: number
     totalSetCount: number

@@ -40,6 +40,14 @@ export interface MembershipOrderStatusResponse {
   paidAt?: string
 }
 
+export interface MembershipValueResponse {
+  entryPoint: string
+  title: string
+  description: string
+  bullets: string[]
+  primaryActionText: string
+}
+
 export function fetchMembershipStatus() {
   return request<MembershipStatusResponse>({
     url: '/api/membership/status'
@@ -64,5 +72,11 @@ export function createMembershipOrder(planCode: string) {
 export function fetchMembershipOrder(orderNo: string) {
   return request<MembershipOrderStatusResponse>({
     url: `/api/membership/orders/${orderNo}`
+  })
+}
+
+export function fetchMembershipValue(entryPoint: string) {
+  return request<MembershipValueResponse>({
+    url: `/api/membership/value?entryPoint=${encodeURIComponent(entryPoint || 'default')}`
   })
 }

@@ -36,7 +36,7 @@ const emit = defineEmits<{
   justify-content: center;
   padding: 80rpx 32rpx;
   text-align: center;
-  color: #f5f5fa;
+  color: var(--app-text);
 
   &__icon {
     width: 96rpx;
@@ -46,7 +46,7 @@ const emit = defineEmits<{
     align-items: center;
     justify-content: center;
     background: rgba(255, 80, 30, 0.1);
-    color: #ff823c;
+    color: var(--app-accent);
     font-size: 44rpx;
   }
 
@@ -59,7 +59,7 @@ const emit = defineEmits<{
   &__desc {
     margin-top: 8rpx;
     max-width: 520rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     font-size: 24rpx;
     line-height: 1.55;
   }
@@ -72,8 +72,8 @@ const emit = defineEmits<{
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ff823c;
-    background: rgba(255, 80, 30, 0.12);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
     border: 1rpx solid rgba(255, 80, 30, 0.28);
     font-size: 24rpx;
     font-weight: 800;

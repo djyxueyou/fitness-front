@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import { fetchActiveTrainingPlan } from '@/api/plan'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
+import { useThemeStore } from '@/stores/theme'
 
+const themeStore = useThemeStore()
 const loading = ref(true)
 const missing = ref(false)
 
@@ -43,7 +46,10 @@ function goBack() {
 </script>
 
 <template>
-  <view class="page-shell active-plan-redirect">
+  <view
+    class="page-shell active-plan-redirect secondary-page"
+    :class="themeStore.themeClass"
+  >
     <AppHeader title="当前计划" subtitle="正在打开计划详情" show-back @back="goBack" />
     <view v-if="loading" class="active-plan-redirect__loading">计划加载中...</view>
     <EmptyState
@@ -62,7 +68,7 @@ function goBack() {
 .active-plan-redirect {
   &__loading {
     padding-top: 120rpx;
-    color: #828296;
+    color: var(--app-text-muted);
     text-align: center;
     font-size: 24rpx;
   }
