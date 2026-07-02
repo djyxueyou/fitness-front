@@ -9,10 +9,6 @@ export function staticAssetUrl(path: string) {
   return `${STATIC_ASSET_BASE_URL}${normalizedPath}`
 }
 
-export function cultivationImageUrl(filename: string) {
-  return staticAssetUrl(`/static/cultivation/${filename}`)
-}
-
 export function exerciseDefaultImageUrl(filename: string) {
   return staticAssetUrl(`/static/exercise-defaults/${filename}`)
 }

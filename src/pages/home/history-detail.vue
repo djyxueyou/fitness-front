@@ -4,7 +4,13 @@ import { onLoad } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import ShareCardSheet from '@/components/share-card-sheet/index.vue'
+import TrainingLevelRewardCard from '@/components/training-level-reward-card/index.vue'
+import TrainingLevelUpgradeModal from '@/components/training-level-upgrade-modal/index.vue'
 import { fetchWorkoutSharePreview, type SharePreviewResponse } from '@/api/share'
+import {
+  settleTrainingLevel,
+  type TrainingLevelSettlementResponse
+} from '@/api/training-level'
 import { useTrainingStore } from '@/stores/training'
 import { useProfileStore } from '@/stores/profile'
 import { useThemeStore } from '@/stores/theme'
@@ -20,6 +26,9 @@ const loading = ref(false)
 const shareVisible = ref(false)
 const shareLoading = ref(false)
 const sharePreview = ref<SharePreviewResponse | null>(null)
+const levelSettlement = ref<TrainingLevelSettlementResponse | null>(null)
+const levelSettlementLoading = ref(false)
+const showLevelUpgrade = ref(false)
 const unit = computed(() => profileStore.unit)
 
 const totalSetsText = computed(() => `${detail.value?.totalSetCount || 0} 组`)
@@ -72,6 +81,9 @@ onLoad(async (query = {}) => {
 
     if (trainingId.value) {
       detail.value = await trainingStore.fetchDetail(trainingId.value)
+      if (query.settleLevel === '1') {
+        await settleLevelGrowth(trainingId.value)
+      }
     }
   } finally {
     loading.value = false
@@ -102,6 +114,23 @@ async function openShareCard() {
 
 function closeShareCard() {
   shareVisible.value = false
+}
+
+async function settleLevelGrowth(id: number) {
+  levelSettlementLoading.value = true
+  try {
+    levelSettlement.value = await settleTrainingLevel(id)
+    showLevelUpgrade.value = Boolean(levelSettlement.value?.upgraded)
+  } catch (err) {
+    levelSettlement.value = null
+    console.error('[training-level] settlement failed', err)
+  } finally {
+    levelSettlementLoading.value = false
+  }
+}
+
+function closeLevelUpgrade() {
+  showLevelUpgrade.value = false
 }
 
 function copyShareText() {
@@ -226,6 +255,12 @@ function comparisonClass(value?: number | null) {
           </view>
         </view>
 
+        <TrainingLevelRewardCard
+          v-if="levelSettlement || levelSettlementLoading"
+          :settlement="levelSettlement"
+          :loading="levelSettlementLoading"
+        />
+
         <view class="glass-card history-detail__insight">
           <view class="history-detail__insight-label">训练复盘</view>
           <view class="history-detail__insight-title">{{ detailInsightTitle }}</view>
@@ -328,6 +363,11 @@ function comparisonClass(value?: number | null) {
     :loading="shareLoading"
     @close="closeShareCard"
     @copy="copyShareText"
+  />
+  <TrainingLevelUpgradeModal
+    :visible="showLevelUpgrade"
+    :settlement="levelSettlement"
+    @close="closeLevelUpgrade"
   />
 </template>
 

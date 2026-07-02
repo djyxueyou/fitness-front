@@ -73,15 +73,6 @@
       }
     },
     {
-      "path": "pages/home/cultivation-settlement",
-      "style": {
-        "navigationStyle": "custom",
-        "backgroundColor": "#F3F6F9",
-        "backgroundColorTop": "#F3F6F9",
-        "backgroundColorBottom": "#F3F6F9"
-      }
-    },
-    {
       "path": "pages/home/workout-calendar",
       "style": {
         "navigationStyle": "custom",

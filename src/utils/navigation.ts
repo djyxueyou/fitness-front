@@ -7,7 +7,6 @@ export const routes = {
   templateEdit: '/pages/home/template-edit',
   workoutActive: '/pages/home/workout-active',
   workoutSummary: '/pages/home/workout-summary',
-  cultivationSettlement: '/pages/home/cultivation-settlement',
   workoutCalendar: '/pages/home/workout-calendar',
   weeklyReview: '/pages/home/weekly-review',
   volumeTrend: '/pages/home/volume-trend',

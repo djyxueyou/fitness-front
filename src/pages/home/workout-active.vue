@@ -1010,7 +1010,7 @@ async function confirmFinish() {
   workoutStore.finishWorkout()
   trainingStore.invalidateCache()
   emitTrainingChanged()
-  uni.redirectTo({ url: `${routes.cultivationSettlement}?id=${result.trainingId}` })
+  uni.redirectTo({ url: `${routes.historyDetail}?id=${result.trainingId}&settleLevel=1` })
 }
 
 async function retrySaveFailedDraft() {
@@ -1035,7 +1035,7 @@ async function retrySaveFailedDraft() {
     workoutStore.finishWorkout()
     trainingStore.invalidateCache()
     emitTrainingChanged()
-    uni.redirectTo({ url: `${routes.cultivationSettlement}?id=${result.trainingId}` })
+    uni.redirectTo({ url: `${routes.historyDetail}?id=${result.trainingId}&settleLevel=1` })
   } catch (err) {
     console.error('[training] retry failed save failed', err)
     uni.showToast({ title: '重新提交失败，请稍后再试', icon: 'none' })
