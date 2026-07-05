@@ -47,6 +47,17 @@ export type WorkoutExercise = {
   supersetGroupId?: string
   sets: WorkoutSet[]
 }
+export type WorkoutExecutionDayItem = {
+  exerciseId: number
+  exerciseName: string
+  primaryMuscle?: string
+  equipment?: string
+  recordType?: WorkoutRecordType
+  targetSets?: number
+  targetWeightKg?: number
+  targetReps?: number
+  targetDurationSeconds?: number
+}
 export type CompletedWorkoutSummary = SaveTrainingResponse & {
   trainingName: string
   startedAt: string
@@ -56,6 +67,7 @@ export type CompletedWorkoutSummary = SaveTrainingResponse & {
   activePlanDayId?: number | null
   activeExecutionId?: number | null
   activeExecutionDayId?: number | null
+  activeExecutionDayTitle?: string | null
   plannedItems?: Array<{
     exerciseId: number
     targetSets: number
@@ -79,6 +91,7 @@ type WorkoutDraft = {
   activePlanDayId?: number | null
   activeExecutionId?: number | null
   activeExecutionDayId?: number | null
+  activeExecutionDayTitle?: string | null
   activeTemplateName: string
   clientRequestId?: string
   startedAt: string
@@ -287,6 +300,7 @@ export const useWorkoutStore = defineStore('workout', () => {
   const activePlanDayId = ref<number | null>(null)
   const activeExecutionId = ref<number | null>(null)
   const activeExecutionDayId = ref<number | null>(null)
+  const activeExecutionDayTitle = ref<string | null>(null)
   const activeTemplateName = ref('自由训练')
   const clientRequestId = ref('')
   const startedAt = ref<string | null>(null)
@@ -305,6 +319,8 @@ export const useWorkoutStore = defineStore('workout', () => {
   const pendingStartPlanDayId = ref<number | null>(null)
   const pendingStartExecutionId = ref<number | null>(null)
   const pendingStartExecutionDayId = ref<number | null>(null)
+  const pendingStartExecutionDayTitle = ref<string | null>(null)
+  const pendingStartExecutionItems = ref<WorkoutExecutionDayItem[]>([])
   const draftSnapshot = ref<WorkoutDraft | null>(initialDraft)
   const hasDraft = ref(Boolean(initialDraft))
   const draftSavedAt = ref(initialDraft?.savedAt || '')
@@ -345,7 +361,9 @@ export const useWorkoutStore = defineStore('workout', () => {
     Boolean(workoutDirty.value && startedAt.value && activeExercises.value.length)
   )
   const hasRecoverableWorkout = computed(() => hasMeaningfulDraft.value || hasDraft.value)
-  const hasSaveFailedDraft = computed(() => draftStatus.value === 'SAVE_FAILED' && Boolean(lastSubmitPayload.value))
+  const hasSaveFailedDraft = computed(
+    () => draftStatus.value === 'SAVE_FAILED' && Boolean(lastSubmitPayload.value)
+  )
   const hasExpiredDraft = computed(() => draftStatus.value === 'EXPIRED')
   const draftSource = computed(() =>
     hasMeaningfulDraft.value
@@ -392,6 +410,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activePlanDayId.value = null
     activeExecutionId.value = null
     activeExecutionDayId.value = null
+    activeExecutionDayTitle.value = null
     activeTemplateName.value = '自由训练'
     clientRequestId.value = createClientRequestId()
     startedAt.value = new Date().toISOString()
@@ -420,6 +439,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       planDayId?: number | null
       executionId?: number | null
       executionDayId?: number | null
+      executionDayTitle?: string | null
+      executionItems?: WorkoutExecutionDayItem[]
     }
   ) {
     const templateStore = useTemplateStore()
@@ -428,7 +449,9 @@ export const useWorkoutStore = defineStore('workout', () => {
     activePlanDayId.value = context?.planDayId ?? null
     activeExecutionId.value = context?.executionId ?? null
     activeExecutionDayId.value = context?.executionDayId ?? null
-    activeTemplateName.value = templateStore.getById(templateId)?.name ?? '自由训练'
+    activeExecutionDayTitle.value = context?.executionDayTitle ?? null
+    activeTemplateName.value =
+      context?.executionDayTitle || templateStore.getById(templateId)?.name || '自由训练'
     clientRequestId.value = createClientRequestId()
     startedAt.value = new Date().toISOString()
     elapsedSeconds.value = 0
@@ -436,6 +459,30 @@ export const useWorkoutStore = defineStore('workout', () => {
     draftStatus.value = 'ACTIVE'
     lastSubmitPayload.value = null
     resetDraftFocus()
+
+    if (context?.executionItems?.length) {
+      const exerciseIds = context.executionItems.map((item) => item.exerciseId)
+      await loadLastPerformances(exerciseIds)
+      await loadRecommendations(exerciseIds)
+      activeExercises.value = context.executionItems.map((item) => {
+        const recordType = item.recordType || 'WEIGHT_REPS'
+        return {
+          id: item.exerciseId,
+          name: item.exerciseName,
+          muscle: item.primaryMuscle || '',
+          equipment: item.equipment,
+          recordType,
+          ended: false,
+          sets: createSetsFromTemplateTargets(Math.max(1, item.targetSets || 1), recordType, {
+            targetWeightKg: item.targetWeightKg,
+            targetReps: item.targetReps,
+            targetDurationSeconds: item.targetDurationSeconds
+          })
+        }
+      })
+      updateDraftFocus(0)
+      return
+    }
 
     if (!templateId) {
       activeExercises.value = createEmptyWorkout()
@@ -471,6 +518,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       planDayId?: number | null
       executionId?: number | null
       executionDayId?: number | null
+      executionDayTitle?: string | null
+      executionItems?: WorkoutExecutionDayItem[]
     }
   ) {
     hasPendingStart.value = true
@@ -479,6 +528,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     pendingStartPlanDayId.value = context?.planDayId ?? null
     pendingStartExecutionId.value = context?.executionId ?? null
     pendingStartExecutionDayId.value = context?.executionDayId ?? null
+    pendingStartExecutionDayTitle.value = context?.executionDayTitle ?? null
+    pendingStartExecutionItems.value = context?.executionItems ?? []
   }
 
   function clearPendingStart() {
@@ -488,6 +539,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     pendingStartPlanDayId.value = null
     pendingStartExecutionId.value = null
     pendingStartExecutionDayId.value = null
+    pendingStartExecutionDayTitle.value = null
+    pendingStartExecutionItems.value = []
   }
 
   async function loadLastPerformances(exerciseIds?: number[]) {
@@ -628,7 +681,8 @@ export const useWorkoutStore = defineStore('workout', () => {
                     durationSeconds: recommendation.targetDurationSeconds ?? set.durationSeconds,
                     plannedWeightKg: recommendation.targetWeightKg ?? set.weight,
                     plannedReps: recommendation.targetReps ?? set.reps,
-                    plannedDurationSeconds: recommendation.targetDurationSeconds ?? set.durationSeconds,
+                    plannedDurationSeconds:
+                      recommendation.targetDurationSeconds ?? set.durationSeconds,
                     targetSource: 'PROGRESSION_RECOMMENDATION',
                     sourceRecommendationId: recommendation.recommendationId
                   }
@@ -1003,7 +1057,10 @@ export const useWorkoutStore = defineStore('workout', () => {
         ? { ...item, sets: item.sets.filter((_, idx) => idx !== setIndex) }
         : item
     )
-    markRecommendationDirtyIfNeeded(exerciseIndex, (exercise.sets[setIndex]?.setType || 'NORMAL') === 'NORMAL')
+    markRecommendationDirtyIfNeeded(
+      exerciseIndex,
+      (exercise.sets[setIndex]?.setType || 'NORMAL') === 'NORMAL'
+    )
     markWorkoutDirty()
     updateDraftFocus(exerciseIndex)
     persistDraft()
@@ -1083,6 +1140,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activePlanDayId.value = null
     activeExecutionId.value = null
     activeExecutionDayId.value = null
+    activeExecutionDayTitle.value = null
     activeTemplateName.value = '自由训练'
     clientRequestId.value = ''
     startedAt.value = null
@@ -1130,6 +1188,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       activePlanDayId: activePlanDayId.value,
       activeExecutionId: activeExecutionId.value,
       activeExecutionDayId: activeExecutionDayId.value,
+      activeExecutionDayTitle: activeExecutionDayTitle.value,
       activeTemplateName: activeTemplateName.value,
       clientRequestId: ensureClientRequestId(),
       startedAt: activeStartedAt,
@@ -1178,6 +1237,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activePlanDayId.value = draft.activePlanDayId ?? null
     activeExecutionId.value = draft.activeExecutionId ?? null
     activeExecutionDayId.value = draft.activeExecutionDayId ?? null
+    activeExecutionDayTitle.value = draft.activeExecutionDayTitle ?? null
     activeTemplateName.value = draft.activeTemplateName || '自由训练'
     clientRequestId.value = draft.clientRequestId || createClientRequestId()
     startedAt.value = draft.startedAt
@@ -1216,6 +1276,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activePlanDayId.value = null
     activeExecutionId.value = null
     activeExecutionDayId.value = null
+    activeExecutionDayTitle.value = null
     activeTemplateName.value = '自由训练'
     clientRequestId.value = ''
     startedAt.value = null
@@ -1248,6 +1309,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     activePlanDayId,
     activeExecutionId,
     activeExecutionDayId,
+    activeExecutionDayTitle,
     activeTemplateName,
     clientRequestId,
     startedAt,
@@ -1265,6 +1327,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     pendingStartPlanDayId,
     pendingStartExecutionId,
     pendingStartExecutionDayId,
+    pendingStartExecutionDayTitle,
+    pendingStartExecutionItems,
     hasDraft,
     draftSavedAt,
     draftStatus,

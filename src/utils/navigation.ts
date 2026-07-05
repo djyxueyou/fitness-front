@@ -14,6 +14,8 @@ export const routes = {
   planIndex: '/pages/plan/index',
   planCreate: '/pages/plan/create',
   planDetail: '/pages/plan/detail',
+  planCustomize: '/pages/plan/customize',
+  planExecutionDay: '/pages/plan/execution-day',
   planActive: '/pages/plan/active',
   planEdit: '/pages/plan/edit',
   planDayEdit: '/pages/plan/day-edit',

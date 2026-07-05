@@ -18,7 +18,11 @@ import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
 import { fetchPlanDaySharePreview, type SharePreviewResponse } from '@/api/share'
-import type { TrainingPlanDayResponse, TrainingPlanDetailResponse } from '@/api/plan'
+import type {
+  RecommendedPlanIntroResponse,
+  TrainingPlanDayResponse,
+  TrainingPlanDetailResponse
+} from '@/api/plan'
 import {
   fetchPlanActivationOptions,
   finishActiveTrainingPlan,
@@ -41,6 +45,8 @@ const draftPromptStore = useWorkoutDraftPromptStore()
 const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
 const detail = ref<TrainingPlanDetailResponse | null>(null)
+const recommendedIntro = ref<RecommendedPlanIntroResponse | null>(null)
+const isRecommended = ref(false)
 const loading = ref(false)
 const busy = ref(false)
 const sheetVisible = ref(false)
@@ -67,6 +73,11 @@ const weeks = computed(() => {
     }))
 })
 const heroMeta = computed(() => {
+  if (recommendedIntro.value) {
+    return `${recommendedIntro.value.cycleWeeks} 周 · ${recommendedIntro.value.minWeeklyFrequency}-${recommendedIntro.value.maxWeeklyFrequency} 练 · ${difficultyText(
+      recommendedIntro.value.difficultyLevel
+    )} · ${recommendedIntro.value.goal || '综合训练'}`
+  }
   if (!detail.value) return ''
   return `${detail.value.cycleWeeks} 周 · ${detail.value.days.length} 个训练日 · ${difficultyText(
     detail.value.difficultyLevel
@@ -94,6 +105,7 @@ const executionStatusText = computed(() => {
   return detail.value?.executionStatus ? labels[detail.value.executionStatus] || '' : ''
 })
 const footerText = computed(() => {
+  if (isRecommended.value) return busy.value ? '处理中...' : '定制并启用'
   if (!detail.value) return '启用此计划'
   if (!detail.value.active) {
     if (!hasPlanDays.value) return '请先新增训练日'
@@ -115,6 +127,7 @@ const footerText = computed(() => {
 onLoad((options) => {
   const id = Number(options?.id)
   planId.value = Number.isFinite(id) && id > 0 ? id : null
+  isRecommended.value = options?.source === 'recommended'
 })
 
 onShow(async () => {
@@ -152,6 +165,10 @@ async function loadDetail(force = false) {
   if (!planId.value || loading.value) return
   loading.value = true
   try {
+    if (isRecommended.value) {
+      recommendedIntro.value = await planStore.getRecommendedIntro(planId.value, force)
+      return
+    }
     detail.value = await planStore.getDetail(planId.value, force)
   } catch (err) {
     uni.showToast({ title: '计划加载失败', icon: 'none' })
@@ -720,6 +737,10 @@ function formatPlanDate(value: string) {
 }
 
 async function handleFooterAction() {
+  if (isRecommended.value && planId.value) {
+    uni.navigateTo({ url: `${routes.planCustomize}?id=${planId.value}` })
+    return
+  }
   if (!detail.value) return
   if (!detail.value.active) {
     await activatePlan()
@@ -795,12 +816,69 @@ function difficultyText(level?: string) {
     <view class="page-shell plan-detail secondary-page safe-bottom" :class="themeStore.themeClass">
       <AppHeader
         title="计划详情"
-        subtitle="按周查看训练日，也可以直接开始单日训练"
+        :subtitle="
+          isRecommended
+            ? '查看计划介绍，定制后生成训练安排'
+            : '按周查看训练日，也可以直接开始单日训练'
+        "
         show-back
         @back="goBack"
       />
 
-      <view v-if="detail" class="plan-detail__content">
+      <view v-if="isRecommended && recommendedIntro" class="plan-detail__content">
+        <view class="glass-card plan-detail__hero">
+          <view class="plan-detail__tag-row">
+            <view class="plan-detail__tag">推荐计划</view>
+          </view>
+          <view class="plan-detail__title">{{ recommendedIntro.name }}</view>
+          <view class="plan-detail__meta">{{ heroMeta }}</view>
+          <view v-if="recommendedIntro.subtitle" class="plan-detail__intro-copy">
+            {{ recommendedIntro.subtitle }}
+          </view>
+          <view v-if="recommendedIntro.targetUserText" class="plan-detail__intro-copy">
+            {{ recommendedIntro.targetUserText }}
+          </view>
+        </view>
+
+        <view class="glass-card plan-detail__intro">
+          <view class="plan-detail__section-title">计划说明</view>
+          <view class="plan-detail__intro-copy">
+            {{
+              recommendedIntro.description ||
+              '定制后会按你的每周训练频率、器械条件和暂时不适合训练的部位生成安排。'
+            }}
+          </view>
+        </view>
+
+        <view class="glass-card plan-detail__intro">
+          <view class="plan-detail__section-title">包含训练模板</view>
+          <view
+            v-for="blueprint in recommendedIntro.blueprints"
+            :key="blueprint.blueprintId"
+            class="plan-detail__blueprint"
+          >
+            <view class="plan-detail__blueprint-name">{{ blueprint.name }}</view>
+            <view class="plan-detail__intro-copy">
+              {{ blueprint.description || '训练日蓝图' }}
+              <text v-if="blueprint.estimatedMinutes">
+                · 约 {{ blueprint.estimatedMinutes }} min</text
+              >
+            </view>
+          </view>
+        </view>
+
+        <view class="glass-card plan-detail__intro">
+          <view class="plan-detail__section-title">可定制项</view>
+          <view class="plan-detail__intro-copy">
+            每周训练次数、暂时不适合训练的部位、器械条件、单次训练时长。
+          </view>
+          <view v-if="recommendedIntro.safetyNotes" class="plan-detail__intro-copy">
+            {{ recommendedIntro.safetyNotes }}
+          </view>
+        </view>
+      </view>
+
+      <view v-else-if="detail" class="plan-detail__content">
         <view class="glass-card plan-detail__hero">
           <view class="plan-detail__hero-more btn-press" @tap="openPlanMoreSheet">...</view>
           <view class="plan-detail__tag-row">
@@ -929,7 +1007,13 @@ function difficultyText(level?: string) {
 
       <view class="plan-detail__footer">
         <PrimaryButton
-          :disabled="detail?.active ? !nextPlanDay : !detail || !hasPlanDays || busy"
+          :disabled="
+            isRecommended
+              ? !recommendedIntro || busy
+              : detail?.active
+                ? !nextPlanDay
+                : !detail || !hasPlanDays || busy
+          "
           @tap="handleFooterAction"
         >
           {{ footerText }}
@@ -1023,6 +1107,38 @@ function difficultyText(level?: string) {
     margin-top: 12rpx;
     color: var(--app-text-muted);
     font-size: 24rpx;
+  }
+
+  &__intro {
+    padding: 28rpx;
+  }
+
+  &__section-title {
+    color: var(--app-text);
+    font-size: 30rpx;
+    font-weight: 900;
+  }
+
+  &__intro-copy {
+    margin-top: 14rpx;
+    color: var(--app-text-muted);
+    font-size: 24rpx;
+    line-height: 1.55;
+  }
+
+  &__blueprint {
+    padding: 18rpx 0;
+    border-bottom: 1rpx solid rgba(15, 23, 42, 0.06);
+  }
+
+  &__blueprint:last-child {
+    border-bottom: 0;
+  }
+
+  &__blueprint-name {
+    color: var(--app-text);
+    font-size: 26rpx;
+    font-weight: 900;
   }
 
   &__progress {

@@ -47,7 +47,14 @@ export interface TrainingPlanDetailResponse {
   cycleWeeks: number
   active: boolean
   userTrainingPlanId?: number
-  executionStatus?: 'SCHEDULED' | 'ACTIVE' | 'FINISHING' | 'COMPLETED' | 'STOPPED' | 'REPLACED' | string
+  executionStatus?:
+    | 'SCHEDULED'
+    | 'ACTIVE'
+    | 'FINISHING'
+    | 'COMPLETED'
+    | 'STOPPED'
+    | 'REPLACED'
+    | string
   currentWeek?: number
   scheduleStartDate?: string
   scheduleEndDate?: string
@@ -275,10 +282,7 @@ export function fetchRecommendedPlanIntro(id: number) {
   })
 }
 
-export function previewRecommendedPlan(
-  id: number,
-  data: RecommendedPlanPersonalizationRequest
-) {
+export function previewRecommendedPlan(id: number, data: RecommendedPlanPersonalizationRequest) {
   return request<RecommendedPlanPreviewResponse>({
     url: `/api/recommended-plans/${id}/personalization/preview`,
     method: 'POST',
@@ -287,10 +291,7 @@ export function previewRecommendedPlan(
   })
 }
 
-export function activateRecommendedPlan(
-  id: number,
-  data: RecommendedPlanPersonalizationRequest
-) {
+export function activateRecommendedPlan(id: number, data: RecommendedPlanPersonalizationRequest) {
   return request<ActivePlanSummaryResponse>({
     url: `/api/recommended-plans/${id}/personalization/activate`,
     method: 'POST',

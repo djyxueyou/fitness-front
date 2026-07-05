@@ -354,9 +354,18 @@ async function initializeWorkout() {
   const planDayId = workoutStore.pendingStartPlanDayId
   const executionId = workoutStore.pendingStartExecutionId
   const executionDayId = workoutStore.pendingStartExecutionDayId
+  const executionDayTitle = workoutStore.pendingStartExecutionDayTitle
+  const executionItems = workoutStore.pendingStartExecutionItems
   startupLoading.value = true
   try {
-    await workoutStore.startWorkout(templateId, { planId, planDayId, executionId, executionDayId })
+    await workoutStore.startWorkout(templateId, {
+      planId,
+      planDayId,
+      executionId,
+      executionDayId,
+      executionDayTitle,
+      executionItems
+    })
     workoutStore.clearPendingStart()
     await applyRestoredDraftFocus()
   } catch (err) {
@@ -567,7 +576,9 @@ function generateWarmups(exerciseIndex: number) {
     targetWeight: firstWorkSet.weight,
     targetReps: firstWorkSet.reps,
     weightStep:
-      unit.value === 'lb' ? convertUnitToKg(profileStore.weightStepLb, 'lb') : profileStore.weightStepKg
+      unit.value === 'lb'
+        ? convertUnitToKg(profileStore.weightStepLb, 'lb')
+        : profileStore.weightStepKg
   })
   if (!candidates.length) {
     showToolFeedback('当前重量不需要额外热身组')
@@ -1004,6 +1015,7 @@ async function confirmFinish() {
     activePlanDayId: workoutStore.activePlanDayId,
     activeExecutionId: workoutStore.activeExecutionId,
     activeExecutionDayId: workoutStore.activeExecutionDayId,
+    activeExecutionDayTitle: workoutStore.activeExecutionDayTitle,
     plannedItems: workoutStore.activeExercises.map((exercise) => ({
       exerciseId: exercise.id,
       targetSets: exercise.sets.length
@@ -1031,6 +1043,7 @@ async function retrySaveFailedDraft() {
       activePlanDayId: workoutStore.lastSubmitPayload.planDayId,
       activeExecutionId: workoutStore.lastSubmitPayload.executionId,
       activeExecutionDayId: workoutStore.lastSubmitPayload.executionDayId,
+      activeExecutionDayTitle: workoutStore.activeExecutionDayTitle,
       plannedItems: workoutStore.activeExercises.map((exercise) => ({
         exerciseId: exercise.id,
         targetSets: exercise.sets.length
@@ -1096,8 +1109,12 @@ onUnmounted(() => {
     <view class="workout-active__progress">
       <view class="workout-active__progress-head">
         <view>
-          <view class="muted">{{ workoutStore.doneSets }}/{{ workoutStore.totalSets }} 组已完成</view>
-          <view class="workout-active__percent">{{ Math.round(workoutStore.progress * 100) }}%</view>
+          <view class="muted"
+            >{{ workoutStore.doneSets }}/{{ workoutStore.totalSets }} 组已完成</view
+          >
+          <view class="workout-active__percent"
+            >{{ Math.round(workoutStore.progress * 100) }}%</view
+          >
         </view>
         <view
           class="workout-active__done btn-press"
@@ -1523,12 +1540,18 @@ onUnmounted(() => {
       :default-bar-weight="profileStore.barWeightKg"
       @close="plateCalculatorVisible = false"
     />
-    <view v-if="warmupPreviewIndex !== null" class="workout-active__overlay" @tap="closeWarmupPreview">
+    <view
+      v-if="warmupPreviewIndex !== null"
+      class="workout-active__overlay"
+      @tap="closeWarmupPreview"
+    >
       <view class="workout-active__sheet workout-active__warmup-sheet" @tap.stop>
         <view class="workout-active__sheet-handle" />
         <view class="title-lg">建议热身组</view>
         <view class="muted workout-active__sheet-sub">
-          根据 {{ warmupPreviewExercise?.name || '当前动作' }} 的第一个正式组计算，热身组不计入容量、完成率和进阶判断。
+          根据
+          {{ warmupPreviewExercise?.name || '当前动作' }}
+          的第一个正式组计算，热身组不计入容量、完成率和进阶判断。
         </view>
         <view class="workout-active__warmup-list">
           <view

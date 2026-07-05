@@ -19,6 +19,7 @@ import {
   fetchActiveTrainingPlanSummary,
   fetchPlanActivationOptions,
   type ActivePlanSummaryResponse,
+  type RecommendedPlanListItemResponse,
   type TrainingPlanListItemResponse
 } from '@/api/plan'
 
@@ -35,7 +36,7 @@ const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const themeStore = useThemeStore()
-const activeTab = ref<'system' | 'mine'>('system')
+const activeTab = ref<'recommended' | 'mine'>('recommended')
 const busyPlanId = ref<number | null>(null)
 const activePlanSummary = ref<ActivePlanSummaryResponse | null>(null)
 const scrollTarget = ref('')
@@ -46,10 +47,15 @@ const sheetItems = ref<ActionSheetItem[]>([])
 const sheetTargetPlan = ref<TrainingPlanListItemResponse | null>(null)
 
 const visiblePlans = computed(() =>
-  sortActiveFirst(activeTab.value === 'system' ? planStore.systemPlans : planStore.userPlans)
+  activeTab.value === 'recommended'
+    ? planStore.recommendedPlans
+    : sortActiveFirst(planStore.userPlans)
 )
-const activePlanName = computed(() => planStore.activePlan?.name || '未启用')
+const activePlanName = computed(
+  () => planStore.activeExecution?.planName || planStore.activePlan?.name || '未启用'
+)
 const activePlanStatusText = computed(() => {
+  if (planStore.activeExecution) return '进行中'
   if (!planStore.activePlan) return '待选择'
   return executionStatusText(planStore.activePlan) || '进行中'
 })
@@ -74,17 +80,18 @@ const activePlanSubtitle = computed(() => {
     return planStore.recommendation?.reason || '今天的计划训练已经完成'
   }
   if (planStore.activePlan) return '今天没有明确训练日，可以查看本周安排'
-  return '先选择一套系统计划，之后可以复制成自己的版本'
+  if (planStore.activeExecution) return '查看下一次计划训练，开始后会自动计入进度'
+  return '先选择一套推荐计划，按你的频率和器械生成安排'
 })
 const activePlanActionText = computed(() => {
   if (hasActivePlanRecommendation.value) return '开始下一次'
-  if (planStore.activePlan) return '查看当前计划'
+  if (planStore.activePlan || planStore.activeExecution) return '查看当前安排'
   return '去启用'
 })
-const systemPlanCount = computed(() => planStore.systemPlans.length)
+const recommendedPlanCount = computed(() => planStore.recommendedPlans.length)
 const userPlanCount = computed(() => planStore.userPlans.length)
 const tabs = computed(() => [
-  { key: 'system' as const, label: `系统计划 ${systemPlanCount.value}` },
+  { key: 'recommended' as const, label: `推荐计划 ${recommendedPlanCount.value}` },
   { key: 'mine' as const, label: `我的计划 ${userPlanCount.value}` }
 ])
 const completedWeekCount = computed(() => activePlanSummary.value?.completedThisWeek ?? 0)
@@ -98,7 +105,7 @@ const weekProgressPercent = computed(() => {
   return total ? Math.min(100, Math.round((completedWeekCount.value / total) * 100)) : 0
 })
 const nextTrainingDayText = computed(() => {
-  if (!planStore.activePlan) return '待选择'
+  if (!planStore.activePlan && !planStore.activeExecution) return '待选择'
   if (!activePlanSummary.value) return '--'
   if (activePlanSummary.value.nextDayOfWeek)
     return weekdayText(activePlanSummary.value.nextDayOfWeek)
@@ -125,12 +132,13 @@ onShow(async () => {
     return
   }
   await planStore.fetchPlans({ force: true })
+  await planStore.loadActiveExecution()
   await planStore.loadRecommendation()
   await loadActivePlanSummary()
 })
 
 async function loadActivePlanSummary() {
-  if (!planStore.activePlan) {
+  if (!planStore.activePlan && !planStore.activeExecution) {
     activePlanSummary.value = null
     return
   }
@@ -146,17 +154,33 @@ function goDetail(id: number) {
   uni.navigateTo({ url: `${routes.planDetail}?id=${id}` })
 }
 
+function goRecommendedDetail(id: number) {
+  uni.navigateTo({ url: `${routes.planDetail}?id=${id}&source=recommended` })
+}
+
 function goCreatePlan() {
   uni.navigateTo({ url: routes.planCreate })
 }
 
 function goActivePlan() {
+  if (planStore.activeExecution && activePlanSummary.value?.nextPlanDayId) {
+    uni.navigateTo({
+      url: `${routes.planExecutionDay}?dayId=${activePlanSummary.value.nextPlanDayId}`
+    })
+    return
+  }
   const id = planStore.activePlan?.id
   if (id) goDetail(id)
 }
 
 async function startNextPlanDay() {
   const recommendation = planStore.recommendation
+  if (planStore.activeExecution && activePlanSummary.value?.nextPlanDayId) {
+    uni.navigateTo({
+      url: `${routes.planExecutionDay}?dayId=${activePlanSummary.value.nextPlanDayId}`
+    })
+    return
+  }
   if (!planStore.activePlan) {
     await focusPlanList()
     return
@@ -200,7 +224,7 @@ async function prepareNewWorkout(nextTitle?: string) {
 }
 
 async function focusPlanList() {
-  activeTab.value = 'system'
+  activeTab.value = 'recommended'
   scrollTarget.value = ''
   await nextTick()
   scrollTarget.value = 'plan-list-anchor'
@@ -297,6 +321,10 @@ async function copyPlan(item: TrainingPlanListItemResponse) {
   } finally {
     busyPlanId.value = null
   }
+}
+
+function customizeRecommendedPlan(item: RecommendedPlanListItemResponse) {
+  uni.navigateTo({ url: `${routes.planCustomize}?id=${item.id}` })
 }
 
 function openPlanActions(item: TrainingPlanListItemResponse) {
@@ -494,7 +522,7 @@ async function openDraftFab() {
               <view class="plan-page__progress-label">本周进度</view>
               <view class="plan-page__progress-value">
                 {{
-                  planStore.activePlan
+                  planStore.activePlan || planStore.activeExecution
                     ? `${weekProgressText} 已完成 · 剩余 ${remainingWeekCount} 次`
                     : '启用计划后显示进度'
                 }}
@@ -514,7 +542,7 @@ async function openDraftFab() {
       <view id="plan-list-anchor" class="section-heading plan-page__section-head">
         <view>
           <view class="section-title">选择计划</view>
-          <view class="plan-page__section-sub">系统计划可直接启用，也可以复制后编辑。</view>
+          <view class="plan-page__section-sub">推荐计划会按频率、器械和不适部位生成训练安排。</view>
         </view>
         <view v-if="activeTab === 'mine'" class="plan-page__create btn-press" @tap="goCreatePlan"
           >+ 新建计划</view
@@ -547,25 +575,42 @@ async function openDraftFab() {
 
       <view v-else class="plan-page__list">
         <view v-if="!visiblePlans.length" class="glass-card plan-page__empty">
-          还没有我的计划。可以先从系统计划复制一份。
+          还没有我的计划。可以先从推荐计划生成一套安排。
         </view>
 
         <view
           v-for="item in visiblePlans"
           :key="item.id"
           class="glass-card plan-page__item btn-press"
-          :class="{ 'plan-page__item--active': item.active }"
-          @tap="goDetail(item.id)"
+          :class="{
+            'plan-page__item--active': activeTab === 'mine' && 'active' in item && item.active
+          }"
+          @tap="activeTab === 'recommended' ? goRecommendedDetail(item.id) : goDetail(item.id)"
         >
-          <view class="plan-page__more btn-press" @tap.stop="openPlanActions(item)">...</view>
+          <view
+            v-if="activeTab === 'mine'"
+            class="plan-page__more btn-press"
+            @tap.stop="openPlanActions(item as TrainingPlanListItemResponse)"
+            >...</view
+          >
           <view class="plan-page__item-main">
             <view class="plan-page__tag-row">
-              <view class="plan-page__tag">{{ item.planType === 'SYSTEM' ? '系统' : '我的' }}</view>
-              <view v-if="item.active" class="plan-page__tag plan-page__tag--active">
-                {{ executionStatusText(item) || '进行中' }}
+              <view class="plan-page__tag">{{
+                activeTab === 'recommended' ? '推荐' : '我的'
+              }}</view>
+              <view
+                v-if="activeTab === 'mine' && 'active' in item && item.active"
+                class="plan-page__tag plan-page__tag--active"
+              >
+                {{ executionStatusText(item as TrainingPlanListItemResponse) || '进行中' }}
               </view>
-              <view v-else-if="executionStatusText(item)" class="plan-page__tag">
-                {{ executionStatusText(item) }}
+              <view
+                v-else-if="
+                  activeTab === 'mine' && executionStatusText(item as TrainingPlanListItemResponse)
+                "
+                class="plan-page__tag"
+              >
+                {{ executionStatusText(item as TrainingPlanListItemResponse) }}
               </view>
             </view>
             <view class="plan-page__name">{{ item.name }}</view>
@@ -574,10 +619,18 @@ async function openDraftFab() {
               {{ item.goal || '综合训练' }}
             </view>
           </view>
-          <view v-if="!item.active" class="plan-page__actions">
+          <view v-if="activeTab === 'recommended'" class="plan-page__actions">
             <view
               class="plan-page__btn plan-page__btn--primary btn-press"
-              @tap.stop="activatePlan(item)"
+              @tap.stop="customizeRecommendedPlan(item as RecommendedPlanListItemResponse)"
+            >
+              定制
+            </view>
+          </view>
+          <view v-else-if="'active' in item && !item.active" class="plan-page__actions">
+            <view
+              class="plan-page__btn plan-page__btn--primary btn-press"
+              @tap.stop="activatePlan(item as TrainingPlanListItemResponse)"
             >
               {{ busyPlanId === item.id ? '处理中' : '启用' }}
             </view>
