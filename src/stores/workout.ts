@@ -54,6 +54,8 @@ export type CompletedWorkoutSummary = SaveTrainingResponse & {
   activeTemplateId?: number | null
   activePlanId?: number | null
   activePlanDayId?: number | null
+  activeExecutionId?: number | null
+  activeExecutionDayId?: number | null
   plannedItems?: Array<{
     exerciseId: number
     targetSets: number
@@ -75,6 +77,8 @@ type WorkoutDraft = {
   activeTemplateId: number | null
   activePlanId?: number | null
   activePlanDayId?: number | null
+  activeExecutionId?: number | null
+  activeExecutionDayId?: number | null
   activeTemplateName: string
   clientRequestId?: string
   startedAt: string
@@ -281,6 +285,8 @@ export const useWorkoutStore = defineStore('workout', () => {
   const activeTemplateId = ref<number | null>(null)
   const activePlanId = ref<number | null>(null)
   const activePlanDayId = ref<number | null>(null)
+  const activeExecutionId = ref<number | null>(null)
+  const activeExecutionDayId = ref<number | null>(null)
   const activeTemplateName = ref('自由训练')
   const clientRequestId = ref('')
   const startedAt = ref<string | null>(null)
@@ -297,6 +303,8 @@ export const useWorkoutStore = defineStore('workout', () => {
   const pendingStartTemplateId = ref<number | null>(null)
   const pendingStartPlanId = ref<number | null>(null)
   const pendingStartPlanDayId = ref<number | null>(null)
+  const pendingStartExecutionId = ref<number | null>(null)
+  const pendingStartExecutionDayId = ref<number | null>(null)
   const draftSnapshot = ref<WorkoutDraft | null>(initialDraft)
   const hasDraft = ref(Boolean(initialDraft))
   const draftSavedAt = ref(initialDraft?.savedAt || '')
@@ -368,7 +376,12 @@ export const useWorkoutStore = defineStore('workout', () => {
     savedAt: draftSource.value?.savedAt || ''
   }))
   const sourceType = computed<'PLAN' | 'TEMPLATE' | 'FREE'>(() => {
-    if (activePlanId.value && activePlanDayId.value) return 'PLAN'
+    if (
+      (activePlanId.value && activePlanDayId.value) ||
+      (activeExecutionId.value && activeExecutionDayId.value)
+    ) {
+      return 'PLAN'
+    }
     if (activeTemplateId.value) return 'TEMPLATE'
     return 'FREE'
   })
@@ -377,6 +390,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeTemplateId.value = null
     activePlanId.value = null
     activePlanDayId.value = null
+    activeExecutionId.value = null
+    activeExecutionDayId.value = null
     activeTemplateName.value = '自由训练'
     clientRequestId.value = createClientRequestId()
     startedAt.value = new Date().toISOString()
@@ -400,12 +415,19 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   async function startWorkout(
     templateId: number | null,
-    context?: { planId?: number | null; planDayId?: number | null }
+    context?: {
+      planId?: number | null
+      planDayId?: number | null
+      executionId?: number | null
+      executionDayId?: number | null
+    }
   ) {
     const templateStore = useTemplateStore()
     activeTemplateId.value = templateId
     activePlanId.value = context?.planId ?? null
     activePlanDayId.value = context?.planDayId ?? null
+    activeExecutionId.value = context?.executionId ?? null
+    activeExecutionDayId.value = context?.executionDayId ?? null
     activeTemplateName.value = templateStore.getById(templateId)?.name ?? '自由训练'
     clientRequestId.value = createClientRequestId()
     startedAt.value = new Date().toISOString()
@@ -444,12 +466,19 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   function queueStartWorkout(
     templateId: number | null,
-    context?: { planId?: number | null; planDayId?: number | null }
+    context?: {
+      planId?: number | null
+      planDayId?: number | null
+      executionId?: number | null
+      executionDayId?: number | null
+    }
   ) {
     hasPendingStart.value = true
     pendingStartTemplateId.value = templateId
     pendingStartPlanId.value = context?.planId ?? null
     pendingStartPlanDayId.value = context?.planDayId ?? null
+    pendingStartExecutionId.value = context?.executionId ?? null
+    pendingStartExecutionDayId.value = context?.executionDayId ?? null
   }
 
   function clearPendingStart() {
@@ -457,6 +486,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     pendingStartTemplateId.value = null
     pendingStartPlanId.value = null
     pendingStartPlanDayId.value = null
+    pendingStartExecutionId.value = null
+    pendingStartExecutionDayId.value = null
   }
 
   async function loadLastPerformances(exerciseIds?: number[]) {
@@ -1050,6 +1081,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeTemplateId.value = null
     activePlanId.value = null
     activePlanDayId.value = null
+    activeExecutionId.value = null
+    activeExecutionDayId.value = null
     activeTemplateName.value = '自由训练'
     clientRequestId.value = ''
     startedAt.value = null
@@ -1095,6 +1128,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       activeTemplateId: activeTemplateId.value,
       activePlanId: activePlanId.value,
       activePlanDayId: activePlanDayId.value,
+      activeExecutionId: activeExecutionId.value,
+      activeExecutionDayId: activeExecutionDayId.value,
       activeTemplateName: activeTemplateName.value,
       clientRequestId: ensureClientRequestId(),
       startedAt: activeStartedAt,
@@ -1141,6 +1176,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeTemplateId.value = draft.activeTemplateId
     activePlanId.value = draft.activePlanId ?? null
     activePlanDayId.value = draft.activePlanDayId ?? null
+    activeExecutionId.value = draft.activeExecutionId ?? null
+    activeExecutionDayId.value = draft.activeExecutionDayId ?? null
     activeTemplateName.value = draft.activeTemplateName || '自由训练'
     clientRequestId.value = draft.clientRequestId || createClientRequestId()
     startedAt.value = draft.startedAt
@@ -1177,6 +1214,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeTemplateId.value = null
     activePlanId.value = null
     activePlanDayId.value = null
+    activeExecutionId.value = null
+    activeExecutionDayId.value = null
     activeTemplateName.value = '自由训练'
     clientRequestId.value = ''
     startedAt.value = null
@@ -1207,6 +1246,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     activeTemplateId,
     activePlanId,
     activePlanDayId,
+    activeExecutionId,
+    activeExecutionDayId,
     activeTemplateName,
     clientRequestId,
     startedAt,
@@ -1222,6 +1263,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     pendingStartTemplateId,
     pendingStartPlanId,
     pendingStartPlanDayId,
+    pendingStartExecutionId,
+    pendingStartExecutionDayId,
     hasDraft,
     draftSavedAt,
     draftStatus,

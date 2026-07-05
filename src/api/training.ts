@@ -151,6 +151,12 @@ export interface SaveTrainingRequest {
   templateId?: number | null
   planId?: number | null
   planDayId?: number | null
+  executionId?: number | null
+  executionDayId?: number | null
+  sourceType?: 'FREE' | 'USER_TEMPLATE' | 'SYSTEM_EXECUTION' | 'USER_PLAN_EXECUTION' | string
+  userTemplateId?: number | null
+  sourceSystemPlanId?: number | null
+  sourceUserPlanDefinitionId?: number | null
   clientRequestId?: string
   trainingName: string
   startedAt: string

@@ -352,9 +352,11 @@ async function initializeWorkout() {
   const templateId = workoutStore.pendingStartTemplateId
   const planId = workoutStore.pendingStartPlanId
   const planDayId = workoutStore.pendingStartPlanDayId
+  const executionId = workoutStore.pendingStartExecutionId
+  const executionDayId = workoutStore.pendingStartExecutionDayId
   startupLoading.value = true
   try {
-    await workoutStore.startWorkout(templateId, { planId, planDayId })
+    await workoutStore.startWorkout(templateId, { planId, planDayId, executionId, executionDayId })
     workoutStore.clearPendingStart()
     await applyRestoredDraftFocus()
   } catch (err) {
@@ -965,6 +967,12 @@ async function confirmFinish() {
     templateId: workoutStore.activeTemplateId,
     planId: workoutStore.activePlanId,
     planDayId: workoutStore.activePlanDayId,
+    executionId: workoutStore.activeExecutionId,
+    executionDayId: workoutStore.activeExecutionDayId,
+    sourceType:
+      workoutStore.activeExecutionId && workoutStore.activeExecutionDayId
+        ? 'SYSTEM_EXECUTION'
+        : undefined,
     clientRequestId: workoutStore.ensureClientRequestId(),
     trainingName: workoutStore.activeTemplateName || '自由训练',
     startedAt: toLocalDateTimeString(startedAt),
@@ -974,14 +982,7 @@ async function confirmFinish() {
   let result: Awaited<ReturnType<typeof saveTraining>>
   try {
     result = await saveTraining({
-      templateId: workoutStore.activeTemplateId,
-      planId: workoutStore.activePlanId,
-      planDayId: workoutStore.activePlanDayId,
-      clientRequestId: workoutStore.ensureClientRequestId(),
-      trainingName: workoutStore.activeTemplateName || '自由训练',
-      startedAt: toLocalDateTimeString(startedAt),
-      endedAt: toLocalDateTimeString(endedAt),
-      items
+      ...payload
     })
   } catch (err) {
     workoutStore.markSaveFailed(payload)
@@ -1001,6 +1002,8 @@ async function confirmFinish() {
     activeTemplateId: workoutStore.activeTemplateId,
     activePlanId: workoutStore.activePlanId,
     activePlanDayId: workoutStore.activePlanDayId,
+    activeExecutionId: workoutStore.activeExecutionId,
+    activeExecutionDayId: workoutStore.activeExecutionDayId,
     plannedItems: workoutStore.activeExercises.map((exercise) => ({
       exerciseId: exercise.id,
       targetSets: exercise.sets.length
@@ -1026,6 +1029,8 @@ async function retrySaveFailedDraft() {
       activeTemplateId: workoutStore.lastSubmitPayload.templateId,
       activePlanId: workoutStore.lastSubmitPayload.planId,
       activePlanDayId: workoutStore.lastSubmitPayload.planDayId,
+      activeExecutionId: workoutStore.lastSubmitPayload.executionId,
+      activeExecutionDayId: workoutStore.lastSubmitPayload.executionDayId,
       plannedItems: workoutStore.activeExercises.map((exercise) => ({
         exerciseId: exercise.id,
         targetSets: exercise.sets.length
