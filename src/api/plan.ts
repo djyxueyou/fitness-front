@@ -98,6 +98,130 @@ export interface ActivePlanSummaryResponse {
   nextScheduledDate?: string
 }
 
+export interface RecommendedPlanListItemResponse {
+  id: number
+  name: string
+  subtitle?: string
+  goal?: string
+  difficultyLevel?: string
+  cycleWeeks: number
+  minWeeklyFrequency: number
+  maxWeeklyFrequency: number
+}
+
+export interface RecommendedPlanBlueprintSummaryResponse {
+  blueprintId: number
+  name: string
+  description?: string
+  estimatedMinutes?: number
+}
+
+export interface RecommendedPlanIntroResponse {
+  id: number
+  name: string
+  subtitle?: string
+  description?: string
+  targetUserText?: string
+  goal?: string
+  difficultyLevel?: string
+  cycleWeeks: number
+  minWeeklyFrequency: number
+  maxWeeklyFrequency: number
+  safetyNotes?: string
+  blueprints: RecommendedPlanBlueprintSummaryResponse[]
+}
+
+export interface RecommendedPlanPersonalizationRequest {
+  weeklyFrequency: number
+  unavailableBodyParts: string[]
+  equipment: 'GYM' | 'DUMBBELL' | 'BODYWEIGHT' | 'UNKNOWN'
+  durationMinutes: 20 | 35 | 50
+}
+
+export interface RecommendedPlanPreviewItemResponse {
+  exerciseId: number
+  exerciseName: string
+  movementPattern?: string
+  sortOrder: number
+  targetSets: number
+  targetWeightKg?: number
+  targetReps?: number
+  targetDurationSeconds?: number
+  targetSource: string
+  replacedFromExerciseId?: number
+  replacementReason?: string
+}
+
+export interface RecommendedPlanPreviewDayResponse {
+  sourceBlueprintDayId?: number
+  blueprintId?: number
+  weekIndex: number
+  dayOfWeek: number
+  title: string
+  frequencyBucket?: string
+  items: RecommendedPlanPreviewItemResponse[]
+}
+
+export interface RecommendedPlanPreviewResponse {
+  systemPlanId: number
+  displayName: string
+  weeklyFrequency: number
+  durationMinutes: number
+  days: RecommendedPlanPreviewDayResponse[]
+  replacementSummary?: string
+  warnings: string[]
+}
+
+export interface ActiveExecutionItemResponse {
+  id: number
+  exerciseId: number
+  exerciseName: string
+  primaryMuscle?: string
+  equipment?: string
+  recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
+  sortOrder: number
+  targetSets?: number
+  targetWeightKg?: number
+  targetReps?: number
+  targetDurationSeconds?: number
+  replacedFromExerciseId?: number
+  replacementReason?: string
+}
+
+export interface ActiveExecutionDayResponse {
+  id: number
+  weekIndex: number
+  dayOfWeek: number
+  plannedDate: string
+  title: string
+  status: 'PENDING' | 'COMPLETED' | 'SKIPPED' | string
+  completedTrainingRecordId?: number
+  completedAt?: string
+  skippedAt?: string
+  items: ActiveExecutionItemResponse[]
+}
+
+export interface ActiveExecutionResponse {
+  executionId: number
+  definitionId: number
+  sourceSystemPlanId?: number
+  planName: string
+  status: 'SCHEDULED' | 'ACTIVE' | 'FINISHING' | 'COMPLETED' | 'STOPPED' | 'REPLACED' | string
+  currentWeek: number
+  cycleWeeks: number
+  scheduleStartDate: string
+  scheduleEndDate: string
+  days: ActiveExecutionDayResponse[]
+}
+
+type ActivePlanEndpointResponse = TrainingPlanDetailResponse | ActiveExecutionResponse
+
+function isActiveExecutionResponse(
+  value: ActivePlanEndpointResponse | null
+): value is ActiveExecutionResponse {
+  return Boolean(value && typeof value === 'object' && 'executionId' in value)
+}
+
 export interface UpdateTrainingPlanRequest {
   name: string
   goal?: string
@@ -134,6 +258,44 @@ export function fetchTrainingPlans(scope: 'all' | 'system' | 'mine' = 'all') {
   return request<TrainingPlanListItemResponse[]>({
     url: `/api/plans?scope=${encodeURIComponent(scope)}`,
     method: 'GET'
+  })
+}
+
+export function fetchRecommendedPlans() {
+  return request<RecommendedPlanListItemResponse[]>({
+    url: '/api/recommended-plans',
+    method: 'GET'
+  })
+}
+
+export function fetchRecommendedPlanIntro(id: number) {
+  return request<RecommendedPlanIntroResponse>({
+    url: `/api/recommended-plans/${id}/intro`,
+    method: 'GET'
+  })
+}
+
+export function previewRecommendedPlan(
+  id: number,
+  data: RecommendedPlanPersonalizationRequest
+) {
+  return request<RecommendedPlanPreviewResponse>({
+    url: `/api/recommended-plans/${id}/personalization/preview`,
+    method: 'POST',
+    data,
+    timeoutMs: 30000
+  })
+}
+
+export function activateRecommendedPlan(
+  id: number,
+  data: RecommendedPlanPersonalizationRequest
+) {
+  return request<ActivePlanSummaryResponse>({
+    url: `/api/recommended-plans/${id}/personalization/activate`,
+    method: 'POST',
+    data,
+    timeoutMs: 30000
   })
 }
 
@@ -232,11 +394,21 @@ export function deleteTrainingPlanDay(id: number, dayId: number) {
   })
 }
 
-export function fetchActiveTrainingPlan() {
-  return request<TrainingPlanDetailResponse | null>({
+function fetchActivePlanEndpoint() {
+  return request<ActivePlanEndpointResponse | null>({
     url: '/api/user/plans/active',
     method: 'GET'
   })
+}
+
+export async function fetchActiveTrainingPlan() {
+  const active = await fetchActivePlanEndpoint()
+  return isActiveExecutionResponse(active) ? null : active
+}
+
+export async function fetchActivePlanExecution() {
+  const active = await fetchActivePlanEndpoint()
+  return isActiveExecutionResponse(active) ? active : null
 }
 
 export function fetchActiveTrainingPlanSummary() {
