@@ -111,6 +111,21 @@ function toggleBodyPart(value: string) {
   void loadPreview()
 }
 
+function setWeeklyFrequency(value: number) {
+  weeklyFrequency.value = value
+  void loadPreview()
+}
+
+function setEquipment(value: RecommendedPlanPersonalizationRequest['equipment']) {
+  equipment.value = value
+  void loadPreview()
+}
+
+function setDurationMinutes(value: 20 | 35 | 50) {
+  durationMinutes.value = value
+  void loadPreview()
+}
+
 async function activate() {
   if (!planId.value || activating.value) return
   activating.value = true
@@ -155,10 +170,7 @@ async function activate() {
               :key="item"
               class="plan-customize__chip btn-press"
               :class="{ 'plan-customize__chip--active': weeklyFrequency === item }"
-              @tap="
-                weeklyFrequency = item
-                loadPreview()
-              "
+              @tap="setWeeklyFrequency(item)"
             >
               {{ item }} 练
             </view>
@@ -188,10 +200,7 @@ async function activate() {
               :key="item.value"
               class="plan-customize__chip btn-press"
               :class="{ 'plan-customize__chip--active': equipment === item.value }"
-              @tap="
-                equipment = item.value
-                loadPreview()
-              "
+              @tap="setEquipment(item.value)"
             >
               {{ item.label }}
             </view>
@@ -206,10 +215,7 @@ async function activate() {
               :key="item"
               class="plan-customize__chip btn-press"
               :class="{ 'plan-customize__chip--active': durationMinutes === item }"
-              @tap="
-                durationMinutes = item
-                loadPreview()
-              "
+              @tap="setDurationMinutes(item)"
             >
               {{ item }} min
             </view>
