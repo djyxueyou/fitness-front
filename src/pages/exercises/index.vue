@@ -19,6 +19,7 @@ import { routes } from '@/utils/navigation'
 
 type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
 type ExerciseScope = 'ALL' | 'CUSTOM' | 'FAVORITES'
+type ExerciseListScope = 'ALL' | 'CUSTOM'
 type ExerciseDifficultyCode = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
 
 const exerciseStore = useExerciseStore()
@@ -140,7 +141,7 @@ watch(searchText, () => {
       reset: true,
       categoryCode: activeCategoryCode.value,
       keyword: searchText.value,
-      scope: activeScope.value,
+      scope: activeScope.value === 'CUSTOM' ? 'CUSTOM' : 'ALL',
       equipmentCode: activeEquipmentCode.value,
       difficultyCode: activeDifficultyCode.value,
       recordType: activeRecordType.value
@@ -148,7 +149,14 @@ watch(searchText, () => {
   }, 300)
 })
 
-function currentQueryOptions() {
+function currentQueryOptions(): {
+  categoryCode: string
+  keyword: string
+  scope: ExerciseListScope
+  equipmentCode: string
+  difficultyCode: string
+  recordType: string
+} {
   return {
     categoryCode: activeCategoryCode.value,
     keyword: searchText.value,

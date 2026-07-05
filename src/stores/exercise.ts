@@ -17,6 +17,7 @@ import { getToken } from '@/api/http'
 import type { Exercise, ExerciseDetail } from '@/types/exercise'
 
 const PAGE_SIZE = 12
+type ExerciseListScope = 'ALL' | 'SYSTEM' | 'CUSTOM'
 
 interface ListCacheEntry {
   items: Exercise[]
@@ -93,7 +94,7 @@ export const useExerciseStore = defineStore('exercise', () => {
   const listCache = ref<Record<string, ListCacheEntry>>({})
   const activeCategoryCode = ref('')
   const activeKeyword = ref('')
-  const activeScope = ref<'ALL' | 'SYSTEM' | 'CUSTOM'>('ALL')
+  const activeScope = ref<ExerciseListScope | 'FAVORITES'>('ALL')
   const activePrimaryMuscleCode = ref('')
   const activeEquipmentCode = ref('')
   const activeDifficultyCode = ref('')
@@ -113,7 +114,7 @@ export const useExerciseStore = defineStore('exercise', () => {
   function queryKey(
     categoryCode = activeCategoryCode.value,
     keyword = activeKeyword.value,
-    scope = activeScope.value,
+    scope: ExerciseListScope = activeScope.value === 'FAVORITES' ? 'ALL' : activeScope.value,
     primaryMuscleCode = activePrimaryMuscleCode.value,
     equipmentCode = activeEquipmentCode.value,
     difficultyCode = activeDifficultyCode.value,
@@ -153,7 +154,7 @@ export const useExerciseStore = defineStore('exercise', () => {
     force?: boolean
     categoryCode?: string
     keyword?: string
-    scope?: 'ALL' | 'SYSTEM' | 'CUSTOM'
+    scope?: ExerciseListScope
     primaryMuscleCode?: string
     equipmentCode?: string
     difficultyCode?: string
@@ -163,7 +164,8 @@ export const useExerciseStore = defineStore('exercise', () => {
     const force = options?.force ?? false
     const categoryCode = options?.categoryCode ?? activeCategoryCode.value
     const keyword = options?.keyword ?? activeKeyword.value
-    const scope = options?.scope ?? activeScope.value
+    const scope: ExerciseListScope =
+      options?.scope ?? (activeScope.value === 'FAVORITES' ? 'ALL' : activeScope.value)
     const primaryMuscleCode = options?.primaryMuscleCode ?? activePrimaryMuscleCode.value
     const equipmentCode = options?.equipmentCode ?? activeEquipmentCode.value
     const difficultyCode = options?.difficultyCode ?? activeDifficultyCode.value

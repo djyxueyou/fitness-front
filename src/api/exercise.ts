@@ -7,12 +7,15 @@ export interface ExerciseSummary {
   categoryName: string
   primaryMuscleCode?: string
   primaryMuscleName?: string
+  primaryMuscle?: string
   secondaryMuscles?: string[]
   equipmentCode?: string
   equipmentName?: string
+  equipment?: string
   equipmentDetail?: string
   difficultyCode?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | string
   difficultyName?: string
+  difficultyLevel?: string
   recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
   searchKeywords?: string
   exerciseType?: 'SYSTEM' | 'USER' | string
