@@ -29,6 +29,7 @@ const alternativeExercises = ref<Exercise[]>([])
 const exercise = computed(() => exerciseStore.getById(exerciseId.value))
 const demoUrl = computed(() => exercise.value?.mediaUrl || '')
 const coverUrl = computed(() => exercise.value?.thumbnailUrl || '')
+const isVideoDemo = computed(() => /\.mp4(?:[?#].*)?$/i.test(demoUrl.value))
 const isCustomExercise = computed(() => exercise.value?.exerciseType === 'USER')
 const instructionTips = computed(() =>
   isCustomExercise.value ? [] : splitContent(exercise.value?.instructionText)
@@ -213,8 +214,21 @@ async function addToTemplate() {
       </AppHeader>
 
       <view class="exercise-detail__preview">
+        <video
+          v-if="demoUrl && isVideoDemo"
+          class="exercise-detail__demo"
+          :src="demoUrl"
+          :poster="coverUrl"
+          :controls="false"
+          :autoplay="true"
+          :loop="true"
+          :muted="true"
+          object-fit="contain"
+          :show-center-play-btn="false"
+          :enable-progress-gesture="false"
+        />
         <image
-          v-if="demoUrl"
+          v-else-if="demoUrl"
           class="exercise-detail__demo"
           :src="demoUrl"
           mode="aspectFit"
@@ -227,7 +241,7 @@ async function addToTemplate() {
           mode="aspectFit"
         />
         <view v-else class="exercise-detail__placeholder">
-          <view class="exercise-detail__placeholder-icon">GIF</view>
+          <view class="exercise-detail__placeholder-icon">演示</view>
           <view class="muted">{{ loading ? '加载动作演示中...' : '暂无动作演示' }}</view>
         </view>
       </view>
@@ -335,17 +349,18 @@ async function addToTemplate() {
   }
 
   &__preview {
-    min-height: 420rpx;
+    min-height: 0;
+    aspect-ratio: 16 / 9;
     border-radius: 36rpx;
-    border: 1px solid rgba(255, 80, 30, 0.16);
-    background: linear-gradient(145deg, rgba(255, 80, 30, 0.08), rgba(255, 160, 60, 0.04));
+    background: #fff;
     overflow: hidden;
   }
 
   &__demo {
     width: 100%;
-    height: 420rpx;
+    height: 100%;
     display: block;
+    background: #fff;
   }
 
   &__placeholder,
