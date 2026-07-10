@@ -83,8 +83,11 @@ export interface PlanRecommendationResponse {
 }
 
 export interface ActivePlanSummaryResponse {
-  userTrainingPlanId: number
+  sourceType?: 'RECOMMENDED_EXECUTION' | 'MY_PLAN' | string
+  userTrainingPlanId?: number | null
+  executionId?: number | null
   planId: number
+  sourceSystemPlanId?: number | null
   planName: string
   executionStatus: string
   weekIndex: number
@@ -202,6 +205,9 @@ export interface ActiveExecutionDayResponse {
   plannedDate: string
   title: string
   status: 'PENDING' | 'COMPLETED' | 'SKIPPED' | string
+  displayStatus?: string
+  actionType?: string
+  canSkip?: boolean
   completedTrainingRecordId?: number
   completedAt?: string
   skippedAt?: string

@@ -254,26 +254,10 @@
   }
 
   &__section-no {
-    display: flex;
-    align-items: baseline;
-    gap: 8rpx;
     color: var(--app-text);
     font-size: 32rpx;
     font-weight: 800;
-    letter-spacing: 1rpx;
-  }
-
-  &__section-index {
-    color: var(--app-accent);
-    font-size: 21rpx;
     letter-spacing: 0;
-    opacity: 0.72;
-  }
-
-  &__section-divider {
-    color: #bdc4cd;
-    font-size: 20rpx;
-    font-weight: 700;
   }
 
   &__section-title {

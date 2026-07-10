@@ -22,7 +22,7 @@ const sections = [
   {
     title: '三、训练风险提示',
     paragraphs: [
-      '动作演示、动作要点、训练模板和训练建议仅用于健身记录与训练参考，不构成医疗、康复、诊断或个性化运动处方。',
+      '动作演示、动作说明、关键提示、训练模板和训练建议仅用于健身记录与训练参考，不构成医疗、康复、诊断或个性化运动处方。',
       '训练前请结合自身身体状况、运动经验和现场环境量力而行。如存在疾病、伤痛、孕期、术后恢复或明显不适，应先咨询医生或专业教练。'
     ]
   },
@@ -112,8 +112,7 @@ function goBack() {
   height: 100vh;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 50% -10%, rgba(255, 100, 24, 0.08) 0%, transparent 42%),
-    var(--app-bg);
+    radial-gradient(circle at 50% -10%, rgba(255, 100, 24, 0.08) 0%, transparent 42%), var(--app-bg);
   color: var(--app-text);
 
   &__shell {

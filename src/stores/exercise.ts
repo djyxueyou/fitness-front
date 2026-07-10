@@ -50,7 +50,9 @@ function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exerc
     primaryMuscleCode: item.primaryMuscleCode,
     primaryMuscleName: item.primaryMuscleName,
     secondaryMuscles: item.secondaryMuscles || [],
-    equipment: item.equipmentDetail ? `${equipmentName} · ${item.equipmentDetail}` : equipmentName || '-',
+    equipment: item.equipmentDetail
+      ? `${equipmentName} · ${item.equipmentDetail}`
+      : equipmentName || '-',
     equipmentCode: item.equipmentCode,
     equipmentName: equipmentName || undefined,
     equipmentDetail: item.equipmentDetail,
@@ -59,7 +61,10 @@ function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exerc
     difficultyName,
     recordType: item.recordType || 'WEIGHT_REPS',
     exerciseType: item.exerciseType || 'SYSTEM',
-    thumbnailUrl: item.thumbnailUrl || item.thumbnailPath
+    thumbnailUrl: item.thumbnailUrl || item.thumbnailPath,
+    isVariant: item.isVariant,
+    variantOfExerciseId: item.variantOfExerciseId,
+    progressionLevel: item.progressionLevel
   }
 }
 
@@ -68,13 +73,15 @@ function normalizeDetail(item: import('@/api/exercise').ExerciseDetail): Exercis
     ...normalizeSummary(item),
     secondaryMuscles: item.secondaryMuscles || [],
     instructionText: item.instructionText,
-    commonMistakesText: item.commonMistakesText,
-    checklistText: item.checklistText,
+    formCuesText: item.formCuesText,
     mediaUrl: item.mediaUrl || item.mediaPath,
     mediaSizeBytes: item.mediaSizeBytes,
     mediaWidth: item.mediaWidth,
     mediaHeight: item.mediaHeight,
-    alternativeExerciseIds: item.alternativeExerciseIds || []
+    alternativeExerciseIds: item.alternativeExerciseIds || [],
+    planningTagsJson: item.planningTagsJson,
+    sourceReferenceUrl: item.sourceReferenceUrl,
+    contentReviewStatus: item.contentReviewStatus
   }
 }
 

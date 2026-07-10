@@ -1,48 +1,48 @@
-# FitForge Uni-app
+# FitForge Frontend
 
-FitForge 现已从原 React 原型重构为 `uni-app + Vue 3 + TypeScript` 多端项目，目标运行端包括：
+FitForge frontend is a uni-app application built with Vue 3 and TypeScript. It targets H5, WeChat Mini Program, and App builds from the same source tree.
 
-- H5
-- 微信小程序
-- iOS App
-- Android App
+## Tech Stack
+
+- uni-app + Vue 3
+- TypeScript
+- Vite + `@dcloudio/vite-plugin-uni`
+- Pinia
+- SCSS
 
 ## Project Structure
 
-- `src/`
-  uni-app 实际源码目录
-- `src/pages/`
-  真实页面路由
-- `src/components/`
-  公共 UI 组件
-- `src/stores/`
-  Pinia 状态
-- `src/mock/`
-  本地 mock 数据
-- `src-react-reference/`
-  迁移前 React 参考实现，只用于比对 UI/交互
+- `src/main.ts`: application entry and Pinia setup.
+- `src/App.vue`: app lifecycle, theme initialization, update checks, and silent token validation.
+- `src/pages.json`: page and tab routing.
+- `src/api/http.ts`: shared API request wrapper.
+- `src/api/*.ts`: domain API clients and request/response types.
+- `src/pages/`: real page implementations used by the current build.
+- `src/components/`: shared UI components.
+- `src/stores/`: Pinia stores.
+- `src/types/`: shared TypeScript types.
+- `scripts/`: build helper scripts.
 
-## Core Routes
+The repository also contains some top-level legacy or migration-era folders. Current development should prefer the `src/` tree unless a task explicitly targets those older files.
 
-Tab 页面：
+## Prerequisites
 
-- `pages/home/index`
-- `pages/exercises/index`
-- `pages/profile/index`
+- Node.js compatible with the current Vite and uni-app toolchain.
+- npm.
+- Backend API service, normally served by `fitness-server`.
 
-二级页面：
+## Environment
 
-- `pages/home/select-template`
-- `pages/home/workout-active`
-- `pages/home/workout-calendar`
-- `pages/home/volume-trend`
-- `pages/home/history-detail`
-- `pages/exercises/detail`
-- `pages/profile/history`
-- `pages/profile/template-manager`
-- `pages/profile/favorites`
-- `pages/profile/settings`
-- `pages/profile/about`
+Create local environment files from the examples already present in this repository. Common variables include:
+
+- `VITE_API_BASE_URL`
+- `VITE_STATIC_ASSET_BASE_URL`
+- `VITE_WECHAT_REAL_LOGIN`
+- `VITE_WECHAT_LOGIN_TIMEOUT_MS`
+- `VITE_API_TIMEOUT_MS`
+- `VITE_API_DEBUG`
+
+Do not commit local secrets or production-only values.
 
 ## Install
 
@@ -50,15 +50,15 @@ Tab 页面：
 npm install
 ```
 
-## Run
+## Development
 
-H5:
+Run the H5 app:
 
 ```bash
 npm run dev:h5
 ```
 
-微信小程序：
+Run the WeChat Mini Program build in development mode:
 
 ```bash
 npm run dev:mp-weixin
@@ -66,37 +66,50 @@ npm run dev:mp-weixin
 
 ## Build
 
-H5:
+Build H5:
 
 ```bash
 npm run build:h5
 ```
 
-微信小程序：
+Build WeChat Mini Program:
 
 ```bash
 npm run build:mp-weixin
 ```
 
-App:
+Build WeChat Mini Program for production mode:
+
+```bash
+npm run build:mp-weixin:prod
+```
+
+Build App:
 
 ```bash
 npm run build:app-plus
 ```
 
-## Verification Status
+## Verification
 
-当前已验证：
+Run the frontend verification pipeline:
 
-- `npm run build:h5`
-- `npm run build:mp-weixin`
-- `npm run build:app-plus`
+```bash
+npm run verify
+```
 
-均可完成构建。
+This currently runs formatting checks, TypeScript checks, and the WeChat Mini Program build.
 
-## Compatibility Notes
+## Backend Contract
 
-- 为了保证三端稳定，趋势页暂时使用自绘柱状/进度布局，而不是继续沿用 React 版 `recharts`
-- 图标未继续依赖 React 图标库，改成了更轻量的文本/符号表达，后续如需更高视觉一致性，可再替换为统一图标资源
-- 当前数据仍为本地 mock，尚未接入真实后端
-- 旧的 React 文件仍保留在仓库中，但不再作为 uni-app 构建入口
+The frontend expects backend responses in the shape:
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+Authentication uses the local token key `LIFTLOG_TOKEN` and sends the token in the `satoken` request header. API clients should go through `src/api/http.ts` so authentication failures and business errors are handled consistently.

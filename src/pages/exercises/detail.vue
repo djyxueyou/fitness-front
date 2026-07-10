@@ -33,13 +33,9 @@ const isCustomExercise = computed(() => exercise.value?.exerciseType === 'USER')
 const instructionTips = computed(() =>
   isCustomExercise.value ? [] : splitContent(exercise.value?.instructionText)
 )
-const mistakeTips = computed(() =>
-  isCustomExercise.value ? [] : splitContent(exercise.value?.commonMistakesText)
+const formCueTips = computed(() =>
+  isCustomExercise.value ? [] : splitContent(exercise.value?.formCuesText)
 )
-const checklistTips = computed(() =>
-  isCustomExercise.value ? [] : splitContent(exercise.value?.checklistText)
-)
-const secondaryMuscles = computed(() => exercise.value?.secondaryMuscles || [])
 const alternativeExerciseIds = computed(() => exercise.value?.alternativeExerciseIds || [])
 const isInCurrentWorkout = computed(() =>
   exercise.value ? workoutStore.hasExercise(exercise.value.id) : false
@@ -239,43 +235,24 @@ async function addToTemplate() {
       <view class="exercise-detail__chips">
         <TagChip :text="`器械：${exercise.equipment}`" />
         <TagChip :text="`难度：${exercise.level}`" />
-        <TagChip :text="`主肌群：${exercise.muscle}`" />
-        <TagChip :text="`分类：${exercise.category}`" />
-      </view>
-
-      <view v-if="secondaryMuscles.length" class="glass-card exercise-detail__section">
-        <view class="exercise-detail__section-title">辅助肌群</view>
-        <view class="exercise-detail__chips exercise-detail__chips--inside">
-          <TagChip v-for="muscle in secondaryMuscles" :key="muscle" :text="muscle" />
-        </view>
       </view>
 
       <view v-if="instructionTips.length" class="glass-card exercise-detail__section">
-        <view class="exercise-detail__section-title">动作要点</view>
+        <view class="exercise-detail__section-title">怎么做</view>
         <view v-for="(tip, index) in instructionTips" :key="tip" class="exercise-detail__tip">
           <view class="exercise-detail__tip-index">{{ index + 1 }}</view>
           <view class="exercise-detail__tip-text">{{ tip }}</view>
         </view>
       </view>
       <view v-else-if="!isCustomExercise" class="glass-card exercise-detail__section">
-        <view class="exercise-detail__section-title">动作要点</view>
+        <view class="exercise-detail__section-title">怎么做</view>
         <view class="muted">暂无详细说明</view>
       </view>
 
-      <view v-if="mistakeTips.length" class="glass-card exercise-detail__section">
-        <view class="exercise-detail__section-title">常见错误</view>
-        <view v-for="(tip, index) in mistakeTips" :key="tip" class="exercise-detail__tip">
-          <view class="exercise-detail__tip-index exercise-detail__tip-index--warn">
-            {{ index + 1 }}
-          </view>
-          <view class="exercise-detail__tip-text">{{ tip }}</view>
-        </view>
-      </view>
-
-      <view v-if="checklistTips.length" class="glass-card exercise-detail__section">
-        <view class="exercise-detail__section-title">训练前检查</view>
-        <view v-for="tip in checklistTips" :key="tip" class="exercise-detail__check">
-          <view class="exercise-detail__check-dot">✓</view>
+      <view v-if="formCueTips.length" class="glass-card exercise-detail__section">
+        <view class="exercise-detail__section-title">关键提示</view>
+        <view v-for="tip in formCueTips" :key="tip" class="exercise-detail__cue">
+          <view class="exercise-detail__cue-dot">✓</view>
           <view class="exercise-detail__tip-text">{{ tip }}</view>
         </view>
       </view>
@@ -423,7 +400,7 @@ async function addToTemplate() {
   }
 
   &__tip,
-  &__check {
+  &__cue {
     display: flex;
     align-items: flex-start;
     gap: 16rpx;
@@ -431,7 +408,7 @@ async function addToTemplate() {
   }
 
   &__tip-index,
-  &__check-dot {
+  &__cue-dot {
     width: 40rpx;
     height: 40rpx;
     border-radius: 14rpx;
@@ -446,14 +423,9 @@ async function addToTemplate() {
   &__tip-index {
     background: linear-gradient(135deg, #ff501e, #ffa03c);
     color: #fff;
-
-    &--warn {
-      background: rgba(255, 107, 74, 0.18);
-      color: #ff6b4a;
-    }
   }
 
-  &__check-dot {
+  &__cue-dot {
     background: rgba(61, 217, 162, 0.16);
     color: #3dd9a2;
   }

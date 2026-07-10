@@ -22,14 +22,16 @@ export interface ExerciseSummary {
   thumbnailSource?: string
   thumbnailPath?: string
   thumbnailUrl?: string
+  isVariant?: number
+  variantOfExerciseId?: number
+  progressionLevel?: number
   favorited?: boolean
 }
 
 export interface ExerciseDetail extends ExerciseSummary {
   secondaryMuscles?: string[]
   instructionText?: string
-  commonMistakesText?: string
-  checklistText?: string
+  formCuesText?: string
   mediaSource: string
   mediaPath?: string
   mediaUrl?: string
@@ -37,6 +39,9 @@ export interface ExerciseDetail extends ExerciseSummary {
   mediaWidth?: number
   mediaHeight?: number
   alternativeExerciseIds?: number[]
+  planningTagsJson?: string
+  sourceReferenceUrl?: string
+  contentReviewStatus?: 'DRAFT' | 'REVIEWED' | string
 }
 
 export interface ExerciseCategory {

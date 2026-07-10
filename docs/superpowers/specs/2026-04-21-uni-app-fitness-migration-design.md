@@ -2,6 +2,8 @@
 
 **Date:** 2026-04-21
 
+> 过期提醒：本文是 2026-04-21 React 原型迁移到 uni-app 的历史设计记录，只描述当时“三 Tab、mock 数据、暂不接后端”的迁移阶段。当前 FitForge 已经演进为四 Tab、真实后端 API、训练计划、会员、分享和训练等级体系。后续产品事实请以根目录 `PRODUCT.md`、`需求设计.md`、`DESIGN.md` 以及真实代码为准。
+
 ## Goal
 
 将当前 React + TypeScript + Vite 的健身前端原型，完整迁移为 `uni-app + Vue 3 + TypeScript` 项目，并支持：

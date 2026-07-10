@@ -1,49 +1,21 @@
-# FitForge Uni-app Project Context
+# FitForge 前端上下文入口
 
-This project is a fitness tracking application built with **uni-app**, **Vue 3**, and **TypeScript**. It is a cross-platform mobile application targeting H5, WeChat Mini Program, and Native Apps (iOS/Android).
+此文件曾经描述早期 uni-app 迁移阶段的前端上下文，其中“本地 mock 数据”“深色主题”等内容已经过期。
 
-## Project Overview
+当前事实来源请按顺序阅读：
 
-- **Core Framework**: uni-app (Vue 3 Composition API)
-- **State Management**: Pinia
-- **Styling**: SCSS (Sass), following a dark-themed fitness UI design.
-- **Build Tool**: Vite
-- **Primary Source Directory**: `src/` (Note: root-level folders like `pages/` or `components/` are redundant and should be ignored in favor of `src/`).
+1. 根目录 `../AGENTS.md`：全栈工程结构、前后端协作和常用命令。
+2. 根目录 `../PRODUCT.md`：产品资料总入口。
+3. 根目录 `../需求设计.md`：当前最新产品需求和业务规则。
+4. 根目录 `../DESIGN.md`：当前最新设计规范。
+5. 当前目录 `AGENTS.md`：前端工程入口、命令、API 和代码约定。
 
-## Architecture & Structure
+前端当前状态摘要：
 
-- `src/pages/`: Contains all application pages organized by feature (home, exercises, profile).
-- `src/components/`: Reusable UI components. Uses `easycom` for automatic imports (prefixes: `app-`, `glass-`).
-- `src/stores/`: Pinia stores for managing global state (workout, exercise, profile, etc.).
-- `src/api/`: Network request layer. Currently uses local mock data but is structured for future backend integration.
-- `src/utils/`: Shared utility functions for formatting, navigation, and business logic.
-- `src/types/`: Centralized TypeScript interfaces and types.
-- `src/static/`: Assets like images and icons.
+- 技术栈：uni-app + Vue 3 + TypeScript + Pinia + Vite。
+- 主要源码目录：`src/`。
+- 页面配置：`src/pages.json`，当前底部主导航为首页、计划、动作库、我的。
+- API：`src/api/*.ts` 已接入后端 `/api/...`，普通请求统一走 `src/api/http.ts`。
+- 设计方向：以根目录 `DESIGN.md` 为准，当前默认是浅色、干净、任务导向、暖橙强调，不再沿用早期大面积深色 mock 原型。
 
-## Key Development Commands
-
-- **Install Dependencies**: `npm install`
-- **Development (H5)**: `npm run dev:h5`
-- **Development (WeChat)**: `npm run dev:mp-weixin`
-- **Build (H5)**: `npm run build:h5`
-- **Build (WeChat)**: `npm run build:mp-weixin`
-- **Build (App)**: `npm run build:app-plus`
-- **Code Formatting**: `npm run format`
-
-## Coding Standards & Conventions
-
-- **Formatting**:
-  - Semi-colons: **None** (`semi: false`)
-  - Quotes: **Single** (`singleQuote: true`)
-  - Tab Width: **2**
-  - Trailing Commas: **None** (`trailingComma: "none"`)
-- **Naming**:
-  - Pages and components follow kebab-case or PascalCase (standard Vue/uni-app conventions).
-  - Stores are typically named after the domain they manage (e.g., `workout.ts`, `exercise.ts`).
-- **Styling**:
-  - Global styles are located in `src/styles/global.scss`.
-  - Component-specific styles should use `<style lang="scss" scoped>`.
-
-## Current State
-
-The project has been successfully migrated from a React prototype. UI and core logic (workout tracking, exercise database, profile) are implemented using mock data. Navigation and tab-bar configuration are defined in `src/pages.json`.
+如果本文件与根目录文档或真实代码冲突，以真实代码和根目录最新文档为准。

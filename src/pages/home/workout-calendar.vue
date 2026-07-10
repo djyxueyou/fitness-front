@@ -143,6 +143,10 @@ function openPlan(id: number) {
   uni.navigateTo({ url: `${routes.planDetail}?id=${id}` })
 }
 
+function openTemplate(id?: number) {
+  if (id) uni.navigateTo({ url: `${routes.templateDetail}?id=${id}` })
+}
+
 function goBack() {
   uni.navigateBack()
 }
@@ -156,7 +160,17 @@ function openPlanDay(item: CalendarDateDetailResponse['planDays'][number]) {
     openRecord(item.completedTrainingId)
     return
   }
-  openPlan(item.planId)
+  if (item.sourceType === 'RECOMMENDED_EXECUTION' && item.executionDayId) {
+    uni.navigateTo({ url: `${routes.planExecutionDay}?dayId=${item.executionDayId}` })
+    return
+  }
+  if (item.templateId) {
+    openTemplate(item.templateId)
+    return
+  }
+  if (item.planId) {
+    openPlan(item.planId)
+  }
 }
 
 async function switchMode(mode: ViewMode) {
@@ -267,17 +281,17 @@ function toDateString(date: Date) {
         <view class="summary">
           <view
             ><strong class="summary__value">{{ monthData?.summary.plannedCount ?? 0 }}</strong
-            ><text>计划</text></view
+            ><text>本月计划</text></view
           >
           <view
             ><strong class="summary__value">{{ monthData?.summary.trainedDayCount ?? 0 }}</strong
-            ><text>训练日</text></view
+            ><text>已训练天数</text></view
           >
           <view
             ><strong class="summary__value"
               >{{ monthData?.summary.completionRate ?? '--'
               }}{{ monthData?.summary.completionRate == null ? '' : '%' }}</strong
-            ><text>到期完成率</text></view
+            ><text>已到期完成</text></view
           >
         </view>
 
@@ -308,26 +322,32 @@ function toDateString(date: Date) {
         </view>
 
         <view class="legend"
-          ><view><i class="legend__plan" />计划安排</view
+          ><view><i class="legend__plan" />计划日</view
           ><view><i class="legend__training" />已训练</view
-          ><view><i class="legend__attention" />待处理</view></view
+          ><view><i class="legend__attention" />需处理</view></view
         >
 
         <view class="detail-head"
           ><view
             ><strong class="detail-head__title">{{ selectedTitle }}</strong
-            ><text>计划与实际训练分开显示</text></view
+            ><text>当天安排和训练记录</text></view
           ></view
         >
         <view v-if="loadingDate" class="detail-empty">正在加载当天安排...</view>
         <template v-else>
           <view
             v-for="item in dateDetail?.planDays || []"
-            :key="`p-${item.userTrainingPlanId}-${item.planDayId}`"
+            :key="`p-${item.sourceType || 'MY_PLAN'}-${item.userTrainingPlanId || item.executionId}-${item.planDayId || item.executionDayId}`"
             class="detail-card btn-press"
             @tap="openPlanDay(item)"
           >
-            <view class="detail-card__icon detail-card__icon--plan">计</view>
+            <image
+              v-if="item.coverUrl"
+              class="detail-card__cover"
+              :src="item.coverUrl"
+              mode="aspectFill"
+            />
+            <view v-else class="detail-card__icon detail-card__icon--plan">计</view>
             <view class="detail-card__body">
               <strong class="detail-card__title">{{ item.title }}</strong>
               <text v-if="item.completedTrainingId">
@@ -573,15 +593,21 @@ function toDateString(date: Date) {
 }
 .legend {
   display: flex;
-  gap: 26rpx;
+  flex-wrap: wrap;
+  gap: 12rpx;
   margin: 18rpx 4rpx 34rpx;
   color: var(--app-text-muted);
-  font-size: 21rpx;
+  font-size: 20rpx;
 }
 .legend view {
+  min-height: 44rpx;
+  padding: 0 14rpx;
   display: flex;
   align-items: center;
   gap: 8rpx;
+  border: 1rpx solid var(--app-border);
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.72);
 }
 .legend i {
   width: 12rpx;
@@ -634,6 +660,13 @@ function toDateString(date: Date) {
   background: rgba(255, 84, 29, 0.18);
   color: var(--app-accent);
   font-weight: 900;
+}
+.detail-card__cover {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 22rpx;
+  background: var(--app-bg);
+  flex-shrink: 0;
 }
 .detail-card__icon--plan {
   background: rgba(63, 193, 142, 0.14);

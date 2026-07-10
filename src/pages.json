@@ -145,6 +145,15 @@
       }
     },
     {
+      "path": "pages/plan/customize-preview",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#F3F6F9",
+        "backgroundColorTop": "#F3F6F9",
+        "backgroundColorBottom": "#F3F6F9"
+      }
+    },
+    {
       "path": "pages/plan/execution-day",
       "style": {
         "navigationStyle": "custom",

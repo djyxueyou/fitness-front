@@ -11,12 +11,10 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { usePlanStore } from '@/stores/plan'
-import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
 import {
-  fetchActiveTrainingPlanSummary,
   fetchPlanActivationOptions,
   type ActivePlanSummaryResponse,
   type RecommendedPlanListItemResponse,
@@ -32,7 +30,6 @@ interface ActionSheetItem {
 }
 
 const planStore = usePlanStore()
-const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const themeStore = useThemeStore()
@@ -51,41 +48,36 @@ const visiblePlans = computed(() =>
     ? planStore.recommendedPlans
     : sortActiveFirst(planStore.userPlans)
 )
-const activePlanName = computed(
-  () => planStore.activeExecution?.planName || planStore.activePlan?.name || '未启用'
-)
+const hasCurrentPlan = computed(() => Boolean(activePlanSummary.value))
+const activePlanName = computed(() => activePlanSummary.value?.planName || '未启用')
 const activePlanStatusText = computed(() => {
-  if (planStore.activeExecution) return '进行中'
-  if (!planStore.activePlan) return '待选择'
-  return executionStatusText(planStore.activePlan) || '进行中'
+  if (!activePlanSummary.value) return '待选择'
+  return summaryStatusText(activePlanSummary.value.executionStatus)
 })
 const hasActivePlanRecommendation = computed(() =>
   Boolean(
-    planStore.activePlan &&
+    hasCurrentPlan.value &&
     planStore.recommendation?.templateId &&
-    ['PLAN_TODAY', 'PLAN_PENDING'].includes(planStore.recommendation.type)
+    planStore.recommendation.type === 'PLAN_TODAY'
   )
 )
 const isTodayCompletedRecommendation = computed(
   () => planStore.recommendation?.type === 'PLAN_TODAY_COMPLETED'
 )
 const activePlanRecommendationTitle = computed(() => {
-  if (!planStore.activePlan) return '还没有启用计划'
-  return planStore.recommendation?.title || ''
+  if (!activePlanSummary.value) return '还没有启用计划'
+  return activePlanSummary.value.nextTitle || planStore.recommendation?.title || '暂无待训练安排'
 })
 const activePlanSubtitle = computed(() => {
-  if (hasActivePlanRecommendation.value)
-    return planStore.recommendation?.subtitle || '按计划推进下一次训练'
+  if (hasActivePlanRecommendation.value) return planStore.recommendation?.subtitle || '按计划推进'
   if (isTodayCompletedRecommendation.value) {
     return planStore.recommendation?.reason || '今天的计划训练已经完成'
   }
-  if (planStore.activePlan) return '今天没有明确训练日，可以查看本周安排'
-  if (planStore.activeExecution) return '查看下一次计划训练，开始后会自动计入进度'
+  if (activePlanSummary.value) return '进入当前安排查看训练日和后续排期'
   return '先选择一套推荐计划，按你的频率和器械生成安排'
 })
 const activePlanActionText = computed(() => {
-  if (hasActivePlanRecommendation.value) return '开始下一次'
-  if (planStore.activePlan || planStore.activeExecution) return '查看当前安排'
+  if (activePlanSummary.value) return '查看当前安排'
   return '去启用'
 })
 const recommendedPlanCount = computed(() => planStore.recommendedPlans.length)
@@ -105,7 +97,7 @@ const weekProgressPercent = computed(() => {
   return total ? Math.min(100, Math.round((completedWeekCount.value / total) * 100)) : 0
 })
 const nextTrainingDayText = computed(() => {
-  if (!planStore.activePlan && !planStore.activeExecution) return '待选择'
+  if (!activePlanSummary.value) return '待选择'
   if (!activePlanSummary.value) return '--'
   if (activePlanSummary.value.nextDayOfWeek)
     return weekdayText(activePlanSummary.value.nextDayOfWeek)
@@ -125,6 +117,15 @@ function executionStatusText(item: TrainingPlanListItemResponse) {
   return item.lastExecutionStatus ? labels[item.lastExecutionStatus] || '' : ''
 }
 
+function summaryStatusText(status?: string) {
+  const labels: Record<string, string> = {
+    SCHEDULED: '待生效',
+    ACTIVE: '进行中',
+    FINISHING: '待收尾'
+  }
+  return status ? labels[status] || '进行中' : '进行中'
+}
+
 onShow(async () => {
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) {
@@ -132,22 +133,13 @@ onShow(async () => {
     return
   }
   await planStore.fetchPlans({ force: true })
-  await planStore.loadActiveExecution()
+  await planStore.loadCurrentPlan()
   await planStore.loadRecommendation()
   await loadActivePlanSummary()
 })
 
 async function loadActivePlanSummary() {
-  if (!planStore.activePlan && !planStore.activeExecution) {
-    activePlanSummary.value = null
-    return
-  }
-  try {
-    activePlanSummary.value = await fetchActiveTrainingPlanSummary()
-  } catch (err) {
-    activePlanSummary.value = null
-    console.error('[plan] active summary fetch failed', err)
-  }
+  activePlanSummary.value = planStore.currentPlanSummary
 }
 
 function goDetail(id: number) {
@@ -163,64 +155,11 @@ function goCreatePlan() {
 }
 
 function goActivePlan() {
-  if (planStore.activeExecution && activePlanSummary.value?.nextPlanDayId) {
-    uni.navigateTo({
-      url: `${routes.planExecutionDay}?dayId=${activePlanSummary.value.nextPlanDayId}`
-    })
+  if (activePlanSummary.value) {
+    uni.navigateTo({ url: routes.planActive })
     return
   }
-  const id = planStore.activePlan?.id
-  if (id) goDetail(id)
-}
-
-async function startNextPlanDay() {
-  const recommendation = planStore.recommendation
-  if (planStore.activeExecution && activePlanSummary.value?.nextPlanDayId) {
-    uni.navigateTo({
-      url: `${routes.planExecutionDay}?dayId=${activePlanSummary.value.nextPlanDayId}`
-    })
-    return
-  }
-  if (!planStore.activePlan) {
-    await focusPlanList()
-    return
-  }
-  if (!hasActivePlanRecommendation.value || !recommendation?.templateId) {
-    goActivePlan()
-    return
-  }
-  const ok = await ensureFeatureAuth('训练功能')
-  if (!ok) return
-  const canStart = await prepareNewWorkout(
-    recommendation.title || recommendation.planName || '计划训练'
-  )
-  if (!canStart) return
-  templateStore.markUsed(recommendation.templateId)
-  workoutStore.queueStartWorkout(recommendation.templateId, {
-    planId: recommendation.planId ?? null,
-    planDayId: recommendation.planDayId ?? null
-  })
-  uni.navigateTo({ url: routes.workoutActive })
-}
-
-async function prepareNewWorkout(nextTitle?: string) {
-  workoutStore.refreshDraftState()
-  if (!workoutStore.hasRecoverableWorkout) return true
-
-  const action = await draftPromptStore.open(
-    nextTitle ? { title: nextTitle, subtitle: '计划训练日 · 删除当前草稿后直接开始' } : undefined
-  )
-  if (action === 'continue') {
-    if (workoutStore.restoreDraft()) {
-      uni.navigateTo({ url: routes.workoutActive })
-    }
-    return false
-  }
-  if (action === 'discard') {
-    workoutStore.discardWorkout()
-    return true
-  }
-  return false
+  void focusPlanList()
 }
 
 async function focusPlanList() {
@@ -232,7 +171,7 @@ async function focusPlanList() {
 
 async function activatePlan(item: TrainingPlanListItemResponse) {
   if (busyPlanId.value || item.active) return
-  if (planStore.activePlan && planStore.activePlan.id !== item.id) {
+  if (activePlanSummary.value && activePlanSummary.value.planId !== item.id) {
     openSwitchPlanSheet(item)
     return
   }
@@ -248,12 +187,10 @@ async function performActivatePlan(
     await planStore.activate(item.id, mode)
     await loadActivePlanSummary()
     uni.showToast({ title: '已启用训练计划', icon: 'none' })
+    setTimeout(() => uni.navigateTo({ url: routes.planActive }), 300)
   } catch (err) {
     uni.showToast({
-      title:
-        err instanceof Error && err.message.includes('at least one training day')
-          ? '请先新增训练日后再启用'
-          : '启用失败',
+      title: activationErrorTitle(err),
       icon: 'none'
     })
     console.error('[plan] activate failed', err)
@@ -455,13 +392,39 @@ function formatPlanDate(value: string) {
   return `${weekdays[date.getDay()]} · ${date.getMonth() + 1}月${date.getDate()}日`
 }
 
+function activationErrorTitle(err: unknown) {
+  if (err instanceof Error) {
+    if (err.message.includes('at least one training day')) {
+      return '请先新增训练日后再启用'
+    }
+    if (err.message) {
+      return err.message
+    }
+  }
+  return '启用失败'
+}
+
 function difficultyText(level?: string) {
   const map: Record<string, string> = {
     BEGINNER: '入门',
+    BEGINNER_INTERMEDIATE: '新手到进阶',
     INTERMEDIATE: '进阶',
     ADVANCED: '高阶'
   }
   return level ? map[level] || level : '通用'
+}
+
+function goalText(goal?: string) {
+  const map: Record<string, string> = {
+    STARTER: '入门体验',
+    FOUNDATION: '基础力量',
+    MUSCLE_GAIN: '增肌分化',
+    HOME_FITNESS: '居家训练',
+    STRENGTH: '力量提升',
+    FAT_LOSS: '减脂塑形',
+    GENERAL_FITNESS: '综合训练'
+  }
+  return goal ? map[goal] || goal : '综合训练'
 }
 
 function weekdayText(dayOfWeek?: number | null) {
@@ -512,7 +475,7 @@ async function openDraftFab() {
             </view>
             <view class="plan-page__active-next">{{ activePlanSubtitle }}</view>
           </view>
-          <view class="plan-page__active-start btn-press" @tap.stop="startNextPlanDay">
+          <view class="plan-page__active-start btn-press" @tap.stop="goActivePlan">
             {{ activePlanActionText }}
           </view>
         </view>
@@ -522,7 +485,7 @@ async function openDraftFab() {
               <view class="plan-page__progress-label">本周进度</view>
               <view class="plan-page__progress-value">
                 {{
-                  planStore.activePlan || planStore.activeExecution
+                  activePlanSummary
                     ? `${weekProgressText} 已完成 · 剩余 ${remainingWeekCount} 次`
                     : '启用计划后显示进度'
                 }}
@@ -616,7 +579,7 @@ async function openDraftFab() {
             <view class="plan-page__name">{{ item.name }}</view>
             <view class="plan-page__meta">
               {{ item.cycleWeeks }} 周 · {{ difficultyText(item.difficultyLevel) }} ·
-              {{ item.goal || '综合训练' }}
+              {{ goalText(item.goal) }}
             </view>
           </view>
           <view v-if="activeTab === 'recommended'" class="plan-page__actions">

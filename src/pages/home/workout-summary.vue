@@ -66,10 +66,11 @@ const positiveComparisons = computed(() =>
     (item) => Number(item.volumeDeltaKg || 0) > 0 || Number(item.maxWeightDeltaKg || 0) > 0
   )
 )
-const bestVolumeComparison = computed(() =>
-  comparisons.value
-    .filter((item) => item.volumeDeltaKg !== null)
-    .sort((a, b) => Number(b.volumeDeltaKg || 0) - Number(a.volumeDeltaKg || 0))[0]
+const bestVolumeComparison = computed(
+  () =>
+    comparisons.value
+      .filter((item) => item.volumeDeltaKg !== null)
+      .sort((a, b) => Number(b.volumeDeltaKg || 0) - Number(a.volumeDeltaKg || 0))[0]
 )
 const firstRecordCount = computed(() =>
   report.value ? reportItems.value.filter((item) => item.firstRecord).length : 0
@@ -133,12 +134,11 @@ function goDetail() {
 }
 
 function goActivePlan() {
-  const planId = summary.value?.activePlanId
-  if (!planId) {
+  if (!summary.value?.activePlanId) {
     goHome()
     return
   }
-  uni.redirectTo({ url: `${routes.planDetail}?id=${planId}` })
+  uni.redirectTo({ url: routes.planActive })
 }
 
 async function saveAsTemplate() {
@@ -400,8 +400,7 @@ function deltaClass(value?: number | null) {
 
   &__insight {
     border-color: rgba(80, 220, 180, 0.18);
-    background:
-      linear-gradient(145deg, rgba(80, 220, 180, 0.08), rgba(255, 255, 255, 0.045));
+    background: linear-gradient(145deg, rgba(80, 220, 180, 0.08), rgba(255, 255, 255, 0.045));
   }
 
   &__insight-label {

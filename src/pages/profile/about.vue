@@ -14,7 +14,7 @@ const versionInfo = getMiniProgramVersionInfo()
 
 const aboutFeatures = [
   { icon: '📝', title: '训练记录', desc: '记录动作、重量、次数、组数和训练容量。' },
-  { icon: '🏋️', title: '动作库', desc: '按部位浏览动作，查看演示、要点和常见错误。' },
+  { icon: '🏋️', title: '动作库', desc: '按部位浏览动作，查看演示、说明和关键提示。' },
   { icon: '⭐', title: '模板复用', desc: '使用系统模板，或沉淀自己的常用训练计划。' }
 ]
 
@@ -42,7 +42,9 @@ function checkUpdate() {
       <view class="about__hero">
         <image class="about__logo" src="/static/app-logo.png" mode="aspectFill" />
         <view class="title-lg">FitForge</view>
-        <view class="muted about__version">v{{ versionInfo.version }} · {{ versionInfo.envLabel }}</view>
+        <view class="muted about__version"
+          >v{{ versionInfo.version }} · {{ versionInfo.envLabel }}</view
+        >
         <view class="muted about__slogan">锻造更强的自己</view>
       </view>
 

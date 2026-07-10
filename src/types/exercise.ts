@@ -16,19 +16,24 @@ export interface Exercise {
   recordType?: string
   exerciseType?: string
   thumbnailUrl?: string
+  isVariant?: number
+  variantOfExerciseId?: number
+  progressionLevel?: number
   favorited?: boolean
 }
 
 export interface ExerciseDetail extends Exercise {
   secondaryMuscles?: string[]
   instructionText?: string
-  commonMistakesText?: string
-  checklistText?: string
+  formCuesText?: string
   mediaUrl?: string
   mediaSizeBytes?: number
   mediaWidth?: number
   mediaHeight?: number
   alternativeExerciseIds?: number[]
+  planningTagsJson?: string
+  sourceReferenceUrl?: string
+  contentReviewStatus?: string
 }
 
 export interface ExerciseRecord {

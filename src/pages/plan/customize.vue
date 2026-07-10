@@ -10,18 +10,14 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import type {
   RecommendedPlanIntroResponse,
-  RecommendedPlanPersonalizationRequest,
-  RecommendedPlanPreviewResponse
+  RecommendedPlanPersonalizationRequest
 } from '@/api/plan'
 
 const planStore = usePlanStore()
 const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
 const intro = ref<RecommendedPlanIntroResponse | null>(null)
-const preview = ref<RecommendedPlanPreviewResponse | null>(null)
 const loading = ref(false)
-const previewing = ref(false)
-const activating = ref(false)
 const weeklyFrequency = ref(3)
 const unavailableBodyParts = ref<string[]>(['NONE'])
 const equipment = ref<RecommendedPlanPersonalizationRequest['equipment']>('GYM')
@@ -51,7 +47,6 @@ const payload = computed<RecommendedPlanPersonalizationRequest>(() => ({
   equipment: equipment.value,
   durationMinutes: durationMinutes.value
 }))
-
 onLoad((options) => {
   const id = Number(options?.id)
   planId.value = Number.isFinite(id) && id > 0 ? id : null
@@ -64,7 +59,6 @@ onShow(async () => {
     return
   }
   await loadIntro()
-  await loadPreview()
 })
 
 async function loadIntro() {
@@ -84,65 +78,47 @@ async function loadIntro() {
   }
 }
 
-async function loadPreview() {
-  if (!planId.value || previewing.value) return
-  previewing.value = true
-  try {
-    preview.value = await planStore.previewRecommended(planId.value, payload.value)
-  } catch (err) {
-    preview.value = null
-    uni.showToast({ title: '预览生成失败', icon: 'none' })
-    console.error('[plan] preview failed', err)
-  } finally {
-    previewing.value = false
-  }
-}
-
 function toggleBodyPart(value: string) {
   if (value === 'NONE') {
     unavailableBodyParts.value = ['NONE']
-    void loadPreview()
     return
   }
   const next = new Set(unavailableBodyParts.value.filter((item) => item !== 'NONE'))
   if (next.has(value)) next.delete(value)
   else next.add(value)
   unavailableBodyParts.value = next.size ? Array.from(next) : ['NONE']
-  void loadPreview()
 }
 
 function setWeeklyFrequency(value: number) {
   weeklyFrequency.value = value
-  void loadPreview()
 }
 
 function setEquipment(value: RecommendedPlanPersonalizationRequest['equipment']) {
   equipment.value = value
-  void loadPreview()
 }
 
 function setDurationMinutes(value: 20 | 35 | 50) {
   durationMinutes.value = value
-  void loadPreview()
 }
 
-async function activate() {
-  if (!planId.value || activating.value) return
-  activating.value = true
-  try {
-    await planStore.activateRecommended(planId.value, payload.value)
-    const execution = await planStore.loadActiveExecution()
-    const nextDay = execution?.days.find((day) => day.status === 'PENDING') || execution?.days[0]
-    uni.showToast({ title: '已生成训练安排', icon: 'none' })
-    uni.redirectTo({
-      url: nextDay ? `${routes.planExecutionDay}?dayId=${nextDay.id}` : routes.planIndex
-    })
-  } catch (err) {
-    uni.showToast({ title: '启用失败', icon: 'none' })
-    console.error('[plan] activate recommended failed', err)
-  } finally {
-    activating.value = false
+function generatePlan() {
+  if (!planId.value) return
+  const query = [
+    `id=${planId.value}`,
+    `weeklyFrequency=${weeklyFrequency.value}`,
+    `unavailableBodyParts=${encodeURIComponent(unavailableBodyParts.value.join(','))}`,
+    `equipment=${equipment.value}`,
+    `durationMinutes=${durationMinutes.value}`
+  ].join('&')
+  uni.navigateTo({ url: `${routes.planCustomizePreview}?${query}` })
+}
+
+function goBack() {
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack()
+    return
   }
+  uni.switchTab({ url: routes.planIndex })
 }
 </script>
 
@@ -152,7 +128,7 @@ async function activate() {
       class="page-shell secondary-page plan-customize safe-bottom"
       :class="themeStore.themeClass"
     >
-      <AppHeader title="定制计划" :subtitle="intro?.name || '推荐计划'" show-back />
+      <AppHeader title="定制计划" :subtitle="intro?.name || '推荐计划'" show-back @back="goBack" />
 
       <EmptyState
         v-if="!loading && !intro"
@@ -222,49 +198,14 @@ async function activate() {
           </view>
         </view>
 
-        <view class="section-heading plan-customize__heading">
-          <view>
-            <view class="section-title">预览安排</view>
-            <view class="plan-customize__sub">{{
-              preview?.replacementSummary || '按你的选择生成训练日'
-            }}</view>
+        <view class="plan-customize__hint">
+          <view class="plan-customize__hint-title">下一步生成完整安排</view>
+          <view class="plan-customize__hint-sub">
+            生成后可按周查看训练日、动作列表和替换说明，再决定是否启用。
           </view>
         </view>
 
-        <view v-if="previewing" class="plan-customize__state">生成中...</view>
-        <view v-else class="plan-customize__days">
-          <view
-            v-for="day in preview?.days || []"
-            :key="`${day.weekIndex}-${day.dayOfWeek}`"
-            class="glass-card plan-customize__day"
-          >
-            <view class="plan-customize__day-title"
-              >第 {{ day.weekIndex }} 周 · {{ day.title }}</view
-            >
-            <view class="plan-customize__day-meta">{{ day.items.length }} 个动作</view>
-            <view
-              v-for="item in day.items"
-              :key="`${day.title}-${item.sortOrder}`"
-              class="plan-customize__exercise"
-            >
-              <text>{{ item.exerciseName }}</text>
-              <text>{{ item.targetSets || 1 }} 组</text>
-            </view>
-          </view>
-        </view>
-
-        <view v-if="preview?.warnings?.length" class="plan-customize__warnings">
-          <view
-            v-for="warning in preview.warnings"
-            :key="warning"
-            class="plan-customize__warning"
-            >{{ warning }}</view
-          >
-        </view>
-
-        <PrimaryButton class="plan-customize__submit" :loading="activating" @tap="activate">
-          生成并启用
-        </PrimaryButton>
+        <PrimaryButton class="plan-customize__submit" @tap="generatePlan">生成计划</PrimaryButton>
       </template>
     </view>
   </scroll-view>
@@ -307,45 +248,25 @@ async function activate() {
     color: #fff;
   }
 
-  &__heading {
-    margin-top: 30rpx;
+  &__hint {
+    margin-top: 28rpx;
+    padding: 26rpx;
+    border: 1rpx solid var(--app-border);
+    border-radius: 30rpx;
+    background: rgba(255, 255, 255, 0.82);
   }
 
-  &__sub,
-  &__day-meta,
-  &__state,
-  &__warning {
-    color: var(--app-text-muted);
-    font-size: 23rpx;
-  }
-
-  &__day {
-    margin-top: 18rpx;
-    padding: 22rpx;
-  }
-
-  &__day-title {
+  &__hint-title {
     color: var(--app-text-main);
     font-size: 28rpx;
     font-weight: 900;
   }
 
-  &__exercise {
-    min-height: 54rpx;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1rpx solid rgba(15, 23, 42, 0.06);
-    color: var(--app-text-main);
-    font-size: 24rpx;
-  }
-
-  &__warnings {
-    margin-top: 18rpx;
-  }
-
-  &__warning {
+  &__hint-sub {
     margin-top: 8rpx;
+    color: var(--app-text-muted);
+    font-size: 22rpx;
+    line-height: 1.45;
   }
 
   &__submit {

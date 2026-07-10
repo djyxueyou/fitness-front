@@ -30,7 +30,6 @@ const actionSheetTitle = ref('')
 const actionSheetSubtitle = ref('')
 const actionSheetItems = ref<ActionSheetItem[]>([])
 const actionTarget = ref<Template | null>(null)
-const activeTab = ref<'mine' | 'system'>('mine')
 
 onShow(async () => {
   const ok = await ensureFeatureAuth('模板管理')
@@ -52,10 +51,6 @@ async function createTemplate() {
 
 function goDetail(id: number) {
   uni.navigateTo({ url: `${routes.templateDetail}?id=${id}` })
-}
-
-function showSystemTemplates() {
-  activeTab.value = 'system'
 }
 
 async function editTemplate(item: Template) {
@@ -148,17 +143,6 @@ function openUserTemplateActions(item: Template) {
   actionSheetVisible.value = true
 }
 
-function openSystemTemplateActions(item: Template) {
-  actionTarget.value = item
-  actionSheetTitle.value = '系统模板'
-  actionSheetSubtitle.value = item.name
-  actionSheetItems.value = [
-    { key: 'detail', label: '查看详情', description: '查看系统模板动作安排' },
-    { key: 'duplicate', label: '复制到我的模板', description: '复制后可自由编辑', primary: true }
-  ]
-  actionSheetVisible.value = true
-}
-
 function closeActionSheet() {
   actionSheetVisible.value = false
 }
@@ -179,45 +163,21 @@ function handleTemplateAction(action: ActionSheetItem) {
   <view class="template-manager-page operation-page" :class="themeStore.themeClass">
     <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
       <view class="page-shell template-manager safe-bottom" :class="themeStore.themeClass">
-        <AppHeader
-          title="模板管理"
-          subtitle="管理自己的训练模板，复制系统方案作为起点"
-          show-back
-          @back="goBack"
-        />
+        <AppHeader title="模板管理" subtitle="管理自己的训练模板" show-back @back="goBack" />
 
         <view class="template-manager__toolbar">
           <view class="template-manager__toolbar-copy">
             <view class="template-manager__toolbar-title">
               我的模板 <text>{{ templateStore.userItems.length }}</text>
             </view>
-            <view class="template-manager__toolbar-sub">
-              系统方案 {{ templateStore.systemItems.length }}
-            </view>
+            <view class="template-manager__toolbar-sub">用于快速开始重复训练</view>
           </view>
           <view class="template-manager__create btn-press" @tap="createTemplate">+ 新建模板</view>
         </view>
 
-        <view class="template-manager__tabs">
-          <view
-            class="template-manager__tab btn-press"
-            :class="{ 'template-manager__tab--active': activeTab === 'mine' }"
-            @tap="activeTab = 'mine'"
-          >
-            我的模板 {{ templateStore.userItems.length }}
-          </view>
-          <view
-            class="template-manager__tab btn-press"
-            :class="{ 'template-manager__tab--active': activeTab === 'system' }"
-            @tap="activeTab = 'system'"
-          >
-            系统模板 {{ templateStore.systemItems.length }}
-          </view>
-        </view>
-
-        <view v-if="activeTab === 'mine'" class="template-manager__list">
+        <view class="template-manager__list">
           <view v-if="!templateStore.userItems.length" class="glass-card template-manager__empty">
-            还没有自定义模板。可以从系统模板复制，或点击“新建模板”创建。
+            还没有自定义模板。可以点击“新建模板”创建。
           </view>
 
           <view
@@ -265,51 +225,6 @@ function handleTemplateAction(action: ActionSheetItem) {
                 </view>
               </view>
             </template>
-          </view>
-
-          <view class="template-manager__helper btn-press" @tap="showSystemTemplates">
-            <view>
-              <view class="template-manager__helper-title">从系统模板快速开始</view>
-              <view class="template-manager__helper-sub">复制后可自由调整动作和组数</view>
-            </view>
-            <view class="template-manager__helper-arrow">›</view>
-          </view>
-        </view>
-
-        <view v-else class="template-manager__list template-manager__list--system">
-          <view
-            v-for="item in templateStore.systemItems"
-            :key="item.id"
-            class="template-manager__item template-manager__item--system"
-          >
-            <view class="template-manager__row">
-              <view class="template-manager__main" @tap="goDetail(item.id)">
-                <TemplateCover
-                  :name="item.name"
-                  :url="item.coverUrl"
-                  :record-type="item.coverRecordType"
-                />
-                <view class="template-manager__body">
-                  <view class="template-manager__name">{{ item.name }}</view>
-                  <view class="template-manager__meta"> {{ item.exercises }} 个动作 · 只读 </view>
-                  <view class="template-manager__desc">
-                    {{ item.description || '系统训练方案，复制后可自由调整。' }}
-                  </view>
-                </view>
-              </view>
-            </view>
-            <view class="template-manager__item-actions">
-              <view
-                class="template-manager__menu template-manager__menu--primary btn-press"
-                @tap.stop="duplicateTemplate(item.id)"
-              >
-                复制
-              </view>
-              <view
-                class="template-manager__arrow template-manager__arrow--action btn-press"
-                @tap.stop="goDetail(item.id)"
-              />
-            </view>
           </view>
         </view>
       </view>

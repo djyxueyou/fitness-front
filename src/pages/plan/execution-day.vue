@@ -84,6 +84,14 @@ async function startWorkout() {
   })
   uni.navigateTo({ url: routes.workoutActive })
 }
+
+function goBack() {
+  if (getCurrentPages().length > 1) {
+    uni.navigateBack()
+    return
+  }
+  uni.switchTab({ url: routes.planIndex })
+}
 </script>
 
 <template>
@@ -92,7 +100,7 @@ async function startWorkout() {
       class="page-shell secondary-page execution-day safe-bottom"
       :class="themeStore.themeClass"
     >
-      <AppHeader title="计划训练" :subtitle="meta" show-back />
+      <AppHeader title="计划训练" :subtitle="meta" show-back @back="goBack" />
 
       <EmptyState
         v-if="!loading && !day"

@@ -39,6 +39,7 @@ const summary = ref<TrainingStatsSummaryResponse | null>(null)
 const weekHistory = ref<TrainingHistoryItemResponse[]>([])
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
 const isLoggedIn = ref(Boolean(getToken()))
+const homeDataLoaded = ref(false)
 let homeLoadedAt = 0
 
 const weightUnit = computed(() => profileStore.unit)
@@ -67,13 +68,21 @@ const weekStats = computed(() => {
   })
 })
 const recentTrainingRecords = computed(() => recentHistory.value.slice(0, 2))
-const hasActivePlan = computed(() => Boolean(planStore.activePlan))
-const needsOnboarding = computed(() => isLoggedIn.value && !onboardingStore.isCompleted)
-const hasOnboardingRecommendation = computed(
-  () => !hasActivePlan.value && Boolean(onboardingStore.profile.recommendedPlanId)
+const hasActivePlan = computed(() => Boolean(planStore.currentPlanSummary))
+const hasExistingTrainingContext = computed(
+  () =>
+    hasActivePlan.value ||
+    recentHistory.value.length > 0 ||
+    weekHistory.value.length > 0 ||
+    Boolean(summary.value?.totalSessions) ||
+    templateStore.userItems.length > 0
 )
-const onboardingRecommendedPlan = computed(() =>
-  planStore.systemPlans.find((plan) => plan.id === onboardingStore.profile.recommendedPlanId)
+const needsOnboarding = computed(
+  () =>
+    isLoggedIn.value &&
+    homeDataLoaded.value &&
+    !onboardingStore.isCompleted &&
+    !hasExistingTrainingContext.value
 )
 const recommendationType = computed(() => planStore.recommendation?.type || '')
 const isRestDay = computed(() => recommendationType.value === 'PLAN_REST')
@@ -82,9 +91,7 @@ const todayDateLabel = computed(() => {
   const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][today.getDay()]
   return `今天 · ${today.getMonth() + 1}月${today.getDate()}日 ${weekday}`
 })
-const isPlanStartRecommendation = computed(() =>
-  ['PLAN_TODAY', 'PLAN_PENDING'].includes(recommendationType.value)
-)
+const isPlanStartRecommendation = computed(() => recommendationType.value === 'PLAN_TODAY')
 const hasPlanRecommendation = computed(() =>
   Boolean(
     hasActivePlan.value && isPlanStartRecommendation.value && planStore.recommendation?.templateId
@@ -93,7 +100,6 @@ const hasPlanRecommendation = computed(() =>
 const todayPlanStatusLabel = computed(() => {
   if (workoutStore.hasRecoverableWorkout) return '草稿训练'
   if (!hasActivePlan.value) return '计划未启用'
-  if (recommendationType.value === 'PLAN_PENDING') return '有补训'
   if (recommendationType.value === 'PLAN_TODAY') return '今日计划'
   if (recommendationType.value === 'PLAN_TODAY_COMPLETED') return '已完成'
   if (recommendationType.value === 'PLAN_COMPLETED') return '本周完成'
@@ -104,19 +110,17 @@ const homeHeroTitle = computed(() => {
   if (workoutStore.hasRecoverableWorkout) return '继续上次训练'
   if (!isLoggedIn.value) return '建立你的训练档案'
   if (!hasActivePlan.value && needsOnboarding.value) return '先建立你的训练偏好'
-  if (!hasActivePlan.value) return '选择适合你的下一步'
+  if (!hasActivePlan.value) return '选择一套训练计划'
   if (recommendationType.value === 'PLAN_TODAY') return '今天有计划训练'
-  if (recommendationType.value === 'PLAN_PENDING') return '有计划需要补训'
   if (recommendationType.value === 'PLAN_TODAY_COMPLETED') return '今日训练已完成'
   if (recommendationType.value === 'PLAN_COMPLETED') return '本周计划已完成'
-  if (recommendationType.value === 'PLAN_REST') return '今天适合灵活安排'
-  return '安排一次有效训练'
+  if (recommendationType.value === 'PLAN_REST') return '今天是计划休息日'
+  return '查看当前训练计划'
 })
 const todayActionSub = computed(() => {
   if (workoutStore.hasRecoverableWorkout) return '恢复未完成训练'
   if (!hasActivePlan.value && needsOnboarding.value) return '完成 30 秒画像，获得适合你的起步计划'
-  if (!hasActivePlan.value && hasOnboardingRecommendation.value) return '根据你的目标和训练条件重新推荐'
-  if (!hasActivePlan.value) return '查看推荐理由并启用训练计划'
+  if (!hasActivePlan.value) return '启用后首页会按日期展示训练安排'
   if (hasPlanRecommendation.value) return '按计划完成后计入进度'
   if (recommendationType.value === 'PLAN_TODAY_COMPLETED') return '可以自由训练，或查看后续安排'
   if (recommendationType.value === 'PLAN_COMPLETED') return '可以自由训练，或查看下周安排'
@@ -128,26 +132,25 @@ const primaryCtaTitle = computed(() => {
   if (!isLoggedIn.value) return '登录并选择训练计划'
   if (hasPlanRecommendation.value) return '开始今日计划'
   if (!hasActivePlan.value && needsOnboarding.value) return '建立训练画像'
-  if (!hasActivePlan.value && hasOnboardingRecommendation.value) return '查看推荐计划'
   if (!hasActivePlan.value) return '选择训练计划'
   if (recommendationType.value === 'PLAN_REST') return '查看本周安排'
   return '查看当前计划'
 })
-const recommendationTitle = computed(
-  () => {
-    if (!hasActivePlan.value && needsOnboarding.value) return '建立训练画像'
-    if (!hasActivePlan.value && onboardingRecommendedPlan.value) {
-      return `推荐计划：${onboardingRecommendedPlan.value.name}`
-    }
-    if (!hasActivePlan.value) return '选择一个训练计划'
+const recommendationTitle = computed(() => {
+  if (!hasActivePlan.value && needsOnboarding.value) return '建立训练画像'
+  if (!hasActivePlan.value) return '选择一个训练计划'
+  if (recommendationType.value !== 'PLAN_TODAY') {
     return (
-      planStore.recommendation?.title ||
-      planStore.recommendation?.planName ||
-      planStore.activePlan?.name ||
-      '自由安排训练'
+      planStore.currentPlanSummary?.planName || planStore.recommendation?.planName || '当前训练计划'
     )
   }
-)
+  return (
+    planStore.recommendation?.title ||
+    planStore.recommendation?.planName ||
+    planStore.currentPlanSummary?.planName ||
+    '自由安排训练'
+  )
+})
 
 onLoad(() => {
   onAuthChanged(refreshAfterAuthChanged)
@@ -185,6 +188,7 @@ async function refreshAfterTrainingChanged() {
 async function loadHomeData(options?: { forceTemplates?: boolean }) {
   if (!getToken()) {
     isLoggedIn.value = false
+    homeDataLoaded.value = false
     summary.value = null
     weekHistory.value = []
     recentHistory.value = []
@@ -205,6 +209,7 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
     clearToken()
     clearCachedUserProfile()
     isLoggedIn.value = false
+    homeDataLoaded.value = false
     summary.value = null
     weekHistory.value = []
     recentHistory.value = []
@@ -213,8 +218,11 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
   }
 
   if (!options?.forceTemplates && summary.value && Date.now() - homeLoadedAt < HOME_CACHE_MS) {
+    homeDataLoaded.value = true
     return
   }
+
+  homeDataLoaded.value = false
 
   if (options?.forceTemplates || !templateStore.loadedFromServer) {
     await templateStore
@@ -224,9 +232,14 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
       })
   }
 
-  planStore.fetchPlans({ force: options?.forceTemplates }).catch((err) => {
+  const planPromise = planStore.fetchPlans({ force: options?.forceTemplates }).catch((err) => {
     console.error('[home] plan fetch failed', err)
   })
+
+  const currentPlanPromise = planStore.loadCurrentPlan().catch((err) => {
+    console.error('[home] current plan fetch failed', err)
+  })
+
   planStore.loadRecommendation().catch((err) => {
     console.error('[home] plan recommendation fetch failed', err)
   })
@@ -259,7 +272,7 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
       console.error('[home] week history fetch failed', err)
     })
 
-  fetchTrainingHistory({
+  const recentHistoryPromise = fetchTrainingHistory({
     pageNo: 1,
     pageSize: 20
   })
@@ -270,6 +283,11 @@ async function loadHomeData(options?: { forceTemplates?: boolean }) {
       recentHistory.value = []
       console.error('[home] recent history fetch failed', err)
     })
+  Promise.allSettled([planPromise, currentPlanPromise, recentHistoryPromise]).finally(() => {
+    if (getToken()) {
+      homeDataLoaded.value = true
+    }
+  })
 }
 
 function getWeekStart(date: Date) {
@@ -326,13 +344,6 @@ async function handlePrimaryCta() {
       uni.navigateTo({ url: routes.onboarding })
       return
     }
-    if (!onboardingStore.profile.recommendedPlanId) {
-      await onboardingStore.recommend()
-    }
-    if (onboardingStore.profile.recommendedPlanId) {
-      uni.navigateTo({ url: routes.recommendedPlan })
-      return
-    }
     await goPlans()
     return
   }
@@ -357,11 +368,8 @@ async function goPlans() {
 async function viewRecommendedPlan() {
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) return
-  const planId = hasActivePlan.value
-    ? (planStore.recommendation?.planId ?? planStore.activePlan?.id)
-    : null
-  if (planId) {
-    uni.navigateTo({ url: `${routes.planDetail}?id=${planId}` })
+  if (hasActivePlan.value) {
+    uni.navigateTo({ url: routes.planActive })
     return
   }
   uni.switchTab({ url: routes.planIndex })
@@ -369,7 +377,7 @@ async function viewRecommendedPlan() {
 
 async function startPlanRecommendation() {
   const recommendation = planStore.recommendation
-  if (!recommendation?.templateId) {
+  if (recommendation?.type !== 'PLAN_TODAY' || !recommendation.templateId) {
     await goPlans()
     return
   }
@@ -475,7 +483,7 @@ async function openDraftFab() {
         />
         <view class="home-page__focus-content">
           <view class="home-page__focus-topline">
-            <view class="home-page__focus-label">今日任务</view>
+            <view class="home-page__focus-label">今日计划</view>
             <view class="home-page__focus-status">{{ todayPlanStatusLabel }}</view>
           </view>
           <view class="home-page__focus-title">{{ recommendationTitle }}</view>
@@ -541,8 +549,6 @@ async function openDraftFab() {
         <view class="home-page__section-head">
           <view>
             <view class="home-page__section-no">
-              <text class="home-page__section-index">02</text>
-              <text class="home-page__section-divider">/</text>
               <text>本周节奏</text>
             </view>
             <view class="home-page__section-title">保持连续，比一次练满更重要</view>
@@ -598,8 +604,6 @@ async function openDraftFab() {
         <view class="home-page__section-head">
           <view>
             <view class="home-page__section-no">
-              <text class="home-page__section-index">03</text>
-              <text class="home-page__section-divider">/</text>
               <text>最近完成</text>
             </view>
             <view class="home-page__section-title">从上一次继续进步</view>

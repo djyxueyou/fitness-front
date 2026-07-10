@@ -21,16 +21,22 @@ export interface CalendarMonthResponse {
 export interface CalendarDateDetailResponse {
   date: string
   planDays: Array<{
-    userTrainingPlanId: number
-    planId: number
+    sourceType?: 'MY_PLAN' | 'RECOMMENDED_EXECUTION' | string
+    userTrainingPlanId?: number | null
+    executionId?: number
+    planId?: number | null
     planName: string
-    planDayId: number
+    planDayId?: number
+    executionDayId?: number
     title: string
-    templateId: number
+    templateId?: number
     templateName?: string
     scheduledDate: string
     status: string
     actionType: string
+    canSkip?: boolean
+    coverUrl?: string
+    coverRecordType?: string
     completedTrainingId?: number
     durationSeconds?: number
     totalSetCount?: number

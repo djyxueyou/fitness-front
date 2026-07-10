@@ -26,11 +26,6 @@ let authFlowRunning = false
 let suppressNextAuthUntil = 0
 
 const weightUnit = computed(() => profileStore.unit)
-const profileSubtitle = computed(() => {
-  const goal = profileStore.trainingGoal || '目标未设'
-  const level = profileStore.experienceLevel || '经验未设'
-  return `${goal} · ${level}`
-})
 const levelState = computed(() => trainingLevel.value)
 const levelTitle = computed(() =>
   levelState.value ? `Lv.${levelState.value.level} · ${levelState.value.badgeName}` : 'Lv.1 · 青铜'
@@ -75,7 +70,9 @@ const badgePreviewItems = [
   { badgeCode: 'GLORY', badgeName: '荣耀', range: 'Lv.81+', accentColor: '#f59e0b' }
 ]
 const currentBadgeIndex = computed(() => {
-  const index = badgePreviewItems.findIndex((item) => item.badgeCode === levelState.value?.badgeCode)
+  const index = badgePreviewItems.findIndex(
+    (item) => item.badgeCode === levelState.value?.badgeCode
+  )
   return index >= 0 ? index : 0
 })
 const profileStats = computed(() => [
@@ -89,14 +86,44 @@ const profileStats = computed(() => [
 ])
 
 const quickItems = [
-  { label: '编辑资料', sub: '个人信息与训练方向', path: routes.profileEdit, icon: '👤', tone: 'cyan' },
-  { label: '身体指标', sub: '体脂、围度和心率记录', path: routes.profileBodyMetrics, icon: '●', tone: 'orange' },
-  { label: '历史记录', sub: '浏览训练明细', path: `${routes.workoutCalendar}?mode=records`, icon: '▣', tone: 'orange' },
-  { label: '模板管理', sub: '维护训练模板', path: routes.templateManager, icon: '★', tone: 'violet' }
+  {
+    label: '编辑资料',
+    sub: '个人信息与训练方向',
+    path: routes.profileEdit,
+    icon: '👤',
+    tone: 'cyan'
+  },
+  {
+    label: '身体指标',
+    sub: '体脂、围度和心率记录',
+    path: routes.profileBodyMetrics,
+    icon: '●',
+    tone: 'orange'
+  },
+  {
+    label: '历史记录',
+    sub: '浏览训练明细',
+    path: `${routes.workoutCalendar}?mode=records`,
+    icon: '▣',
+    tone: 'orange'
+  },
+  {
+    label: '模板管理',
+    sub: '维护训练模板',
+    path: routes.templateManager,
+    icon: '★',
+    tone: 'violet'
+  }
 ]
 
 const serviceItems = [
-  { label: '会员中心', sub: '查看试用期、套餐和会员权益', path: routes.membership, icon: '♛', tone: 'gold' },
+  {
+    label: '会员中心',
+    sub: '查看试用期、套餐和会员权益',
+    path: routes.membership,
+    icon: '♛',
+    tone: 'gold'
+  },
   { label: '我的收藏', sub: '常用动作收藏', path: routes.favorites, icon: '♥', tone: 'gold' },
   { label: '设置', sub: '单位、休息与应用偏好', path: routes.settings, icon: '⚙', tone: 'cyan' },
   { label: '关于', sub: '版本信息与相关协议', path: routes.about, icon: 'ⓘ', tone: 'orange' }
@@ -215,9 +242,7 @@ function getToneBg(tone?: string) {
             />
             <view class="profile__info">
               <view class="title-lg">{{ profileStore.nickname }}</view>
-              <view class="profile__profile-sub">{{ profileSubtitle }}</view>
             </view>
-            <view class="profile__settings btn-press" @tap="openPage(routes.settings)">⚙</view>
           </view>
 
           <view class="profile__level-card btn-press" @tap="openLevelDetail">
@@ -232,7 +257,9 @@ function getToneBg(tone?: string) {
             <view class="profile__level-main">
               <view class="profile__level-label">训练等级</view>
               <view class="profile__level-title">{{ levelTitle }}</view>
-              <view class="profile__level-copy">连续有效训练 {{ levelState?.currentStreakDays || 0 }} 天</view>
+              <view class="profile__level-copy"
+                >连续有效训练 {{ levelState?.currentStreakDays || 0 }} 天</view
+              >
               <view class="profile__level-track">
                 <view class="profile__level-bar" :style="levelProgressStyle" />
               </view>
@@ -263,7 +290,9 @@ function getToneBg(tone?: string) {
             class="profile__quick-item btn-press"
             @tap="openPage(item.path)"
           >
-            <view class="profile__quick-icon" :style="{ background: getToneBg(item.tone) }">{{ item.icon }}</view>
+            <view class="profile__quick-icon" :style="{ background: getToneBg(item.tone) }">{{
+              item.icon
+            }}</view>
             <view class="profile__quick-title">{{ item.label }}</view>
             <view class="profile__quick-sub">{{ item.sub }}</view>
           </view>
@@ -280,7 +309,9 @@ function getToneBg(tone?: string) {
             class="profile__menu-item btn-press"
             @tap="openPage(item.path)"
           >
-            <view class="profile__menu-icon" :style="{ background: getToneBg(item.tone) }">{{ item.icon }}</view>
+            <view class="profile__menu-icon" :style="{ background: getToneBg(item.tone) }">{{
+              item.icon
+            }}</view>
             <view class="profile__menu-body">
               <view class="profile__menu-title">{{ item.label }}</view>
               <view class="profile__menu-sub">{{ item.sub }}</view>
@@ -332,7 +363,11 @@ function getToneBg(tone?: string) {
         </view>
 
         <view class="profile__level-summary">
-          <view v-for="item in levelSummaryItems" :key="item.label" class="profile__level-summary-item">
+          <view
+            v-for="item in levelSummaryItems"
+            :key="item.label"
+            class="profile__level-summary-item"
+          >
             <view class="profile__level-summary-value">{{ item.value }}</view>
             <view class="profile__level-summary-label">{{ item.label }}</view>
           </view>
@@ -375,8 +410,12 @@ function getToneBg(tone?: string) {
       </scroll-view>
 
       <view class="profile__level-actions">
-        <view class="gradient-fire profile__level-action btn-press" @tap="goTrainFromLevel">去训练</view>
-        <view class="glass-card profile__level-action btn-press" @tap="goAnalysisFromLevel">查看训练分析</view>
+        <view class="gradient-fire profile__level-action btn-press" @tap="goTrainFromLevel"
+          >去训练</view
+        >
+        <view class="glass-card profile__level-action btn-press" @tap="goAnalysisFromLevel"
+          >查看训练分析</view
+        >
       </view>
     </view>
   </view>
@@ -403,8 +442,7 @@ function getToneBg(tone?: string) {
     padding: 30rpx;
     border-radius: 36rpx;
     background:
-      radial-gradient(circle at 18% 0%, rgba(255, 122, 26, 0.14), transparent 38%),
-      var(--app-card);
+      radial-gradient(circle at 18% 0%, rgba(255, 122, 26, 0.14), transparent 38%), var(--app-card);
     border: 1rpx solid rgba(255, 122, 26, 0.16);
     box-shadow: var(--app-shadow);
   }
@@ -431,19 +469,6 @@ function getToneBg(tone?: string) {
     margin-top: 8rpx;
     color: var(--app-text-muted);
     font-size: 24rpx;
-  }
-
-  &__settings {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 24rpx;
-    background: var(--app-surface);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--app-text);
-    font-size: 28rpx;
-    font-weight: 900;
   }
 
   &__level-card {
@@ -728,8 +753,7 @@ function getToneBg(tone?: string) {
     border-radius: 32rpx;
     background:
       radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.9), transparent 34%),
-      radial-gradient(circle at 86% 0%, rgba(255, 122, 26, 0.16), transparent 42%),
-      #ffffff;
+      radial-gradient(circle at 86% 0%, rgba(255, 122, 26, 0.16), transparent 42%), #ffffff;
     display: flex;
     align-items: center;
     gap: 24rpx;

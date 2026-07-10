@@ -76,12 +76,12 @@ const heroMeta = computed(() => {
   if (recommendedIntro.value) {
     return `${recommendedIntro.value.cycleWeeks} 周 · ${recommendedIntro.value.minWeeklyFrequency}-${recommendedIntro.value.maxWeeklyFrequency} 练 · ${difficultyText(
       recommendedIntro.value.difficultyLevel
-    )} · ${recommendedIntro.value.goal || '综合训练'}`
+    )} · ${goalText(recommendedIntro.value.goal)}`
   }
   if (!detail.value) return ''
   return `${detail.value.cycleWeeks} 周 · ${detail.value.days.length} 个训练日 · ${difficultyText(
     detail.value.difficultyLevel
-  )} · ${detail.value.goal || '综合训练'}`
+  )} · ${goalText(detail.value.goal)}`
 })
 const sortedDays = computed(() =>
   [...(detail.value?.days || [])].sort(
@@ -198,12 +198,10 @@ async function performActivatePlan(mode: 'THIS_WEEK' | 'NEXT_WEEK') {
     await planStore.activate(detail.value.id, mode)
     await loadDetail(true)
     uni.showToast({ title: '已启用训练计划', icon: 'none' })
+    setTimeout(() => uni.redirectTo({ url: routes.planActive }), 300)
   } catch (err) {
     uni.showToast({
-      title:
-        err instanceof Error && err.message.includes('at least one training day')
-          ? '请先新增训练日后再启用'
-          : '启用失败',
+      title: activationErrorTitle(err),
       icon: 'none'
     })
     console.error('[plan] activate failed', err)
@@ -736,6 +734,18 @@ function formatPlanDate(value: string) {
   return `${weekdays[date.getDay()]} · ${date.getMonth() + 1}月${date.getDate()}日`
 }
 
+function activationErrorTitle(err: unknown) {
+  if (err instanceof Error) {
+    if (err.message.includes('at least one training day')) {
+      return '请先新增训练日后再启用'
+    }
+    if (err.message) {
+      return err.message
+    }
+  }
+  return '启用失败'
+}
+
 async function handleFooterAction() {
   if (isRecommended.value && planId.value) {
     uni.navigateTo({ url: `${routes.planCustomize}?id=${planId.value}` })
@@ -804,10 +814,24 @@ function weekdayText(dayOfWeek: number) {
 function difficultyText(level?: string) {
   const map: Record<string, string> = {
     BEGINNER: '入门',
+    BEGINNER_INTERMEDIATE: '新手到进阶',
     INTERMEDIATE: '进阶',
     ADVANCED: '高阶'
   }
   return level ? map[level] || level : '通用'
+}
+
+function goalText(goal?: string) {
+  const map: Record<string, string> = {
+    STARTER: '入门体验',
+    FOUNDATION: '基础力量',
+    MUSCLE_GAIN: '增肌分化',
+    HOME_FITNESS: '居家训练',
+    STRENGTH: '力量提升',
+    FAT_LOSS: '减脂塑形',
+    GENERAL_FITNESS: '综合训练'
+  }
+  return goal ? map[goal] || goal : '综合训练'
 }
 </script>
 

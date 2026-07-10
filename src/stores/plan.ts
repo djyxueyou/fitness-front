@@ -10,6 +10,7 @@ import {
   deleteTrainingPlan,
   deleteTrainingPlanDay,
   fetchActivePlanExecution,
+  fetchActiveTrainingPlanSummary,
   fetchRecommendedPlanIntro,
   fetchRecommendedPlans,
   fetchTodayPlanRecommendation,
@@ -41,6 +42,7 @@ export const usePlanStore = defineStore('plan', () => {
   const detailCache = ref<Record<number, TrainingPlanDetailResponse>>({})
   const recommendedIntroCache = ref<Record<number, RecommendedPlanIntroResponse>>({})
   const activeExecution = ref<ActiveExecutionResponse | null>(null)
+  const currentPlanSummary = ref<ActivePlanSummaryResponse | null>(null)
   const recommendation = ref<PlanRecommendationResponse | null>(null)
   const loading = ref(false)
   const loadedAt = ref(0)
@@ -50,6 +52,7 @@ export const usePlanStore = defineStore('plan', () => {
   const systemPlans = computed(() => items.value.filter((item) => item.planType === 'SYSTEM'))
   const userPlans = computed(() => items.value.filter((item) => item.planType !== 'SYSTEM'))
   const activePlan = computed(() => items.value.find((item) => item.active) || null)
+  const hasCurrentPlan = computed(() => Boolean(currentPlanSummary.value))
 
   async function fetchPlans(options?: { force?: boolean }) {
     const cacheUsable =
@@ -115,20 +118,31 @@ export const usePlanStore = defineStore('plan', () => {
     payload: RecommendedPlanPersonalizationRequest
   ): Promise<ActivePlanSummaryResponse> {
     const summary = await activateRecommendedPlan(id, payload)
-    await loadActiveExecution()
+    currentPlanSummary.value = summary
+    await loadCurrentPlan()
     await fetchPlans({ force: true })
     await loadRecommendation()
     return summary
   }
 
-  async function loadActiveExecution() {
+  async function loadCurrentPlan() {
     try {
-      const execution = await fetchActivePlanExecution()
+      const [summary, execution] = await Promise.all([
+        fetchActiveTrainingPlanSummary(),
+        fetchActivePlanExecution()
+      ])
+      currentPlanSummary.value = summary
       activeExecution.value = execution && 'executionId' in execution ? execution : null
     } catch (err) {
+      currentPlanSummary.value = null
       activeExecution.value = null
-      console.error('[plan] active execution fetch failed', err)
+      console.error('[plan] current plan fetch failed', err)
     }
+    return currentPlanSummary.value
+  }
+
+  async function loadActiveExecution() {
+    await loadCurrentPlan()
     return activeExecution.value
   }
 
@@ -142,6 +156,7 @@ export const usePlanStore = defineStore('plan', () => {
         [id]: { ...cached, active: true }
       }
     }
+    await loadCurrentPlan()
     await loadRecommendation()
   }
 
@@ -155,6 +170,7 @@ export const usePlanStore = defineStore('plan', () => {
   async function deactivateActive() {
     await deactivateActiveTrainingPlan()
     activeExecution.value = null
+    currentPlanSummary.value = null
     detailCache.value = Object.fromEntries(
       Object.entries(detailCache.value).map(([id, detail]) => [id, { ...detail, active: false }])
     )
@@ -238,6 +254,8 @@ export const usePlanStore = defineStore('plan', () => {
     userPlans,
     activePlan,
     activeExecution,
+    currentPlanSummary,
+    hasCurrentPlan,
     recommendation,
     loading,
     listError,
@@ -246,6 +264,7 @@ export const usePlanStore = defineStore('plan', () => {
     getRecommendedIntro,
     previewRecommended,
     activateRecommended,
+    loadCurrentPlan,
     loadActiveExecution,
     activate,
     createPlan,

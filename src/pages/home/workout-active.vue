@@ -284,7 +284,7 @@ function notifyRestFinished() {
   if (profileStore.restVibration) {
     uni.vibrateShort({ type: 'medium' })
   }
-  uni.showToast({ title: '休息结束，开始下一组', icon: 'none' })
+  uni.showToast({ title: '休息结束', icon: 'none' })
 }
 
 function skipRest(notify = false) {
@@ -719,16 +719,7 @@ function toggleSetDone(setIndex: number) {
     effortTarget.value = { exerciseIndex: currentExerciseIndex.value, setIndex }
   }
   if (afterExercise.sets.every((set) => set.done)) {
-    const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
-    workoutStore.endExercise(currentExerciseIndex.value)
-    if (nextIndex !== null) {
-      void focusWorkoutExercise(nextIndex)
-    }
-    startRest(
-      nextIndex === null
-        ? `${afterExercise.name} 已完成`
-        : `${afterExercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`
-    )
+    startRest(`${afterExercise.name} 最后一组已完成`)
     return
   }
   startRest(`第 ${setIndex + 1} 组已完成`)
@@ -834,11 +825,17 @@ function finishExerciseEarly() {
 
   const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
   if (nextIndex !== null) {
+    const allSetsDone = exercise.sets.every((set) => set.done)
+    if (restRemaining.value > 0) {
+      skipRest()
+    }
     workoutStore.endExercise(currentExerciseIndex.value)
     void focusWorkoutExercise(nextIndex)
-    startRest(
-      `${exercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`
-    )
+    if (!allSetsDone) {
+      startRest(
+        `${exercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`
+      )
+    }
     return
   }
 

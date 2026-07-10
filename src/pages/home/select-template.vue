@@ -8,7 +8,6 @@ import TemplateItem from '@/components/template-item/index.vue'
 import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import { fetchTrainingHistory, type TrainingHistoryItemResponse } from '@/api/training'
-import { usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useThemeStore } from '@/stores/theme'
 import { useWorkoutStore } from '@/stores/workout'
@@ -20,35 +19,34 @@ import type { Template } from '@/types/template'
 
 const templateStore = useTemplateStore()
 const themeStore = useThemeStore()
-const planStore = usePlanStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
 const recentTemplates = computed(() =>
-  templateStore.getRecentItemsFromHistory(recentHistory.value, 5)
+  templateStore
+    .getRecentItemsFromHistory(recentHistory.value, 5)
+    .filter((item) => item.templateType !== 'SYSTEM')
 )
 const searchText = ref('')
-const activeTab = ref<'mine' | 'recent' | 'system'>('mine')
+const activeTab = ref<'mine' | 'recent'>('mine')
 const tabs = [
   { key: 'recent', label: '最近使用' },
-  { key: 'mine', label: '我的模板' },
-  { key: 'system', label: '系统模板' }
+  { key: 'mine', label: '我的模板' }
 ] as const
 
 const activeTemplates = computed(() => {
   const sourceMap = {
     mine: templateStore.userItems,
-    recent: recentTemplates.value,
-    system: templateStore.systemItems
+    recent: recentTemplates.value
   }
   return filterTemplates(sourceMap[activeTab.value])
 })
 const initialLoading = computed(() => templateStore.loading && !templateStore.items.length)
 const emptyText = computed(() => {
   if (searchText.value.trim()) return '没有匹配的训练模板'
-  if (activeTab.value === 'mine') return '还没有我的模板，可以新建模板或从系统模板复制。'
+  if (activeTab.value === 'mine') return '还没有我的模板，可以新建模板，或直接自由训练。'
   if (activeTab.value === 'recent') return '开始一次模板训练后，会显示最近使用模板。'
-  return '暂无系统模板'
+  return '暂无模板'
 })
 
 function filterTemplates(items: Template[]) {
@@ -67,9 +65,6 @@ onShow(async () => {
     return
   }
   workoutStore.refreshDraftState()
-  planStore.fetchPlans().catch((err) => {
-    console.error('[template] plan fetch failed', err)
-  })
   await loadTemplates(false)
   fetchTrainingHistory({ pageNo: 1, pageSize: 20 })
     .then((page) => {
@@ -149,11 +144,6 @@ async function goTemplateEdit(templateId: number) {
   uni.navigateTo({ url: `${routes.templateEdit}?id=${templateId}` })
 }
 
-function goSystemTemplates() {
-  searchText.value = ''
-  activeTab.value = 'system'
-}
-
 async function prepareNewWorkout(nextTitle?: string) {
   workoutStore.refreshDraftState()
   if (!workoutStore.hasRecoverableWorkout) return true
@@ -182,8 +172,8 @@ async function prepareNewWorkout(nextTitle?: string) {
       :class="themeStore.themeClass"
     >
       <AppHeader
-        title="选择训练模板"
-        subtitle="选择一套动作安排，或直接自由训练"
+        title="选择训练方式"
+        subtitle="从我的模板开始，或直接自由训练"
         show-back
         @back="goBack"
       >
@@ -193,10 +183,6 @@ async function prepareNewWorkout(nextTitle?: string) {
           </view>
         </template>
       </AppHeader>
-
-      <view v-if="planStore.activePlan" class="glass-card select-template__plan-hint">
-        你有进行中的计划，也可以返回首页开始今日计划。
-      </view>
 
       <view class="glass-card select-template__search">
         <text class="select-template__search-icon">⌕</text>
@@ -272,9 +258,6 @@ async function prepareNewWorkout(nextTitle?: string) {
           >
             <view class="select-template__empty-action btn-press" @tap="createTemplate">
               新建模板
-            </view>
-            <view class="select-template__empty-action btn-press" @tap="goSystemTemplates">
-              查看系统模板
             </view>
           </view>
         </view>
