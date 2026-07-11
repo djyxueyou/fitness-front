@@ -205,14 +205,8 @@ function toDateString(date: Date) {
 </script>
 
 <template>
-  <scroll-view
-    scroll-y
-    class="page-scroll"
-    :class="themeStore.themeClass"
-    lower-threshold="120"
-    @scrolltolower="loadMore"
-  >
-    <view class="page-shell calendar-page safe-bottom" :class="themeStore.themeClass">
+  <view class="training-records" :class="themeStore.themeClass">
+    <view class="calendar-page">
       <template v-if="activeMode === 'calendar'">
         <view class="month-row">
           <view class="month-button btn-press" @tap="changeMonth(-1)">‹</view>
@@ -365,24 +359,32 @@ function toDateString(date: Date) {
             :meta="`${formatHistoryDate(item.startedAt)} · ${Math.round(item.durationSeconds / 60)} min · ${item.totalSetCount} 组`"
             @tap="openRecord(item.id)"
           />
-          <view class="record-footer">
+          <view
+            class="record-footer btn-press"
+            :class="{ 'record-footer--enabled': trainingStore.historyHasMore }"
+            @tap="loadMore"
+          >
             {{
               trainingStore.loading
                 ? '加载中...'
                 : trainingStore.historyHasMore
-                  ? '上拉加载更多'
+                  ? '点击加载更多'
                   : '没有更多记录了'
             }}
           </view>
         </view>
       </template>
     </view>
-  </scroll-view>
+  </view>
 </template>
 
 <style scoped lang="scss">
+.training-records {
+  width: 100%;
+}
+
 .calendar-page {
-  padding-bottom: 60rpx;
+  padding-bottom: 24rpx;
 }
 .month-row {
   display: flex;
@@ -658,6 +660,10 @@ function toDateString(date: Date) {
   text-align: center;
   color: var(--app-text-muted);
   font-size: 22rpx;
+}
+
+.record-footer--enabled {
+  color: var(--app-accent);
 }
 .calendar-record-card {
   margin-bottom: 14rpx;
