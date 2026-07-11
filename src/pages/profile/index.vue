@@ -76,57 +76,36 @@ const currentBadgeIndex = computed(() => {
   return index >= 0 ? index : 0
 })
 const profileStats = computed(() => [
-  { icon: '🔥', value: `${profileStore.currentStreakDays} 天`, label: '连续训练' },
-  { icon: '🏋️', value: `${profileStore.totalSessions} 次`, label: '累计训练' },
+  { value: `${profileStore.currentStreakDays} 天`, label: '连续训练' },
+  { value: `${profileStore.totalSessions} 次`, label: '累计训练' },
   {
-    icon: '⚡',
     value: `${formatCompactWeight(profileStore.totalVolumeKg, weightUnit.value)} ${weightUnit.value}`,
     label: '累计容量'
   }
 ])
 
-const quickItems = [
+const healthItems = [
   {
-    label: '编辑资料',
+    label: '个人资料',
     sub: '个人信息与训练方向',
-    path: routes.profileEdit,
-    icon: '👤',
-    tone: 'cyan'
+    path: routes.profileEdit
   },
   {
     label: '身体指标',
     sub: '体脂、围度和心率记录',
-    path: routes.profileBodyMetrics,
-    icon: '●',
-    tone: 'orange'
-  },
-  {
-    label: '历史记录',
-    sub: '浏览训练明细',
-    path: `${routes.workoutCalendar}?mode=records`,
-    icon: '▣',
-    tone: 'orange'
-  },
-  {
-    label: '模板管理',
-    sub: '维护训练模板',
-    path: routes.templateManager,
-    icon: '★',
-    tone: 'violet'
+    path: routes.profileBodyMetrics
   }
 ]
 
-const serviceItems = [
+const accountItems = [
   {
     label: '会员中心',
     sub: '查看试用期、套餐和会员权益',
-    path: routes.membership,
-    icon: '♛',
-    tone: 'gold'
+    path: routes.membership
   },
-  { label: '我的收藏', sub: '常用动作收藏', path: routes.favorites, icon: '♥', tone: 'gold' },
-  { label: '设置', sub: '单位、休息与应用偏好', path: routes.settings, icon: '⚙', tone: 'cyan' },
-  { label: '关于', sub: '版本信息与相关协议', path: routes.about, icon: 'ⓘ', tone: 'orange' }
+  { label: '我的收藏', sub: '常用动作收藏', path: routes.favorites },
+  { label: '设置', sub: '单位、休息与应用偏好', path: routes.settings },
+  { label: '关于', sub: '版本信息与相关协议', path: routes.about }
 ]
 
 onShow(async () => {
@@ -211,19 +190,6 @@ function logout() {
     }
   })
 }
-
-function getToneBg(tone?: string) {
-  switch (tone) {
-    case 'cyan':
-      return 'rgba(80, 200, 255, 0.15)'
-    case 'violet':
-      return 'rgba(200, 80, 255, 0.15)'
-    case 'gold':
-      return 'rgba(255, 200, 80, 0.15)'
-    default:
-      return 'rgba(255, 80, 30, 0.15)'
-  }
-}
 </script>
 
 <template>
@@ -233,8 +199,10 @@ function getToneBg(tone?: string) {
         正在打开登录授权...
       </view>
       <template v-else>
-        <view class="profile__hero" :style="levelThemeStyle">
-          <view class="profile__hero-top">
+        <view class="profile__page-title">我的</view>
+
+        <view class="profile__summary" :style="levelThemeStyle">
+          <view class="profile__identity btn-press" @tap="openPage(routes.profileEdit)">
             <image
               class="profile__avatar"
               :src="profileStore.avatarDisplayUrl || '/static/app-logo.png'"
@@ -242,7 +210,9 @@ function getToneBg(tone?: string) {
             />
             <view class="profile__info">
               <view class="title-lg">{{ profileStore.nickname }}</view>
+              <view class="profile__identity-sub">{{ levelTitle }}</view>
             </view>
+            <view class="profile__chevron">›</view>
           </view>
 
           <view class="profile__level-card btn-press" @tap="openLevelDetail">
@@ -257,9 +227,6 @@ function getToneBg(tone?: string) {
             <view class="profile__level-main">
               <view class="profile__level-label">训练等级</view>
               <view class="profile__level-title">{{ levelTitle }}</view>
-              <view class="profile__level-copy"
-                >连续有效训练 {{ levelState?.currentStreakDays || 0 }} 天</view
-              >
               <view class="profile__level-track">
                 <view class="profile__level-bar" :style="levelProgressStyle" />
               </view>
@@ -272,51 +239,41 @@ function getToneBg(tone?: string) {
 
           <view class="profile__stats">
             <view v-for="item in profileStats" :key="item.label" class="profile__stat">
-              <view class="profile__stat-icon">{{ item.icon }}</view>
               <view class="profile__stat-value">{{ item.value }}</view>
-              <view class="muted">{{ item.label }}</view>
+              <view class="profile__stat-label">{{ item.label }}</view>
             </view>
           </view>
         </view>
 
-        <view class="profile__section-head">
-          <view class="profile__section-title">训练与记录</view>
-        </view>
-
-        <view class="profile__quick-grid">
+        <view class="profile__section-title">健康资料</view>
+        <view class="profile__group">
           <view
-            v-for="item in quickItems"
+            v-for="item in healthItems"
             :key="item.label"
-            class="profile__quick-item btn-press"
+            class="profile__row btn-press"
             @tap="openPage(item.path)"
           >
-            <view class="profile__quick-icon" :style="{ background: getToneBg(item.tone) }">{{
-              item.icon
-            }}</view>
-            <view class="profile__quick-title">{{ item.label }}</view>
-            <view class="profile__quick-sub">{{ item.sub }}</view>
+            <view class="profile__row-body">
+              <view class="profile__row-title">{{ item.label }}</view>
+              <view class="profile__row-sub">{{ item.sub }}</view>
+            </view>
+            <view class="profile__chevron">›</view>
           </view>
         </view>
 
-        <view class="profile__section-head profile__section-head--services">
-          <view class="profile__section-title">更多服务</view>
-        </view>
-
-        <view class="profile__menu">
+        <view class="profile__section-title">账户与服务</view>
+        <view class="profile__group">
           <view
-            v-for="item in serviceItems"
+            v-for="item in accountItems"
             :key="item.label"
-            class="profile__menu-item btn-press"
+            class="profile__row btn-press"
             @tap="openPage(item.path)"
           >
-            <view class="profile__menu-icon" :style="{ background: getToneBg(item.tone) }">{{
-              item.icon
-            }}</view>
-            <view class="profile__menu-body">
-              <view class="profile__menu-title">{{ item.label }}</view>
-              <view class="profile__menu-sub">{{ item.sub }}</view>
+            <view class="profile__row-body">
+              <view class="profile__row-title">{{ item.label }}</view>
+              <view class="profile__row-sub">{{ item.sub }}</view>
             </view>
-            <view class="profile__menu-arrow">›</view>
+            <view class="profile__chevron">›</view>
           </view>
         </view>
 
@@ -664,6 +621,153 @@ function getToneBg(tone?: string) {
     justify-content: center;
     font-size: 26rpx;
     font-weight: 900;
+  }
+
+  &__page-title {
+    margin: 8rpx 0 24rpx;
+    color: var(--app-text);
+    font-size: 54rpx;
+    font-weight: 900;
+    line-height: 1.15;
+  }
+
+  &__summary,
+  &__group {
+    overflow: hidden;
+    border: 1rpx solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+    box-shadow: none;
+  }
+
+  &__summary {
+    padding: 0;
+  }
+
+  &__identity {
+    min-height: 132rpx;
+    padding: 24rpx 26rpx;
+    display: flex;
+    align-items: center;
+    gap: 22rpx;
+  }
+
+  &__avatar {
+    width: 92rpx;
+    height: 92rpx;
+    border-radius: 28rpx;
+    background: var(--app-bg);
+  }
+
+  &__identity-sub {
+    margin-top: 6rpx;
+    color: var(--app-text-muted);
+    font-size: 22rpx;
+  }
+
+  &__chevron {
+    margin-left: auto;
+    flex-shrink: 0;
+    color: var(--app-text-muted);
+    font-size: 40rpx;
+    font-weight: 500;
+  }
+
+  &__level-card {
+    margin: 0 26rpx;
+    padding: 24rpx 0;
+    border-width: 1rpx 0 0;
+    border-radius: 0;
+    border-color: var(--app-border);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  &__level-track {
+    background: var(--app-bg);
+  }
+
+  &__level-bar {
+    background: var(--app-accent);
+  }
+
+  &__stats {
+    margin: 0;
+    padding: 22rpx 12rpx 26rpx;
+    border-top: 1rpx solid var(--app-border);
+    gap: 0;
+  }
+
+  &__stat {
+    position: relative;
+    padding: 4rpx 10rpx;
+    border-radius: 0;
+    background: transparent;
+
+    & + &::before {
+      position: absolute;
+      top: 4rpx;
+      bottom: 4rpx;
+      left: 0;
+      width: 1rpx;
+      background: var(--app-border);
+      content: '';
+    }
+  }
+
+  &__stat-value {
+    margin-top: 0;
+    font-size: 27rpx;
+  }
+
+  &__stat-label {
+    margin-top: 8rpx;
+    color: var(--app-text-muted);
+    font-size: 21rpx;
+  }
+
+  &__section-title {
+    margin: 34rpx 8rpx 14rpx;
+    color: var(--app-text-muted);
+    font-size: 23rpx;
+    font-weight: 700;
+  }
+
+  &__row {
+    position: relative;
+    min-height: 96rpx;
+    padding: 18rpx 26rpx;
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+
+    & + &::before {
+      position: absolute;
+      top: 0;
+      right: 24rpx;
+      left: 24rpx;
+      height: 1rpx;
+      background: var(--app-border);
+      content: '';
+    }
+  }
+
+  &__row-body {
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__row-title {
+    color: var(--app-text);
+    font-size: 27rpx;
+    font-weight: 800;
+  }
+
+  &__row-sub {
+    margin-top: 6rpx;
+    color: var(--app-text-muted);
+    font-size: 21rpx;
+    line-height: 1.4;
   }
 
   &__level-overlay {
