@@ -86,12 +86,6 @@ const profileStats = computed(() => [
 
 const healthItems = [
   {
-    label: '个人资料',
-    sub: '个人信息与训练方向',
-    path: routes.profileEdit,
-    icon: '/static/profile/user.svg'
-  },
-  {
     label: '身体指标',
     sub: '体脂、围度和心率记录',
     path: routes.profileBodyMetrics,
