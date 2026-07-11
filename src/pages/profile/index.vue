@@ -210,31 +210,11 @@ function logout() {
             />
             <view class="profile__info">
               <view class="title-lg">{{ profileStore.nickname }}</view>
-              <view class="profile__identity-sub">{{ levelTitle }}</view>
-            </view>
-            <view class="profile__chevron">›</view>
-          </view>
-
-          <view class="profile__level-card btn-press" @tap="openLevelDetail">
-            <TrainingLevelBadge
-              size="sm"
-              :level="levelState?.level || 1"
-              :badge-name="levelState?.badgeName || '青铜'"
-              :badge-code="levelState?.badgeCode || 'BRONZE'"
-              :theme-color="levelState?.themeColor || '#ff7a1a'"
-              :accent-color="levelState?.accentColor || '#cd7f32'"
-            />
-            <view class="profile__level-main">
-              <view class="profile__level-label">训练等级</view>
-              <view class="profile__level-title">{{ levelTitle }}</view>
-              <view class="profile__level-track">
-                <view class="profile__level-bar" :style="levelProgressStyle" />
+              <view class="profile__identity-sub btn-press" @tap.stop="openLevelDetail">
+                {{ levelTitle }}
               </view>
             </view>
-            <view class="profile__level-side">
-              <view class="profile__level-value">{{ levelProgressText }}</view>
-              <view class="profile__level-next">还差 {{ levelNextExp }} XP</view>
-            </view>
+            <view class="profile__chevron">›</view>
           </view>
 
           <view class="profile__stats">
@@ -245,39 +225,19 @@ function logout() {
           </view>
         </view>
 
-        <view class="profile__section-title">健康资料</view>
         <view class="profile__group">
           <view
-            v-for="item in healthItems"
+            v-for="item in [...healthItems, ...accountItems]"
             :key="item.label"
             class="profile__row btn-press"
             @tap="openPage(item.path)"
           >
             <view class="profile__row-body">
               <view class="profile__row-title">{{ item.label }}</view>
-              <view class="profile__row-sub">{{ item.sub }}</view>
             </view>
             <view class="profile__chevron">›</view>
           </view>
         </view>
-
-        <view class="profile__section-title">账户与服务</view>
-        <view class="profile__group">
-          <view
-            v-for="item in accountItems"
-            :key="item.label"
-            class="profile__row btn-press"
-            @tap="openPage(item.path)"
-          >
-            <view class="profile__row-body">
-              <view class="profile__row-title">{{ item.label }}</view>
-              <view class="profile__row-sub">{{ item.sub }}</view>
-            </view>
-            <view class="profile__chevron">›</view>
-          </view>
-        </view>
-
-        <view class="profile__logout btn-press" @tap="logout">退出登录</view>
       </template>
     </view>
   </scroll-view>
@@ -638,6 +598,10 @@ function logout() {
     border-radius: var(--app-radius-lg);
     background: var(--app-surface);
     box-shadow: none;
+  }
+
+  &__group {
+    margin-top: 34rpx;
   }
 
   &__summary {
