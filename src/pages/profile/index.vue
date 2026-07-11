@@ -257,6 +257,8 @@ function logout() {
             <view class="profile__chevron">›</view>
           </view>
         </view>
+
+        <view class="profile__logout btn-press" @tap="logout">退出登录</view>
       </template>
     </view>
   </scroll-view>
