@@ -101,12 +101,6 @@ const accountItems = [
     icon: '/static/profile/sparkles.svg'
   },
   {
-    label: '我的收藏',
-    sub: '常用动作收藏',
-    path: routes.favorites,
-    icon: '/static/profile/heart.svg'
-  },
-  {
     label: '设置',
     sub: '单位、休息与应用偏好',
     path: routes.settings,
