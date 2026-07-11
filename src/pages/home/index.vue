@@ -24,6 +24,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
+import { useTrainingHubStore, type TrainingHubView } from '@/stores/training-hub'
 import { formatCompactWeight } from '@/utils/unit'
 
 const profileStore = useProfileStore()
@@ -33,6 +34,7 @@ const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const themeStore = useThemeStore()
+const trainingHubStore = useTrainingHubStore()
 const HOME_CACHE_MS = 30000
 
 const summary = ref<TrainingStatsSummaryResponse | null>(null)
@@ -396,15 +398,18 @@ async function startPlanRecommendation() {
 }
 
 async function goTrainingHistory() {
-  const ok = await ensureFeatureAuth('训练记录')
-  if (!ok) return
-  uni.navigateTo({ url: `${routes.workoutCalendar}?mode=records` })
+  await openTrainingHub('history', '训练记录')
 }
 
 async function goCalendar() {
-  const ok = await ensureFeatureAuth('训练日历')
+  await openTrainingHub('calendar', '训练日历')
+}
+
+async function openTrainingHub(view: Exclude<TrainingHubView, 'plan'>, authLabel: string) {
+  const ok = await ensureFeatureAuth(authLabel)
   if (!ok) return
-  uni.navigateTo({ url: routes.workoutCalendar })
+  trainingHubStore.open(view)
+  uni.switchTab({ url: routes.planIndex })
 }
 
 async function loginForStats() {
