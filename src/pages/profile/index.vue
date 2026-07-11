@@ -88,12 +88,14 @@ const healthItems = [
   {
     label: '个人资料',
     sub: '个人信息与训练方向',
-    path: routes.profileEdit
+    path: routes.profileEdit,
+    icon: '/static/profile/user.svg'
   },
   {
     label: '身体指标',
     sub: '体脂、围度和心率记录',
-    path: routes.profileBodyMetrics
+    path: routes.profileBodyMetrics,
+    icon: '/static/profile/chart-bar.svg'
   }
 ]
 
@@ -101,11 +103,27 @@ const accountItems = [
   {
     label: '会员中心',
     sub: '查看试用期、套餐和会员权益',
-    path: routes.membership
+    path: routes.membership,
+    icon: '/static/profile/sparkles.svg'
   },
-  { label: '我的收藏', sub: '常用动作收藏', path: routes.favorites },
-  { label: '设置', sub: '单位、休息与应用偏好', path: routes.settings },
-  { label: '关于', sub: '版本信息与相关协议', path: routes.about }
+  {
+    label: '我的收藏',
+    sub: '常用动作收藏',
+    path: routes.favorites,
+    icon: '/static/profile/heart.svg'
+  },
+  {
+    label: '设置',
+    sub: '单位、休息与应用偏好',
+    path: routes.settings,
+    icon: '/static/profile/cog-6-tooth.svg'
+  },
+  {
+    label: '关于',
+    sub: '版本信息与相关协议',
+    path: routes.about,
+    icon: '/static/profile/information-circle.svg'
+  }
 ]
 
 onShow(async () => {
@@ -232,6 +250,7 @@ function logout() {
             class="profile__row btn-press"
             @tap="openPage(item.path)"
           >
+            <image class="profile__row-icon" :src="item.icon" mode="aspectFit" />
             <view class="profile__row-body">
               <view class="profile__row-title">{{ item.label }}</view>
             </view>
@@ -719,6 +738,13 @@ function logout() {
   &__row-body {
     min-width: 0;
     flex: 1;
+  }
+
+  &__row-icon {
+    width: 42rpx;
+    height: 42rpx;
+    flex-shrink: 0;
+    opacity: 0.72;
   }
 
   &__row-title {
