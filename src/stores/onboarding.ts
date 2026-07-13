@@ -1,10 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import {
-  fetchRecommendedPlans,
-  fetchTrainingProfile,
-  saveTrainingProfile
-} from '@/api/onboarding'
+import { fetchRecommendedPlans, fetchTrainingProfile, saveTrainingProfile } from '@/api/onboarding'
 
 const STORAGE_KEY = 'FITFORGE_TRAINING_ONBOARDING'
 
@@ -96,7 +92,8 @@ export const useOnboardingStore = defineStore('onboarding', () => {
       completed: serverProfile.completed,
       currentStep: serverProfile.currentStep ?? 0,
       goal: (serverProfile.goal || profile.value.goal) as TrainingGoal,
-      experienceLevel: (serverProfile.experienceLevel || profile.value.experienceLevel) as ExperienceLevel,
+      experienceLevel: (serverProfile.experienceLevel ||
+        profile.value.experienceLevel) as ExperienceLevel,
       sessionsPerWeek: serverProfile.sessionsPerWeek || profile.value.sessionsPerWeek,
       sessionDurationMinutes:
         serverProfile.sessionDurationMinutes || profile.value.sessionDurationMinutes,

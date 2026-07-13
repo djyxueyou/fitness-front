@@ -91,8 +91,14 @@ function updateTrainingPreferences() {
 
       <view class="privacy__card glass-card">
         <view class="privacy__title">导出我的数据</view>
-        <view class="privacy__desc">包含训练记录、身体指标和本地训练画像。当前版本会将 JSON 数据复制到剪贴板。</view>
-        <view class="privacy__action btn-press" :class="{ 'privacy__action--disabled': busy }" @tap="exportData">
+        <view class="privacy__desc"
+          >包含训练记录、身体指标和本地训练画像。当前版本会将 JSON 数据复制到剪贴板。</view
+        >
+        <view
+          class="privacy__action btn-press"
+          :class="{ 'privacy__action--disabled': busy }"
+          @tap="exportData"
+        >
           {{ busy ? '处理中...' : '复制数据导出' }}
         </view>
       </view>
@@ -100,7 +106,9 @@ function updateTrainingPreferences() {
       <view class="privacy__card glass-card">
         <view class="privacy__title">{{ preferenceActionTitle }}</view>
         <view class="privacy__desc">{{ preferenceActionDescription }}</view>
-        <view class="privacy__subtle btn-press" @tap="updateTrainingPreferences">{{ preferenceActionTitle }}</view>
+        <view class="privacy__subtle btn-press" @tap="updateTrainingPreferences">{{
+          preferenceActionTitle
+        }}</view>
       </view>
     </view>
   </scroll-view>
@@ -108,12 +116,44 @@ function updateTrainingPreferences() {
 
 <style lang="scss" scoped>
 .privacy {
-  &__card { padding: 28rpx; margin-bottom: 20rpx; }
-  &__title { color: var(--app-text); font-size: 29rpx; font-weight: 900; }
-  &__desc { margin-top: 10rpx; color: var(--app-text-muted); font-size: 23rpx; line-height: 1.65; }
-  &__action, &__subtle { margin-top: 24rpx; min-height: 78rpx; border-radius: 24rpx; display: flex; align-items: center; justify-content: center; font-size: 25rpx; font-weight: 900; }
-  &__action { color: #fff; background: var(--app-accent); box-shadow: var(--app-shadow-cta); }
-  &__subtle { color: var(--app-text-secondary); background: var(--app-surface-subtle); border: 1rpx solid var(--app-border); }
-  &__action--disabled { opacity: .5; }
+  &__card {
+    padding: 28rpx;
+    margin-bottom: 20rpx;
+  }
+  &__title {
+    color: var(--app-text);
+    font-size: 29rpx;
+    font-weight: 900;
+  }
+  &__desc {
+    margin-top: 10rpx;
+    color: var(--app-text-muted);
+    font-size: 23rpx;
+    line-height: 1.65;
+  }
+  &__action,
+  &__subtle {
+    margin-top: 24rpx;
+    min-height: 78rpx;
+    border-radius: 24rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 25rpx;
+    font-weight: 900;
+  }
+  &__action {
+    color: #fff;
+    background: var(--app-accent);
+    box-shadow: var(--app-shadow-cta);
+  }
+  &__subtle {
+    color: var(--app-text-secondary);
+    background: var(--app-surface-subtle);
+    border: 1rpx solid var(--app-border);
+  }
+  &__action--disabled {
+    opacity: 0.5;
+  }
 }
 </style>

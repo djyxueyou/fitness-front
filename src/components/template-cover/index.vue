@@ -10,12 +10,7 @@ defineProps<{
 
 <template>
   <view class="template-cover">
-    <ExerciseThumbnail
-      :name="name"
-      :record-type="recordType"
-      :url="url"
-      size="large"
-    />
+    <ExerciseThumbnail :name="name" :record-type="recordType" :url="url" size="large" />
   </view>
 </template>
 

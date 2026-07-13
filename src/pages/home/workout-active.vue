@@ -5,17 +5,23 @@ import ExercisePicker from '@/components/exercise-picker/index.vue'
 import ProgressBar from '@/components/progress-bar/index.vue'
 import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import EffortPicker from '@/components/effort-picker/index.vue'
+import RestSecondsSheet from '@/components/rest-seconds-sheet/index.vue'
+import SetTypeSheet from '@/components/set-type-sheet/index.vue'
 import ProgressionRecommendation from '@/components/progression-recommendation/index.vue'
 import { useMembershipPromptStore } from '@/stores/membership-prompt'
 import PlateCalculator from '@/components/plate-calculator/index.vue'
 import type { ExerciseSummary } from '@/api/exercise'
+import { updateTemplate } from '@/api/template'
 import { saveTraining, type SaveTrainingRequest } from '@/api/training'
 import { routes } from '@/utils/navigation'
 import { formatSeconds } from '@/utils/format'
 import { emitTrainingChanged } from '@/utils/training-events'
 import { buildWarmupCandidates, type WarmupCandidate } from '@/utils/warmup'
+import { shouldPromptForEffort } from '@/utils/effort-prompt'
+import { workoutHeaderActions } from '@/utils/workout-header-actions'
 import { useProfileStore } from '@/stores/profile'
 import { useTrainingStore } from '@/stores/training'
+import { useTemplateStore } from '@/stores/template'
 import { useThemeStore } from '@/stores/theme'
 import { convertUnitToKg, formatWeight, type WeightUnit } from '@/utils/unit'
 import {
@@ -30,9 +36,11 @@ const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
 const membershipPromptStore = useMembershipPromptStore()
 const trainingStore = useTrainingStore()
+const templateStore = useTemplateStore()
 const themeStore = useThemeStore()
 const showFinish = ref(false)
 const showExitConfirm = ref(false)
+const showDiscardConfirm = ref(false)
 const submitting = ref(false)
 const currentExerciseIndex = ref(0)
 const menuExerciseIndex = ref<number | null>(null)
@@ -51,7 +59,10 @@ const replacementTargetIndex = ref<number | null>(null)
 const pendingReplacement = ref<{ targetIndex: number; exercise: ExerciseSummary } | null>(null)
 const pendingDeleteIndex = ref<number | null>(null)
 const restFocusIndex = ref<number | null>(null)
+const restEditorIndex = ref<number | null>(null)
+const setTypeTarget = ref<{ exerciseIndex: number; setIndex: number } | null>(null)
 const unit = computed<WeightUnit>(() => profileStore.unit)
+const headerActions = computed(() => workoutHeaderActions(submitting.value, workoutStore.isPaused))
 let timer: ReturnType<typeof setInterval> | null = null
 let restTimer: ReturnType<typeof setInterval> | null = null
 let stepTimer: ReturnType<typeof setInterval> | null = null
@@ -60,6 +71,59 @@ let toolFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 let lastDraftPersistedAt = 0
 let restStartedAt = 0
 let restDurationSeconds = 0
+const REST_DRAFT_KEY = 'FITFORGE_ACTIVE_REST_CLOCK'
+const PAUSE_INTRO_KEY = 'FITFORGE_WORKOUT_PAUSE_INTRO_SEEN'
+
+interface PersistedRestClock {
+  title: string
+  endsAtMs: number | null
+  remainingWhenPaused: number | null
+  focusIndex: number | null
+}
+
+function persistRestClock() {
+  if (restRemaining.value <= 0) {
+    uni.removeStorageSync(REST_DRAFT_KEY)
+    return
+  }
+  const paused = workoutStore.isPaused || workoutStore.isSavedDraft
+  const state: PersistedRestClock = {
+    title: restTitle.value,
+    endsAtMs: paused ? null : restStartedAt + restDurationSeconds * 1000,
+    remainingWhenPaused: paused ? restRemaining.value : null,
+    focusIndex: restFocusIndex.value
+  }
+  uni.setStorageSync(REST_DRAFT_KEY, state)
+}
+
+function restorePersistedRestClock() {
+  const stored = uni.getStorageSync(REST_DRAFT_KEY) as PersistedRestClock | undefined
+  if (!stored || (!stored.endsAtMs && stored.remainingWhenPaused == null)) return
+  restTitle.value = stored.title || '组间休息'
+  restFocusIndex.value = stored.focusIndex ?? null
+  if (workoutStore.isPaused) {
+    const remaining =
+      stored.remainingWhenPaused ??
+      Math.max(0, Math.ceil(((stored.endsAtMs || Date.now()) - Date.now()) / 1000))
+    restRemaining.value = remaining
+    restDurationSeconds = remaining
+    restStartedAt = Date.now()
+    persistRestClock()
+    return
+  }
+  const remaining = stored.endsAtMs
+    ? Math.max(0, Math.ceil((stored.endsAtMs - Date.now()) / 1000))
+    : Math.max(0, stored.remainingWhenPaused || 0)
+  if (remaining <= 0) {
+    uni.removeStorageSync(REST_DRAFT_KEY)
+    return
+  }
+  restRemaining.value = remaining
+  restDurationSeconds = remaining
+  restStartedAt = Date.now()
+  startRestInterval()
+  persistRestClock()
+}
 
 function startStepTimer(action: () => void) {
   clearStepTimer()
@@ -143,13 +207,11 @@ const plateCalculatorTarget = computed(() => {
 const warmupPreviewExercise = computed(() =>
   warmupPreviewIndex.value === null ? null : workoutStore.activeExercises[warmupPreviewIndex.value]
 )
-const exitConfirmTitle = '\u9000\u51fa\u8bad\u7ec3\uff1f'
-const exitConfirmDesc =
-  '\u5f53\u524d\u8bad\u7ec3\u4f1a\u4fdd\u5b58\u4e3a\u8349\u7a3f\uff0c\u7a0d\u540e\u53ef\u4ee5\u4ece\u53f3\u4fa7\u5165\u53e3\u7ee7\u7eed\u3002'
-const exitConfirmHint =
-  '\u9000\u51fa\u540e\u4e0d\u4f1a\u5b8c\u6210\u8bad\u7ec3\uff0c\u4e5f\u4e0d\u4f1a\u751f\u6210\u8bad\u7ec3\u8bb0\u5f55\u3002'
-const exitConfirmCancelText = '\u7ee7\u7eed\u8bad\u7ec3'
-const exitConfirmSubmitText = '\u4fdd\u5b58\u5e76\u9000\u51fa'
+const exitConfirmTitle = '退出训练？'
+const exitConfirmDesc = '保存后会停止训练计时，稍后可以从“训练草稿”入口继续。'
+const exitConfirmHint = '退出不会完成训练，也不会生成训练记录。'
+const exitConfirmCancelText = '继续训练'
+const exitConfirmSubmitText = '保存草稿并退出'
 
 function toLocalDateTimeString(iso: string) {
   const date = new Date(iso)
@@ -233,6 +295,13 @@ function closePage() {
   }
 }
 
+function minimizePage() {
+  workoutStore.minimizeWorkout()
+  persistRestClock()
+  clearTimers()
+  uni.navigateBack()
+}
+
 function cancelExit() {
   showExitConfirm.value = false
 }
@@ -240,7 +309,25 @@ function cancelExit() {
 async function confirmExit() {
   showExitConfirm.value = false
   await workoutStore.reportAllRecommendationOverrides()
-  workoutStore.persistDraft()
+  workoutStore.saveDraftAndStop()
+  persistRestClock()
+  clearTimers()
+  uni.navigateBack()
+}
+
+function requestDiscardWorkout() {
+  showExitConfirm.value = false
+  if (!workoutStore.hasMeaningfulDraft) {
+    discardWorkoutAndLeave()
+    return
+  }
+  showDiscardConfirm.value = true
+}
+
+function discardWorkoutAndLeave() {
+  showDiscardConfirm.value = false
+  workoutStore.discardWorkout()
+  uni.removeStorageSync(REST_DRAFT_KEY)
   clearTimers()
   uni.navigateBack()
 }
@@ -264,11 +351,17 @@ function startRestInterval() {
   }, 1000)
 }
 
-function startRest(title: string, focusAfterRestIndex: number | null = null) {
+function startRest(
+  title: string,
+  focusAfterRestIndex: number | null = null,
+  overrideSeconds?: number
+) {
   if (restTimer) clearInterval(restTimer)
   restTitle.value = title
-  restRemaining.value = profileStore.restSeconds
-  restDurationSeconds = profileStore.restSeconds
+  const configuredRestSeconds =
+    overrideSeconds ?? currentExercise.value?.restSeconds ?? profileStore.restSeconds
+  restRemaining.value = configuredRestSeconds
+  restDurationSeconds = configuredRestSeconds
   restStartedAt = Date.now()
   restFocusIndex.value = focusAfterRestIndex
 
@@ -278,6 +371,7 @@ function startRest(title: string, focusAfterRestIndex: number | null = null) {
   }
 
   startRestInterval()
+  persistRestClock()
 }
 
 function notifyRestFinished() {
@@ -296,6 +390,7 @@ function skipRest(notify = false) {
   restTitle.value = ''
   const focusIndex = restFocusIndex.value
   restFocusIndex.value = null
+  uni.removeStorageSync(REST_DRAFT_KEY)
   if (notify) {
     notifyRestFinished()
   }
@@ -307,6 +402,32 @@ function skipRest(notify = false) {
 function addRestSeconds(seconds: number) {
   restRemaining.value += seconds
   restDurationSeconds += seconds
+  persistRestClock()
+}
+
+function pauseActiveWorkout() {
+  if (workoutStore.isPaused) {
+    resumeActiveWorkout()
+    return
+  }
+  if (restTimer) clearInterval(restTimer)
+  restTimer = null
+  workoutStore.pauseWorkout()
+  persistRestClock()
+  if (!uni.getStorageSync(PAUSE_INTRO_KEY)) {
+    uni.setStorageSync(PAUSE_INTRO_KEY, '1')
+    uni.showToast({ title: '训练计时已暂停，仍可继续编辑', icon: 'none' })
+  }
+}
+
+function resumeActiveWorkout() {
+  if (restRemaining.value > 0) {
+    restStartedAt = Date.now()
+    restDurationSeconds = restRemaining.value
+    startRestInterval()
+  }
+  workoutStore.resumeWorkout()
+  persistRestClock()
 }
 
 function restoreRestFromClock() {
@@ -345,6 +466,7 @@ async function initializeWorkout() {
     if (!workoutStore.activeExercises.length) {
       workoutStore.restoreDraft()
     }
+    workoutStore.resumeSavedDraft()
     await applyRestoredDraftFocus()
     return
   }
@@ -491,20 +613,27 @@ function setTypeText(setType?: WorkoutSetType) {
 function chooseSetType(exerciseIndex: number, setIndex: number) {
   const set = workoutStore.activeExercises[exerciseIndex]?.sets[setIndex]
   if (!set || set.done) return
-  const values: WorkoutSetType[] = ['NORMAL', 'WARMUP', 'DROP', 'FAILURE']
-  uni.showActionSheet({
-    itemList: ['普通组', '热身组', '递减组', '力竭组'],
-    success: ({ tapIndex }) => {
-      const type = values[tapIndex]
-      if (type) workoutStore.setSetType(exerciseIndex, setIndex, type)
-    }
-  })
+  setTypeTarget.value = { exerciseIndex, setIndex }
+}
+
+function applySetType(type: WorkoutSetType) {
+  const target = setTypeTarget.value
+  if (!target) return
+  workoutStore.setSetType(target.exerciseIndex, target.setIndex, type)
+  setTypeTarget.value = null
 }
 
 function selectEffort(effort: WorkoutEffort) {
   const target = effortTarget.value
   if (!target) return
   workoutStore.setEffort(target.exerciseIndex, target.setIndex, effort)
+  workoutStore.markEffortPromptHandled(target.exerciseIndex)
+  effortTarget.value = null
+}
+
+function dismissEffort() {
+  const target = effortTarget.value
+  if (target) workoutStore.markEffortPromptHandled(target.exerciseIndex)
   effortTarget.value = null
 }
 
@@ -656,6 +785,70 @@ function openPlateCalculator(exerciseIndex: number) {
   plateCalculatorVisible.value = true
 }
 
+function chooseExerciseRest(exerciseIndex: number) {
+  menuExerciseIndex.value = null
+  restEditorIndex.value = exerciseIndex
+}
+
+function confirmExerciseRest(payload: { restSeconds: number }) {
+  const index = restEditorIndex.value
+  if (index === null) return
+  workoutStore.setExerciseRestSeconds(index, payload.restSeconds)
+  restEditorIndex.value = null
+  void offerPersistRestToTemplate(index, payload.restSeconds)
+}
+
+async function offerPersistRestToTemplate(exerciseIndex: number, seconds: number) {
+  const templateId = workoutStore.activeTemplateId
+  if (!templateId) return
+  const detail = await templateStore.getDetail(templateId).catch(() => null)
+  if (!detail || detail.templateType !== 'USER') return
+  const confirmed = await new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '更新我的模板？',
+      content: `本次训练已改为 ${seconds} 秒。是否同时保存到「${detail.name}」？`,
+      cancelText: '仅本次',
+      confirmText: '更新模板',
+      success: (result) => resolve(Boolean(result.confirm)),
+      fail: () => resolve(false)
+    })
+  })
+  if (!confirmed) return
+  const exerciseId = workoutStore.activeExercises[exerciseIndex]?.id
+  try {
+    await updateTemplate(templateId, {
+      name: detail.name,
+      items: detail.items.map((item) => ({
+        exerciseId: item.exerciseId,
+        targetSets: item.targetSets,
+        targetWeightKg: item.targetWeightKg,
+        targetReps: item.targetReps,
+        targetDurationSeconds: item.targetDurationSeconds,
+        restSeconds: item.exerciseId === exerciseId ? seconds : item.restSeconds
+      }))
+    })
+    await templateStore.fetchTemplates({ force: true })
+    uni.showToast({ title: '已同步到我的模板', icon: 'none' })
+  } catch (err) {
+    console.error('[workout] template rest update failed', err)
+    uni.showToast({ title: '模板更新失败，本次设置已保留', icon: 'none' })
+  }
+}
+
+function openManualEffort(exerciseIndex: number) {
+  const exercise = workoutStore.activeExercises[exerciseIndex]
+  if (!exercise) return
+  const setIndex = exercise.sets.findLastIndex(
+    (set) => set.done && (set.setType || 'NORMAL') !== 'WARMUP'
+  )
+  menuExerciseIndex.value = null
+  if (setIndex < 0) {
+    uni.showToast({ title: '请先完成一组正式训练', icon: 'none' })
+    return
+  }
+  effortTarget.value = { exerciseIndex, setIndex }
+}
+
 function findSupersetNextIndex(exerciseIndex: number) {
   const groupId = workoutStore.activeExercises[exerciseIndex]?.supersetGroupId
   if (!groupId) return null
@@ -695,9 +888,14 @@ function toggleSetDone(setIndex: number) {
     return
   }
 
-  const shouldAskEffort =
-    (targetSet.setType || 'NORMAL') !== 'WARMUP' &&
-    exercise.sets.filter((set) => set.setType !== 'WARMUP' && !set.done).length === 1
+  const shouldAskEffort = shouldPromptForEffort({
+    enabled: profileStore.effortPromptEnabled,
+    handled: exercise.effortPromptHandled === true,
+    completedSetType: (targetSet.setType || 'NORMAL') === 'WARMUP' ? 'WARMUP' : 'NORMAL',
+    remainingIncompleteWorkingSets:
+      exercise.sets.filter((set) => set.setType !== 'WARMUP' && !set.done).length - 1,
+    inSupersetTransition: findSupersetNextIndex(currentExerciseIndex.value) !== null
+  })
 
   workoutStore.toggleSet(currentExerciseIndex.value, setIndex)
   void workoutStore.reportRecommendationOverrideIfNeeded(currentExerciseIndex.value)
@@ -719,10 +917,17 @@ function toggleSetDone(setIndex: number) {
     effortTarget.value = { exerciseIndex: currentExerciseIndex.value, setIndex }
   }
   if (afterExercise.sets.every((set) => set.done)) {
-    startRest(`${afterExercise.name} 最后一组已完成`)
+    restTitle.value = ''
     return
   }
-  startRest(`第 ${setIndex + 1} 组已完成`)
+  const workingRestSeconds = exercise.restSeconds ?? profileStore.restSeconds
+  const setRestSeconds =
+    (targetSet.setType || 'NORMAL') === 'WARMUP'
+      ? workingRestSeconds === 0
+        ? 0
+        : Math.min(90, Math.max(30, Math.round(workingRestSeconds * 0.5)))
+      : workingRestSeconds
+  startRest(`第 ${setIndex + 1} 组已完成`, null, setRestSeconds)
 }
 
 function addSet(exerciseIndex = currentExerciseIndex.value) {
@@ -746,6 +951,7 @@ function deleteSet(exerciseIndex: number, setIndex: number) {
 }
 
 function openExercisePicker() {
+  menuExerciseIndex.value = null
   pickerVisible.value = true
 }
 
@@ -780,6 +986,24 @@ function addExerciseFromPicker(exercise: ExerciseSummary) {
   void focusWorkoutExercise(workoutStore.activeExercises.length - 1)
   pickerVisible.value = false
   uni.showToast({ title: '已添加动作', icon: 'none' })
+}
+
+function addExercisesFromPicker(exercises: ExerciseSummary[]) {
+  const result = workoutStore.addExercises(
+    exercises.map((exercise) => ({
+      id: exercise.id,
+      name: exercise.name,
+      muscle: exercise.primaryMuscle || '',
+      recordType: exercise.recordType || 'WEIGHT_REPS',
+      equipment: exercise.equipment
+    }))
+  )
+  const added = result.addedIds.length
+  pickerVisible.value = false
+  if (added) {
+    void focusWorkoutExercise(workoutStore.activeExercises.length - added)
+    uni.showToast({ title: `已添加 ${added} 个动作`, icon: 'none' })
+  }
 }
 
 function replaceExercise(targetIndex: number, exercise: ExerciseSummary) {
@@ -935,6 +1159,7 @@ function handleFinishTap() {
 
 async function confirmFinish() {
   if (submitting.value) return
+  workoutStore.syncElapsed()
   await workoutStore.reportAllRecommendationOverrides()
   const startedAt =
     workoutStore.startedAt ||
@@ -944,6 +1169,7 @@ async function confirmFinish() {
     .map((exercise) => ({
       exerciseId: exercise.id,
       targetSets: exercise.sets.filter((set) => set.setType !== 'WARMUP').length,
+      restSeconds: exercise.restSeconds ?? profileStore.restSeconds,
       sets: exercise.sets
         .filter((set) => set.done)
         .map((set) => ({
@@ -985,6 +1211,8 @@ async function confirmFinish() {
     trainingName: workoutStore.activeTemplateName || '自由训练',
     startedAt: toLocalDateTimeString(startedAt),
     endedAt: toLocalDateTimeString(endedAt),
+    durationSeconds: workoutStore.elapsedSeconds,
+    pausedSeconds: workoutStore.accumulatedPausedSeconds,
     items
   }
   let result: Awaited<ReturnType<typeof saveTraining>>
@@ -1002,6 +1230,7 @@ async function confirmFinish() {
   }
 
   clearTimers()
+  skipRest()
   workoutStore.setCompletedSummary({
     ...result,
     trainingName: workoutStore.activeTemplateName || '自由训练',
@@ -1030,6 +1259,7 @@ async function retrySaveFailedDraft() {
   submitting.value = true
   try {
     const result = await saveTraining(workoutStore.lastSubmitPayload)
+    skipRest()
     workoutStore.setCompletedSummary({
       ...result,
       trainingName: workoutStore.lastSubmitPayload.trainingName,
@@ -1060,10 +1290,10 @@ async function retrySaveFailedDraft() {
 }
 
 onMounted(() => {
-  void initializeWorkout()
+  void initializeWorkout().then(() => restorePersistedRestClock())
 
   timer = setInterval(() => {
-    workoutStore.elapsedSeconds += 1
+    workoutStore.syncElapsed()
     if (Date.now() - lastDraftPersistedAt > 10000) {
       workoutStore.persistDraft()
       lastDraftPersistedAt = Date.now()
@@ -1075,10 +1305,16 @@ onHide(() => {
   if (restTimer) clearInterval(restTimer)
   restTimer = null
   workoutStore.persistDraft()
+  persistRestClock()
 })
 
 onShow(() => {
-  restoreRestFromClock()
+  workoutStore.resumeSavedDraft()
+  workoutStore.syncElapsed()
+  if (!workoutStore.isPaused) {
+    if (restRemaining.value > 0) restoreRestFromClock()
+    else restorePersistedRestClock()
+  }
 })
 
 onUnmounted(() => {
@@ -1088,19 +1324,40 @@ onUnmounted(() => {
     workoutStore.discardWorkout()
   }
   clearTimers()
+  persistRestClock()
 })
 </script>
 
 <template>
   <view class="workout-active" :class="themeStore.themeClass">
     <view class="workout-active__top">
-      <view class="workout-active__close btn-press" @tap="closePage">×</view>
+      <view class="workout-active__nav-actions">
+        <view
+          class="workout-active__nav-btn btn-press"
+          :aria-label="headerActions.minimizeLabel"
+          @tap="minimizePage"
+        >
+          <image
+            class="workout-active__nav-icon"
+            src="/static/icons/chevron-down.svg"
+            mode="aspectFit"
+          />
+        </view>
+        <view
+          class="workout-active__nav-btn btn-press"
+          :aria-label="headerActions.exitLabel"
+          @tap="closePage"
+        >
+          <image class="workout-active__nav-icon" src="/static/icons/x-mark.svg" mode="aspectFit" />
+        </view>
+      </view>
       <view class="workout-active__title-wrap">
         <view class="workout-active__source">{{ sourceText }}</view>
         <view class="workout-active__title">{{ workoutStore.activeTemplateName }}</view>
         <view class="workout-active__timer">{{ formatSeconds(workoutStore.elapsedSeconds) }}</view>
+        <view v-if="workoutStore.isPaused" class="workout-active__paused-label">已暂停</view>
       </view>
-      <view class="workout-active__top-spacer" />
+      <view class="workout-active__top-spacer workout-active__top-spacer--wide" />
     </view>
 
     <view class="workout-active__progress">
@@ -1113,15 +1370,33 @@ onUnmounted(() => {
             >{{ Math.round(workoutStore.progress * 100) }}%</view
           >
         </view>
-        <view
-          class="workout-active__done btn-press"
-          :class="{ 'workout-active__done--disabled': submitting }"
-          @tap="handleFinishTap"
-        >
-          {{ submitting ? '保存中' : '完成训练' }}
+        <view class="workout-active__progress-actions">
+          <view
+            class="workout-active__pause btn-press"
+            :class="{ 'workout-active__pause--paused': workoutStore.isPaused }"
+            @tap="pauseActiveWorkout"
+          >
+            {{ headerActions.pauseLabel }}
+          </view>
+          <view
+            class="workout-active__done btn-press"
+            :class="{ 'workout-active__done--disabled': submitting }"
+            @tap="handleFinishTap"
+            >{{ submitting ? '保存中' : '完成训练' }}</view
+          >
         </view>
       </view>
       <ProgressBar :value="workoutStore.progress" />
+    </view>
+
+    <view v-if="workoutStore.isPaused" class="workout-active__paused-banner">
+      <view>
+        <view class="workout-active__paused-title">训练计时已暂停</view>
+        <view class="workout-active__paused-sub">
+          可以继续调整动作和组数据，有效训练时长不会增加。
+        </view>
+      </view>
+      <view class="workout-active__paused-resume btn-press" @tap="resumeActiveWorkout">继续</view>
     </view>
 
     <view v-if="workoutStore.hasSaveFailedDraft" class="workout-active__save-failed">
@@ -1252,6 +1527,12 @@ onUnmounted(() => {
               >
                 杠铃片计算
               </view>
+              <view class="workout-active__menu-item" @tap="chooseExerciseRest(exerciseIndex)">
+                组间休息 · {{ exercise.restSeconds ?? profileStore.restSeconds }}秒
+              </view>
+              <view class="workout-active__menu-item" @tap="openManualEffort(exerciseIndex)">
+                记录训练感受
+              </view>
               <view
                 class="workout-active__menu-item workout-active__menu-item--danger"
                 @tap="deleteExercise(exerciseIndex)"
@@ -1278,6 +1559,12 @@ onUnmounted(() => {
           />
 
           <view v-if="!exercise.ended" class="workout-active__quick-tools">
+            <view
+              class="workout-active__quick-tool workout-active__rest-pill btn-press"
+              @tap="chooseExerciseRest(exerciseIndex)"
+            >
+              休息 {{ exercise.restSeconds ?? profileStore.restSeconds }} 秒 ›
+            </view>
             <view
               class="workout-active__quick-tool btn-press"
               @tap="applyLastPerformance(exerciseIndex)"
@@ -1328,12 +1615,21 @@ onUnmounted(() => {
                 'workout-active__set--duration': isDurationExercise(exercise)
               }"
             >
-              <view
-                class="workout-active__set-index btn-press"
-                :class="{ 'workout-active__set-index--typed': setTypeText(set.setType) }"
-                @tap.stop="chooseSetType(exerciseIndex, setIndex)"
-              >
-                {{ setTypeText(set.setType) || setIndex + 1 }}
+              <view class="workout-active__set-index-wrap">
+                <view
+                  class="workout-active__set-index btn-press"
+                  :class="{ 'workout-active__set-index--typed': setTypeText(set.setType) }"
+                  @tap.stop="chooseSetType(exerciseIndex, setIndex)"
+                >
+                  {{ setTypeText(set.setType) || setIndex + 1 }}
+                </view>
+                <view
+                  v-if="exercise.sets.length > 1 && !set.done"
+                  class="workout-active__set-delete btn-press"
+                  @tap.stop="deleteSet(exerciseIndex, setIndex)"
+                >
+                  删除
+                </view>
               </view>
               <view
                 class="workout-active__stepper"
@@ -1427,6 +1723,13 @@ onUnmounted(() => {
             </view>
           </app-swipe-action>
 
+          <view
+            v-if="!exercise.ended && exercise.sets.length > 1"
+            class="workout-active__delete-hint"
+          >
+            左滑任意未完成组可删除
+          </view>
+
           <view v-if="!exercise.ended" class="workout-active__actions">
             <view
               class="glass-card workout-active__action btn-press"
@@ -1514,6 +1817,37 @@ onUnmounted(() => {
             {{ exitConfirmSubmitText }}
           </view>
         </view>
+        <view class="workout-active__confirm-danger btn-press" @tap="requestDiscardWorkout">
+          放弃本次训练
+        </view>
+      </view>
+    </view>
+
+    <view
+      v-if="showDiscardConfirm"
+      class="workout-active__overlay"
+      @tap="showDiscardConfirm = false"
+    >
+      <view class="workout-active__sheet workout-active__sheet--confirm" @tap.stop>
+        <view class="workout-active__sheet-handle" />
+        <view class="workout-active__confirm-title">放弃本次训练？</view>
+        <view class="muted workout-active__confirm-desc">
+          已记录的动作、组数和重量会被删除，且无法恢复。
+        </view>
+        <view class="workout-active__confirm-actions">
+          <view
+            class="glass-card workout-active__confirm-btn btn-press"
+            @tap="showDiscardConfirm = false"
+          >
+            取消
+          </view>
+          <view
+            class="workout-active__confirm-btn workout-active__confirm-btn--danger btn-press"
+            @tap="discardWorkoutAndLeave"
+          >
+            确认放弃
+          </view>
+        </view>
       </view>
     </view>
 
@@ -1523,13 +1857,31 @@ onUnmounted(() => {
       title="添加训练动作"
       subtitle="搜索并加入本次训练"
       :selected-ids="selectedExerciseIds"
+      :context="replacementTargetIndex !== null ? 'REPLACE' : 'WORKOUT'"
+      :mode="replacementTargetIndex !== null ? 'SINGLE_REPLACE' : 'MULTIPLE_ADD'"
       @close="closeExercisePicker"
       @select="addExerciseFromPicker"
+      @confirm="addExercisesFromPicker"
     />
-    <EffortPicker
-      :visible="Boolean(effortTarget)"
-      @close="effortTarget = null"
-      @select="selectEffort"
+    <EffortPicker :visible="Boolean(effortTarget)" @close="dismissEffort" @select="selectEffort" />
+    <RestSecondsSheet
+      :visible="restEditorIndex !== null"
+      :exercise-name="workoutStore.activeExercises[restEditorIndex ?? -1]?.name || ''"
+      :value="
+        workoutStore.activeExercises[restEditorIndex ?? -1]?.restSeconds ?? profileStore.restSeconds
+      "
+      @close="restEditorIndex = null"
+      @confirm="confirmExerciseRest"
+    />
+    <SetTypeSheet
+      :visible="setTypeTarget !== null"
+      :value="
+        workoutStore.activeExercises[setTypeTarget?.exerciseIndex ?? -1]?.sets[
+          setTypeTarget?.setIndex ?? -1
+        ]?.setType || 'NORMAL'
+      "
+      @close="setTypeTarget = null"
+      @select="applySetType"
     />
     <PlateCalculator
       :visible="plateCalculatorVisible"
@@ -1646,7 +1998,7 @@ onUnmounted(() => {
     gap: 20rpx;
   }
 
-  &__close,
+  &__nav-btn,
   &__done {
     min-width: 72rpx;
     min-height: 72rpx;
@@ -1656,16 +2008,34 @@ onUnmounted(() => {
     justify-content: center;
   }
 
-  &__close {
+  &__nav-actions {
+    width: 164rpx;
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    flex-shrink: 0;
+  }
+
+  &__nav-btn {
+    width: 72rpx;
     background: var(--app-surface);
     border: 1px solid var(--app-border);
-    font-size: 34rpx;
+    color: var(--app-text-secondary);
+  }
+
+  &__nav-icon {
+    width: 38rpx;
+    height: 38rpx;
   }
 
   &__top-spacer {
     width: 72rpx;
     height: 72rpx;
     flex-shrink: 0;
+
+    &--wide {
+      width: 164rpx;
+    }
   }
 
   &__done {
@@ -1711,6 +2081,17 @@ onUnmounted(() => {
     font-size: 40rpx;
   }
 
+  &__paused-label {
+    width: max-content;
+    margin: 8rpx auto 0;
+    padding: 5rpx 14rpx;
+    border-radius: 999rpx;
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+    font-size: 20rpx;
+    font-weight: 900;
+  }
+
   &__progress {
     margin-top: 24rpx;
   }
@@ -1721,6 +2102,72 @@ onUnmounted(() => {
     justify-content: space-between;
     gap: 18rpx;
     margin-bottom: 8rpx;
+  }
+
+  &__progress-actions {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+  &__pause {
+    display: grid;
+    place-items: center;
+    min-height: 68rpx;
+    padding: 0 22rpx;
+    border: 1rpx solid var(--app-border);
+    border-radius: 24rpx;
+    background: var(--app-surface);
+    font-size: 24rpx;
+    font-weight: 800;
+
+    &--paused {
+      color: #fff;
+      border-color: transparent;
+      background: linear-gradient(135deg, #ff501e, #ffa03c);
+    }
+  }
+
+  &__paused-banner {
+    margin-top: 14rpx;
+    padding: 18rpx 20rpx;
+    border-radius: 24rpx;
+    border: 1rpx solid rgba(255, 91, 31, 0.24);
+    background: rgba(255, 107, 44, 0.09);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+  }
+
+  &__paused-title {
+    color: var(--app-text);
+    font-size: 24rpx;
+    font-weight: 900;
+  }
+
+  &__paused-sub {
+    margin-top: 5rpx;
+    color: var(--app-text-muted);
+    font-size: 20rpx;
+    line-height: 1.4;
+  }
+
+  &__paused-resume {
+    min-width: 104rpx;
+    min-height: 64rpx;
+    border-radius: 22rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: var(--app-accent);
+    font-size: 23rpx;
+    font-weight: 900;
+  }
+  &__rest-pill {
+    border-color: rgba(255, 91, 31, 0.35);
+    color: var(--app-accent);
+    background: rgba(255, 107, 44, 0.1);
   }
 
   &__stats {
@@ -1912,7 +2359,7 @@ onUnmounted(() => {
     }
 
     &--menu-open {
-      z-index: 50;
+      z-index: var(--z-popover, 40);
     }
   }
 
@@ -2028,7 +2475,7 @@ onUnmounted(() => {
     border-radius: 24rpx;
     background: var(--app-surface-raised);
     border: 1px solid var(--app-border);
-    z-index: 60;
+    z-index: var(--z-popover, 40);
     box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.36);
   }
 
@@ -2147,6 +2594,18 @@ onUnmounted(() => {
     }
   }
 
+  &__set-index-wrap {
+    min-width: 0;
+    text-align: center;
+  }
+
+  &__set-delete {
+    margin-top: 4rpx;
+    color: var(--app-danger, #e34b4b);
+    font-size: 17rpx;
+    line-height: 1.2;
+  }
+
   &__stepper {
     display: grid;
     grid-template-columns: 60rpx 1fr 60rpx;
@@ -2230,6 +2689,13 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
     gap: 16rpx;
     margin-top: 10rpx;
+  }
+
+  &__delete-hint {
+    margin: 4rpx 0 10rpx;
+    color: var(--app-text-muted);
+    font-size: 20rpx;
+    text-align: right;
   }
 
   &__action {
@@ -2327,7 +2793,7 @@ onUnmounted(() => {
     background: rgba(0, 0, 0, 0.72);
     display: flex;
     align-items: flex-end;
-    z-index: 20;
+    z-index: var(--z-mask, 100);
   }
 
   &__sheet {
@@ -2464,6 +2930,22 @@ onUnmounted(() => {
       color: #fff;
       box-shadow: 0 18rpx 44rpx rgba(255, 93, 24, 0.3);
     }
+
+    &--danger {
+      color: #fff;
+      background: var(--app-danger, #df4242);
+    }
+  }
+
+  &__confirm-danger {
+    min-height: 72rpx;
+    margin-top: 12rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--app-danger, #df4242);
+    font-size: 24rpx;
+    font-weight: 900;
   }
 }
 </style>

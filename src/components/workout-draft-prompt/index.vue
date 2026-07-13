@@ -45,7 +45,11 @@ const workoutStore = useWorkoutStore()
           继续训练
         </view>
         <view class="draft-prompt__danger btn-press" @tap="promptStore.requestDiscard">
-          {{ promptStore.startTarget ? `删除草稿并开始“${promptStore.startTarget.title}”` : '删除草稿' }}
+          {{
+            promptStore.startTarget
+              ? `删除草稿并开始“${promptStore.startTarget.title}”`
+              : '删除草稿'
+          }}
         </view>
         <view class="draft-prompt__cancel btn-press" @tap="promptStore.close">取消</view>
       </template>
@@ -61,10 +65,16 @@ const workoutStore = useWorkoutStore()
           }}
         </view>
         <view class="draft-prompt__confirm-actions">
-          <view class="draft-prompt__cancel draft-prompt__confirm-btn btn-press" @tap="promptStore.cancelDiscard">
+          <view
+            class="draft-prompt__cancel draft-prompt__confirm-btn btn-press"
+            @tap="promptStore.cancelDiscard"
+          >
             取消
           </view>
-          <view class="draft-prompt__danger draft-prompt__confirm-btn btn-press" @tap="promptStore.choose('discard')">
+          <view
+            class="draft-prompt__danger draft-prompt__confirm-btn btn-press"
+            @tap="promptStore.choose('discard')"
+          >
             {{ promptStore.startTarget ? '删除并开始' : '删除' }}
           </view>
         </view>
@@ -130,8 +140,7 @@ const workoutStore = useWorkoutStore()
     align-items: center;
     gap: 18rpx;
     background:
-      radial-gradient(circle at 0% 0%, rgba(255, 100, 24, 0.1), transparent 44%),
-      var(--app-surface);
+      radial-gradient(circle at 0% 0%, rgba(255, 100, 24, 0.1), transparent 44%), var(--app-surface);
     border: 1px solid var(--app-border);
   }
 

@@ -37,7 +37,7 @@ const options: Array<{ value: WorkoutEffort; label: string; desc: string }> = [
 .effort-picker {
   position: fixed;
   inset: 0;
-  z-index: 130;
+  z-index: var(--z-dialog, 120);
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: flex-end;

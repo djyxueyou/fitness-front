@@ -5,7 +5,13 @@ export interface ExerciseProgressionRecommendation {
   locked: boolean
   recommendationId?: string
   ruleVersion: string
-  action: 'NONE' | 'MAINTAIN' | 'INCREASE_WEIGHT' | 'REDUCE_WEIGHT' | 'INCREASE_REPS' | 'INCREASE_DURATION'
+  action:
+    | 'NONE'
+    | 'MAINTAIN'
+    | 'INCREASE_WEIGHT'
+    | 'REDUCE_WEIGHT'
+    | 'INCREASE_REPS'
+    | 'INCREASE_DURATION'
   reasonCode: string
   reasonText: string
   targetText?: string

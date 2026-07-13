@@ -5,6 +5,7 @@ import AppHeader from '@/components/app-header/index.vue'
 import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import ExercisePicker from '@/components/exercise-picker/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
+import RestSecondsSheet from '@/components/rest-seconds-sheet/index.vue'
 import {
   createTemplate,
   updateTemplate,
@@ -29,6 +30,7 @@ interface EditableTemplateItem {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  restSeconds?: number | null
   thumbnailUrl?: string
 }
 
@@ -46,6 +48,7 @@ const durationMinutes = ref(1)
 const durationSeconds = ref(0)
 
 const pickerVisible = ref(false)
+const restEditorIndex = ref<number | null>(null)
 
 const isEditMode = computed(() => !!templateId.value)
 const hasValidContent = computed(() => Boolean(templateName.value.trim()) && items.value.length > 0)
@@ -69,6 +72,16 @@ onShow(async () => {
 
 function goBack() {
   uni.navigateBack()
+}
+
+function chooseRestSeconds(index: number) {
+  restEditorIndex.value = index
+}
+
+function confirmRestSeconds(payload: { restSeconds: number }) {
+  const item = items.value[restEditorIndex.value ?? -1]
+  if (item) item.restSeconds = payload.restSeconds
+  restEditorIndex.value = null
 }
 
 async function loadTemplate() {
@@ -96,6 +109,7 @@ async function loadTemplate() {
       targetWeightKg: item.targetWeightKg,
       targetReps: item.targetReps,
       targetDurationSeconds: item.targetDurationSeconds,
+      restSeconds: item.restSeconds,
       thumbnailUrl: item.thumbnailUrl || item.thumbnailPath
     }))
   } catch (err) {
@@ -126,7 +140,8 @@ async function saveTemplate() {
       targetWeightKg: item.recordType === 'WEIGHT_REPS' ? (item.targetWeightKg ?? 20) : undefined,
       targetReps: item.recordType !== 'DURATION' ? (item.targetReps ?? 10) : undefined,
       targetDurationSeconds:
-        item.recordType === 'DURATION' ? (item.targetDurationSeconds ?? 60) : undefined
+        item.recordType === 'DURATION' ? (item.targetDurationSeconds ?? 60) : undefined,
+      restSeconds: item.restSeconds
     }))
   }
 
@@ -194,6 +209,17 @@ async function addExercise(exercise: ExerciseSummary) {
     thumbnailUrl: exercise.thumbnailUrl || exercise.thumbnailPath
   })
   uni.showToast({ title: usedPrevious ? '已参考上次表现' : '已按默认目标添加', icon: 'none' })
+}
+
+async function addExercises(exercises: ExerciseSummary[]) {
+  try {
+    for (const exercise of exercises) await addExercise(exercise)
+    closeExercisePicker()
+    uni.showToast({ title: `已添加 ${exercises.length} 个动作`, icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: '添加动作失败，请重试', icon: 'none' })
+    console.error('[template-edit] batch add failed', err)
+  }
 }
 
 function removeItem(index: number) {
@@ -336,6 +362,18 @@ function confirmDuration() {
               <view class="template-edit__body">
                 <view class="template-edit__name">{{ item.exerciseName }}</view>
                 <view class="template-edit__meta">目标组数</view>
+                <view
+                  class="template-edit__rest-pill btn-press"
+                  :class="{ 'template-edit__rest-pill--custom': item.restSeconds != null }"
+                  @tap="chooseRestSeconds(index)"
+                >
+                  {{
+                    item.restSeconds == null
+                      ? `休息 默认 ${profileStore.restSeconds} 秒`
+                      : `休息 ${item.restSeconds} 秒`
+                  }}
+                  ›
+                </view>
               </view>
               <view class="template-edit__sets">
                 <view class="template-edit__step btn-press" @tap="adjustSets(index, -1)">−</view>
@@ -455,8 +493,17 @@ function confirmDuration() {
       title="添加动作"
       subtitle="搜索并添加到当前模板"
       :selected-ids="items.map((item) => item.exerciseId)"
+      context="TEMPLATE"
       @close="closeExercisePicker"
       @select="addExercise"
+      @confirm="addExercises"
+    />
+    <RestSecondsSheet
+      :visible="restEditorIndex !== null"
+      :exercise-name="items[restEditorIndex ?? -1]?.exerciseName || ''"
+      :value="items[restEditorIndex ?? -1]?.restSeconds ?? profileStore.restSeconds"
+      @close="restEditorIndex = null"
+      @confirm="confirmRestSeconds"
     />
 
     <view v-if="durationEditorVisible" class="duration-editor__mask" @tap="closeDurationEditor">
@@ -633,6 +680,27 @@ function confirmDuration() {
     margin-top: 6rpx;
     color: var(--app-text-muted);
     font-size: 20rpx;
+  }
+
+  &__rest-pill {
+    width: max-content;
+    min-height: 52rpx;
+    margin-top: 8rpx;
+    padding: 0 16rpx;
+    border-radius: 999rpx;
+    display: flex;
+    align-items: center;
+    color: var(--app-text-secondary);
+    background: var(--app-bg);
+    border: 1rpx solid var(--app-border);
+    font-size: 20rpx;
+    font-weight: 800;
+
+    &--custom {
+      color: var(--app-accent);
+      background: var(--app-accent-soft);
+      border-color: rgba(255, 91, 31, 0.25);
+    }
   }
 
   &__sets {

@@ -1,6 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  effectiveElapsedSeconds,
+  pauseWorkoutClock,
+  resumeWorkoutClock,
+  restoreSuspendedWorkoutClock,
+  suspendWorkoutClock
+} from '@/utils/workout-clock'
+import {
   fetchExerciseLastPerformances,
   fetchExerciseLastPerformance,
   type ExerciseLastPerformanceResponse,
@@ -9,6 +16,7 @@ import {
   type SaveTrainingResponse
 } from '@/api/training'
 import { useTemplateStore } from '@/stores/template'
+import { useProfileStore } from '@/stores/profile'
 import {
   fetchProgressionRecommendation,
   sendProgressionRecommendationFeedback,
@@ -16,7 +24,7 @@ import {
 } from '@/api/progression'
 
 const WORKOUT_DRAFT_KEY = 'LIFTLOG_WORKOUT_DRAFT'
-const WORKOUT_DRAFT_VERSION = 3
+const WORKOUT_DRAFT_VERSION = 4
 const WORKOUT_DRAFT_TTL_MS = 48 * 60 * 60 * 1000
 
 export type WorkoutRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
@@ -45,6 +53,8 @@ export type WorkoutExercise = {
   recordType: WorkoutRecordType
   ended?: boolean
   supersetGroupId?: string
+  restSeconds?: number
+  effortPromptHandled?: boolean
   sets: WorkoutSet[]
 }
 export type WorkoutExecutionDayItem = {
@@ -57,6 +67,7 @@ export type WorkoutExecutionDayItem = {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  plannedRestSeconds?: number
 }
 export type CompletedWorkoutSummary = SaveTrainingResponse & {
   trainingName: string
@@ -96,6 +107,11 @@ type WorkoutDraft = {
   clientRequestId?: string
   startedAt: string
   elapsedSeconds: number
+  pausedAtMs?: number | null
+  accumulatedPausedSeconds?: number
+  sessionState?: 'RUNNING' | 'SAVED_DRAFT'
+  suspendedAtMs?: number | null
+  accumulatedSuspendedSeconds?: number
   activeExercises: WorkoutExercise[]
   lastActiveExerciseId?: number | null
   lastActiveExerciseIndex?: number | null
@@ -305,6 +321,11 @@ export const useWorkoutStore = defineStore('workout', () => {
   const clientRequestId = ref('')
   const startedAt = ref<string | null>(null)
   const elapsedSeconds = ref(0)
+  const pausedAtMs = ref<number | null>(null)
+  const accumulatedPausedSeconds = ref(0)
+  const sessionState = ref<'RUNNING' | 'SAVED_DRAFT'>(initialDraft?.sessionState || 'SAVED_DRAFT')
+  const suspendedAtMs = ref<number | null>(initialDraft?.suspendedAtMs ?? null)
+  const accumulatedSuspendedSeconds = ref(initialDraft?.accumulatedSuspendedSeconds ?? 0)
   const activeExercises = ref<WorkoutExercise[]>(createEmptyWorkout())
   const lastActiveExerciseId = ref<number | null>(null)
   const lastActiveExerciseIndex = ref<number | null>(null)
@@ -357,6 +378,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     )
   )
   const hasActiveWorkout = computed(() => Boolean(startedAt.value && activeExercises.value.length))
+  const isPaused = computed(() => pausedAtMs.value !== null)
+  const isSavedDraft = computed(() => sessionState.value === 'SAVED_DRAFT')
   const hasMeaningfulDraft = computed(() =>
     Boolean(workoutDirty.value && startedAt.value && activeExercises.value.length)
   )
@@ -371,7 +394,8 @@ export const useWorkoutStore = defineStore('workout', () => {
           activeTemplateName: activeTemplateName.value,
           elapsedSeconds: elapsedSeconds.value,
           activeExercises: activeExercises.value,
-          savedAt: draftSavedAt.value
+          savedAt: draftSavedAt.value,
+          sessionState: sessionState.value
         }
       : draftSnapshot.value
   )
@@ -391,7 +415,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     durationText: draftElapsedText.value,
     exerciseCount: draftExerciseCount.value,
     doneSets: draftDoneSets.value,
-    savedAt: draftSource.value?.savedAt || ''
+    savedAt: draftSource.value?.savedAt || '',
+    state: draftSource.value?.sessionState || 'SAVED_DRAFT'
   }))
   const sourceType = computed<'PLAN' | 'TEMPLATE' | 'FREE'>(() => {
     if (
@@ -415,6 +440,11 @@ export const useWorkoutStore = defineStore('workout', () => {
     clientRequestId.value = createClientRequestId()
     startedAt.value = new Date().toISOString()
     elapsedSeconds.value = 0
+    pausedAtMs.value = null
+    accumulatedPausedSeconds.value = 0
+    sessionState.value = 'RUNNING'
+    suspendedAtMs.value = null
+    accumulatedSuspendedSeconds.value = 0
     workoutDirty.value = false
     draftStatus.value = 'ACTIVE'
     lastSubmitPayload.value = null
@@ -444,6 +474,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     }
   ) {
     const templateStore = useTemplateStore()
+    const profileStore = useProfileStore()
     activeTemplateId.value = templateId
     activePlanId.value = context?.planId ?? null
     activePlanDayId.value = context?.planDayId ?? null
@@ -455,6 +486,11 @@ export const useWorkoutStore = defineStore('workout', () => {
     clientRequestId.value = createClientRequestId()
     startedAt.value = new Date().toISOString()
     elapsedSeconds.value = 0
+    pausedAtMs.value = null
+    accumulatedPausedSeconds.value = 0
+    sessionState.value = 'RUNNING'
+    suspendedAtMs.value = null
+    accumulatedSuspendedSeconds.value = 0
     workoutDirty.value = false
     draftStatus.value = 'ACTIVE'
     lastSubmitPayload.value = null
@@ -473,6 +509,8 @@ export const useWorkoutStore = defineStore('workout', () => {
           equipment: item.equipment,
           recordType,
           ended: false,
+          restSeconds: item.plannedRestSeconds ?? profileStore.restSeconds,
+          effortPromptHandled: false,
           sets: createSetsFromTemplateTargets(Math.max(1, item.targetSets || 1), recordType, {
             targetWeightKg: item.targetWeightKg,
             targetReps: item.targetReps,
@@ -502,6 +540,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       equipment: item.equipment,
       recordType: item.recordType || 'WEIGHT_REPS',
       ended: false,
+      restSeconds: item.restSeconds ?? profileStore.restSeconds,
+      effortPromptHandled: false,
       sets: createSetsFromTemplateTargets(item.targetSets, item.recordType || 'WEIGHT_REPS', {
         targetWeightKg: item.effectiveTargetWeightKg,
         targetReps: item.effectiveTargetReps,
@@ -652,6 +692,91 @@ export const useWorkoutStore = defineStore('workout', () => {
           }
         : item
     )
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function markEffortPromptHandled(exerciseIndex: number, handled = true) {
+    const exercise = activeExercises.value[exerciseIndex]
+    if (!exercise) return
+    activeExercises.value = activeExercises.value.map((item, index) =>
+      index === exerciseIndex ? { ...item, effortPromptHandled: handled } : item
+    )
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function setExerciseRestSeconds(exerciseIndex: number, restSeconds: number) {
+    const normalized = Math.min(600, Math.max(0, Math.round(restSeconds)))
+    activeExercises.value = activeExercises.value.map((item, index) =>
+      index === exerciseIndex ? { ...item, restSeconds: normalized } : item
+    )
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function clockState() {
+    return {
+      startedAtMs: startedAt.value ? new Date(startedAt.value).getTime() : Date.now(),
+      pausedAtMs: pausedAtMs.value,
+      accumulatedPausedSeconds: accumulatedPausedSeconds.value,
+      suspendedAtMs: suspendedAtMs.value,
+      accumulatedSuspendedSeconds: accumulatedSuspendedSeconds.value
+    }
+  }
+
+  function syncElapsed(nowMs = Date.now()) {
+    if (!startedAt.value) return
+    elapsedSeconds.value = effectiveElapsedSeconds(clockState(), nowMs)
+  }
+
+  function pauseWorkout(nowMs = Date.now()) {
+    if (!startedAt.value) return
+    const next = pauseWorkoutClock(clockState(), nowMs)
+    pausedAtMs.value = next.pausedAtMs
+    syncElapsed(nowMs)
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function resumeWorkout(nowMs = Date.now()) {
+    if (!startedAt.value) return
+    const next = resumeWorkoutClock(clockState(), nowMs)
+    pausedAtMs.value = next.pausedAtMs
+    accumulatedPausedSeconds.value = next.accumulatedPausedSeconds
+    syncElapsed(nowMs)
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function minimizeWorkout() {
+    sessionState.value = 'RUNNING'
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function saveDraftAndStop(nowMs = Date.now()) {
+    if (!startedAt.value) return
+    if (isPaused.value) {
+      const resumed = resumeWorkoutClock(clockState(), nowMs)
+      pausedAtMs.value = resumed.pausedAtMs
+      accumulatedPausedSeconds.value = resumed.accumulatedPausedSeconds
+    }
+    syncElapsed(nowMs)
+    const suspended = suspendWorkoutClock(clockState(), nowMs)
+    suspendedAtMs.value = suspended.suspendedAtMs ?? null
+    sessionState.value = 'SAVED_DRAFT'
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function resumeSavedDraft(nowMs = Date.now()) {
+    if (!startedAt.value || sessionState.value !== 'SAVED_DRAFT') return
+    const restored = restoreSuspendedWorkoutClock(clockState(), nowMs)
+    suspendedAtMs.value = restored.suspendedAtMs ?? null
+    accumulatedSuspendedSeconds.value = restored.accumulatedSuspendedSeconds || 0
+    sessionState.value = 'RUNNING'
+    syncElapsed(nowMs)
     markWorkoutDirty()
     persistDraft()
   }
@@ -1085,6 +1210,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       equipment,
       recordType,
       ended: false,
+      restSeconds: useProfileStore().restSeconds,
+      effortPromptHandled: false,
       sets: createSetsFromTemplateTargets(1, recordType)
     })
     markWorkoutDirty()
@@ -1103,6 +1230,54 @@ export const useWorkoutStore = defineStore('workout', () => {
       })
     void loadRecommendations([id])
     return true
+  }
+
+  function addExercises(
+    exercises: Array<{
+      id: number
+      name: string
+      muscle: string
+      recordType?: WorkoutRecordType
+      equipment?: string
+    }>
+  ) {
+    ensureWorkoutSession()
+    const existingIds = new Set(activeExercises.value.map((item) => item.id))
+    const unique = exercises.filter((item, index, list) => {
+      if (existingIds.has(item.id)) return false
+      return list.findIndex((candidate) => candidate.id === item.id) === index
+    })
+    if (!unique.length) {
+      return { addedIds: [] as number[], duplicateIds: exercises.map((item) => item.id) }
+    }
+    const firstAddedIndex = activeExercises.value.length
+    activeExercises.value = [
+      ...activeExercises.value,
+      ...unique.map((item) => {
+        const recordType = item.recordType || 'WEIGHT_REPS'
+        return {
+          id: item.id,
+          name: item.name,
+          muscle: item.muscle,
+          equipment: item.equipment,
+          recordType,
+          ended: false,
+          restSeconds: useProfileStore().restSeconds,
+          effortPromptHandled: false,
+          sets: createSetsFromTemplateTargets(1, recordType)
+        }
+      })
+    ]
+    markWorkoutDirty()
+    updateDraftFocus(firstAddedIndex)
+    persistDraft()
+    const addedIds = unique.map((item) => item.id)
+    void loadLastPerformances(addedIds)
+    void loadRecommendations(addedIds)
+    return {
+      addedIds,
+      duplicateIds: exercises.filter((item) => !addedIds.includes(item.id)).map((item) => item.id)
+    }
   }
 
   function removeExercise(exerciseIndex: number) {
@@ -1145,6 +1320,11 @@ export const useWorkoutStore = defineStore('workout', () => {
     clientRequestId.value = ''
     startedAt.value = null
     elapsedSeconds.value = 0
+    pausedAtMs.value = null
+    accumulatedPausedSeconds.value = 0
+    sessionState.value = 'RUNNING'
+    suspendedAtMs.value = null
+    accumulatedSuspendedSeconds.value = 0
     workoutDirty.value = false
     activeExercises.value = createEmptyWorkout()
     lastPerformanceMap.value = {}
@@ -1193,6 +1373,11 @@ export const useWorkoutStore = defineStore('workout', () => {
       clientRequestId: ensureClientRequestId(),
       startedAt: activeStartedAt,
       elapsedSeconds: elapsedSeconds.value,
+      pausedAtMs: pausedAtMs.value,
+      accumulatedPausedSeconds: accumulatedPausedSeconds.value,
+      sessionState: sessionState.value,
+      suspendedAtMs: suspendedAtMs.value,
+      accumulatedSuspendedSeconds: accumulatedSuspendedSeconds.value,
       activeExercises: activeExercises.value,
       lastActiveExerciseId: lastActiveExerciseId.value,
       lastActiveExerciseIndex: lastActiveExerciseIndex.value,
@@ -1242,6 +1427,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     clientRequestId.value = draft.clientRequestId || createClientRequestId()
     startedAt.value = draft.startedAt
     elapsedSeconds.value = draft.elapsedSeconds || 0
+    pausedAtMs.value = draft.pausedAtMs ?? null
+    accumulatedPausedSeconds.value = draft.accumulatedPausedSeconds ?? 0
+    sessionState.value = draft.sessionState || 'SAVED_DRAFT'
+    suspendedAtMs.value =
+      draft.suspendedAtMs ??
+      (sessionState.value === 'SAVED_DRAFT' ? new Date(draft.savedAt).getTime() : null)
+    accumulatedSuspendedSeconds.value = draft.accumulatedSuspendedSeconds ?? 0
     workoutDirty.value = true
     lastActiveExerciseId.value = draft.lastActiveExerciseId ?? null
     lastActiveExerciseIndex.value = draft.lastActiveExerciseIndex ?? null
@@ -1254,6 +1446,8 @@ export const useWorkoutStore = defineStore('workout', () => {
       return {
         ...exercise,
         recordType,
+        restSeconds: exercise.restSeconds ?? useProfileStore().restSeconds,
+        effortPromptHandled: exercise.effortPromptHandled ?? false,
         sets: exercise.sets.map((set) => ({
           ...set,
           reps: isDurationRecord(recordType) ? 1 : set.reps,
@@ -1281,6 +1475,11 @@ export const useWorkoutStore = defineStore('workout', () => {
     clientRequestId.value = ''
     startedAt.value = null
     elapsedSeconds.value = 0
+    pausedAtMs.value = null
+    accumulatedPausedSeconds.value = 0
+    sessionState.value = 'RUNNING'
+    suspendedAtMs.value = null
+    accumulatedSuspendedSeconds.value = 0
     workoutDirty.value = false
     activeExercises.value = createEmptyWorkout()
     lastPerformanceMap.value = {}
@@ -1314,6 +1513,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     clientRequestId,
     startedAt,
     elapsedSeconds,
+    pausedAtMs,
+    accumulatedPausedSeconds,
+    sessionState,
+    suspendedAtMs,
+    accumulatedSuspendedSeconds,
+    isPaused,
+    isSavedDraft,
     activeExercises,
     completedSummary,
     lastPerformanceMap,
@@ -1358,6 +1564,14 @@ export const useWorkoutStore = defineStore('workout', () => {
     loadRecommendations,
     setSetType,
     setEffort,
+    markEffortPromptHandled,
+    setExerciseRestSeconds,
+    syncElapsed,
+    pauseWorkout,
+    resumeWorkout,
+    minimizeWorkout,
+    saveDraftAndStop,
+    resumeSavedDraft,
     applyRecommendation,
     dismissRecommendation,
     applyLastPerformance,
@@ -1380,6 +1594,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     deleteLastSet,
     removeSet,
     addExercise,
+    addExercises,
     removeExercise,
     endExercise,
     reopenExercise,

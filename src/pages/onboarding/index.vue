@@ -164,7 +164,9 @@ function goBack() {
             v-for="option in levelOptions"
             :key="option.value"
             class="onboarding__option onboarding__option--row btn-press"
-            :class="{ 'onboarding__option--active': onboardingStore.profile.experienceLevel === option.value }"
+            :class="{
+              'onboarding__option--active': onboardingStore.profile.experienceLevel === option.value
+            }"
             @tap="choose('experienceLevel', option.value)"
           >
             <view>
@@ -180,9 +182,12 @@ function goBack() {
             v-for="count in [2, 3, 4, 5]"
             :key="count"
             class="onboarding__chip btn-press"
-            :class="{ 'onboarding__chip--active': onboardingStore.profile.sessionsPerWeek === count }"
+            :class="{
+              'onboarding__chip--active': onboardingStore.profile.sessionsPerWeek === count
+            }"
             @tap="choose('sessionsPerWeek', count)"
-          >{{ count }} 次</view>
+            >{{ count }} 次</view
+          >
         </view>
         <view class="onboarding__label">单次可用时间</view>
         <view class="onboarding__chips">
@@ -190,9 +195,12 @@ function goBack() {
             v-for="minutes in [30, 45, 60, 75]"
             :key="minutes"
             class="onboarding__chip btn-press"
-            :class="{ 'onboarding__chip--active': onboardingStore.profile.sessionDurationMinutes === minutes }"
+            :class="{
+              'onboarding__chip--active': onboardingStore.profile.sessionDurationMinutes === minutes
+            }"
             @tap="choose('sessionDurationMinutes', minutes)"
-          >{{ minutes }} 分钟</view>
+            >{{ minutes }} 分钟</view
+          >
         </view>
       </view>
 
@@ -204,7 +212,9 @@ function goBack() {
             v-for="option in environmentOptions"
             :key="option.value"
             class="onboarding__option onboarding__option--row btn-press"
-            :class="{ 'onboarding__option--active': onboardingStore.profile.environment === option.value }"
+            :class="{
+              'onboarding__option--active': onboardingStore.profile.environment === option.value
+            }"
             @tap="choose('environment', option.value)"
           >
             <view>
@@ -220,14 +230,22 @@ function goBack() {
             v-for="item in ['膝部', '腰背', '肩部']"
             :key="item"
             class="onboarding__chip btn-press"
-            :class="{ 'onboarding__chip--active': onboardingStore.profile.limitations.includes(item) }"
+            :class="{
+              'onboarding__chip--active': onboardingStore.profile.limitations.includes(item)
+            }"
             @tap="toggleLimitation(item)"
-          >{{ item }}</view>
+            >{{ item }}</view
+          >
         </view>
       </view>
 
       <view class="bottom-action-bar onboarding__actions">
-        <view v-if="currentStep > 0" class="onboarding__back btn-press" @tap="onboardingStore.update({ currentStep: currentStep - 1 })">上一步</view>
+        <view
+          v-if="currentStep > 0"
+          class="onboarding__back btn-press"
+          @tap="onboardingStore.update({ currentStep: currentStep - 1 })"
+          >上一步</view
+        >
         <PrimaryButton :text="currentStep === 2 ? '查看更新后的推荐' : '继续'" @tap="next" />
       </view>
     </view>
@@ -236,28 +254,130 @@ function goBack() {
 
 <style lang="scss" scoped>
 .onboarding {
-  &__progress { display: flex; gap: 10rpx; margin: 8rpx 0 34rpx; }
-  &__progress-item { height: 8rpx; flex: 1; border-radius: 99rpx; background: var(--app-border); }
-  &__progress-item--active { background: var(--app-accent); }
-  &__section { padding: 30rpx; border-radius: 36rpx; background: var(--app-surface); border: 1rpx solid var(--app-border); box-shadow: var(--app-shadow-card); }
-  &__eyebrow { color: var(--app-accent); font-size: 22rpx; font-weight: 800; }
-  &__title { margin-top: 12rpx; color: var(--app-text); font-size: 40rpx; font-weight: 900; line-height: 1.25; }
-  &__desc, &__option-desc { color: var(--app-text-muted); font-size: 23rpx; line-height: 1.5; }
-  &__desc { margin-top: 10rpx; }
-  &__grid, &__stack { margin-top: 28rpx; display: grid; gap: 16rpx; }
-  &__grid { grid-template-columns: repeat(2, 1fr); }
-  &__option { min-height: 150rpx; padding: 24rpx; border-radius: 26rpx; background: var(--app-surface-subtle); border: 2rpx solid transparent; }
-  &__option--row { min-height: 110rpx; display: flex; align-items: center; justify-content: space-between; }
-  &__option--active { background: var(--app-accent-soft); border-color: var(--app-accent); }
-  &__option-title { color: var(--app-text); font-size: 27rpx; font-weight: 900; }
-  &__option-desc { margin-top: 8rpx; }
-  &__check { color: var(--app-accent); font-size: 30rpx; opacity: 0; }
-  &__option--active &__check { opacity: 1; }
-  &__label { margin-top: 30rpx; color: var(--app-text-secondary); font-size: 23rpx; font-weight: 800; }
-  &__chips { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 14rpx; }
-  &__chip { min-width: 120rpx; padding: 18rpx 24rpx; text-align: center; border-radius: 999rpx; color: var(--app-text-secondary); background: var(--app-surface-subtle); border: 1rpx solid var(--app-border); font-size: 24rpx; font-weight: 800; }
-  &__chip--active { color: var(--app-accent); background: var(--app-accent-soft); border-color: var(--app-accent); }
-  &__actions { display: flex; gap: 16rpx; }
-  &__back { width: 170rpx; display: flex; align-items: center; justify-content: center; color: var(--app-text-secondary); font-size: 25rpx; font-weight: 800; }
+  &__progress {
+    display: flex;
+    gap: 10rpx;
+    margin: 8rpx 0 34rpx;
+  }
+  &__progress-item {
+    height: 8rpx;
+    flex: 1;
+    border-radius: 99rpx;
+    background: var(--app-border);
+  }
+  &__progress-item--active {
+    background: var(--app-accent);
+  }
+  &__section {
+    padding: 30rpx;
+    border-radius: 36rpx;
+    background: var(--app-surface);
+    border: 1rpx solid var(--app-border);
+    box-shadow: var(--app-shadow-card);
+  }
+  &__eyebrow {
+    color: var(--app-accent);
+    font-size: 22rpx;
+    font-weight: 800;
+  }
+  &__title {
+    margin-top: 12rpx;
+    color: var(--app-text);
+    font-size: 40rpx;
+    font-weight: 900;
+    line-height: 1.25;
+  }
+  &__desc,
+  &__option-desc {
+    color: var(--app-text-muted);
+    font-size: 23rpx;
+    line-height: 1.5;
+  }
+  &__desc {
+    margin-top: 10rpx;
+  }
+  &__grid,
+  &__stack {
+    margin-top: 28rpx;
+    display: grid;
+    gap: 16rpx;
+  }
+  &__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  &__option {
+    min-height: 150rpx;
+    padding: 24rpx;
+    border-radius: 26rpx;
+    background: var(--app-surface-subtle);
+    border: 2rpx solid transparent;
+  }
+  &__option--row {
+    min-height: 110rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  &__option--active {
+    background: var(--app-accent-soft);
+    border-color: var(--app-accent);
+  }
+  &__option-title {
+    color: var(--app-text);
+    font-size: 27rpx;
+    font-weight: 900;
+  }
+  &__option-desc {
+    margin-top: 8rpx;
+  }
+  &__check {
+    color: var(--app-accent);
+    font-size: 30rpx;
+    opacity: 0;
+  }
+  &__option--active &__check {
+    opacity: 1;
+  }
+  &__label {
+    margin-top: 30rpx;
+    color: var(--app-text-secondary);
+    font-size: 23rpx;
+    font-weight: 800;
+  }
+  &__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12rpx;
+    margin-top: 14rpx;
+  }
+  &__chip {
+    min-width: 120rpx;
+    padding: 18rpx 24rpx;
+    text-align: center;
+    border-radius: 999rpx;
+    color: var(--app-text-secondary);
+    background: var(--app-surface-subtle);
+    border: 1rpx solid var(--app-border);
+    font-size: 24rpx;
+    font-weight: 800;
+  }
+  &__chip--active {
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+    border-color: var(--app-accent);
+  }
+  &__actions {
+    display: flex;
+    gap: 16rpx;
+  }
+  &__back {
+    width: 170rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--app-text-secondary);
+    font-size: 25rpx;
+    font-weight: 800;
+  }
 }
 </style>

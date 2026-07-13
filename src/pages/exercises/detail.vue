@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { computed, getCurrentInstance, ref } from 'vue'
+import { onLoad, onReady } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import TagChip from '@/components/tag-chip/index.vue'
@@ -14,22 +14,45 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { formatSeconds } from '@/utils/format'
+import { useVideoPlaybackCover } from '@/utils/video-playback-cover'
 import type { Exercise } from '@/types/exercise'
+import type { ExercisePickerContext } from '@/utils/exercise-picker-context'
 
 const exerciseStore = useExerciseStore()
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const themeStore = useThemeStore()
+const pageInstance = getCurrentInstance()
 const exerciseId = ref(0)
 const loading = ref(true)
 const isAdded = ref(false)
 const lastPerformance = ref<ExerciseLastPerformanceResponse | null>(null)
 const alternativeExercises = ref<Exercise[]>([])
+const pickerContext = ref<ExercisePickerContext | null>(null)
+const pickerSelected = ref(false)
+const pickerLocked = ref(false)
 
 const exercise = computed(() => exerciseStore.getById(exerciseId.value))
 const demoUrl = computed(() => exercise.value?.mediaUrl || '')
 const coverUrl = computed(() => exercise.value?.thumbnailUrl || '')
 const isVideoDemo = computed(() => /\.mp4(?:[?#].*)?$/i.test(demoUrl.value))
+const {
+  videoMounted,
+  videoReady,
+  videoFailed,
+  loadingVisible,
+  handlePageReady,
+  handleCoverLoad,
+  handleCoverError,
+  handleTimeUpdate,
+  handleError
+} = useVideoPlaybackCover(demoUrl, coverUrl)
+const showVideoCover = computed(
+  () => isVideoDemo.value && !!coverUrl.value && (!videoReady.value || videoFailed.value)
+)
+const showVideoStatus = computed(
+  () => showVideoCover.value && (loadingVisible.value || videoFailed.value)
+)
 const isCustomExercise = computed(() => exercise.value?.exerciseType === 'USER')
 const instructionTips = computed(() =>
   isCustomExercise.value ? [] : splitContent(exercise.value?.instructionText)
@@ -41,6 +64,18 @@ const alternativeExerciseIds = computed(() => exercise.value?.alternativeExercis
 const isInCurrentWorkout = computed(() =>
   exercise.value ? workoutStore.hasExercise(exercise.value.id) : false
 )
+const primaryActionText = computed(() => {
+  if (pickerContext.value && pickerLocked.value) {
+    return pickerContext.value === 'TEMPLATE' ? '已在当前模板中' : '已加入当前训练'
+  }
+  if (pickerContext.value && pickerSelected.value && pickerContext.value !== 'REPLACE') {
+    return '✓ 已选择'
+  }
+  if (pickerContext.value === 'TEMPLATE') return '选择到当前模板'
+  if (pickerContext.value === 'REPLACE') return '用此动作替换'
+  if (pickerContext.value === 'WORKOUT') return '选择此动作'
+  return isAdded.value || isInCurrentWorkout.value ? '已在今日训练中' : '添加到今日训练'
+})
 const bestMetricLabel = computed(() =>
   exercise.value?.recordType === 'DURATION'
     ? '最长计时'
@@ -85,8 +120,15 @@ onLoad((query = {}) => {
     return
   }
   exerciseId.value = id
+  if (['WORKOUT', 'TEMPLATE', 'REPLACE'].includes(String(query.pickerContext))) {
+    pickerContext.value = String(query.pickerContext) as ExercisePickerContext
+  }
+  pickerSelected.value = String(query.pickerSelected) === '1'
+  pickerLocked.value = String(query.pickerLocked) === '1'
   loadDetail(id)
 })
+
+onReady(handlePageReady)
 
 async function loadDetail(id: number) {
   loading.value = true
@@ -155,6 +197,11 @@ async function toggleFavorite() {
 async function addToWorkout() {
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok || !exercise.value) return
+  if (pickerContext.value) {
+    if (pickerLocked.value || (pickerSelected.value && pickerContext.value !== 'REPLACE')) return
+    emitPickerSelection(true)
+    return
+  }
   const added = workoutStore.addExercise(
     exercise.value.id,
     exercise.value.name,
@@ -170,6 +217,35 @@ async function addToWorkout() {
   setTimeout(() => {
     isAdded.value = false
   }, 1600)
+}
+
+function cancelPickerSelection() {
+  if (!pickerContext.value || pickerContext.value === 'REPLACE' || !exercise.value) return
+  emitPickerSelection(false)
+}
+
+function emitPickerSelection(selected: boolean) {
+  if (!exercise.value || !pickerContext.value) return
+  const proxy = pageInstance?.proxy as unknown as {
+    getOpenerEventChannel?: () => { emit: (name: string, value: unknown) => void }
+    $getOpenerEventChannel?: () => { emit: (name: string, value: unknown) => void }
+  }
+  const channel = proxy?.getOpenerEventChannel?.() || proxy?.$getOpenerEventChannel?.()
+  const exerciseSummary = {
+    id: exercise.value.id,
+    name: exercise.value.name,
+    categoryCode: '',
+    categoryName: exercise.value.category || '',
+    primaryMuscle: exercise.value.muscle,
+    equipment: exercise.value.equipment,
+    recordType: exercise.value.recordType,
+    thumbnailUrl: exercise.value.thumbnailUrl
+  }
+  channel?.emit(
+    'exerciseSelected',
+    pickerContext.value === 'REPLACE' ? exerciseSummary : { exercise: exerciseSummary, selected }
+  )
+  uni.navigateBack()
 }
 
 async function addToTemplate() {
@@ -215,8 +291,8 @@ async function addToTemplate() {
 
       <view class="exercise-detail__preview">
         <video
-          v-if="demoUrl && isVideoDemo"
-          class="exercise-detail__demo"
+          v-if="demoUrl && isVideoDemo && videoMounted && !videoFailed"
+          class="exercise-detail__demo exercise-detail__video"
           :src="demoUrl"
           :poster="coverUrl"
           :controls="false"
@@ -226,21 +302,40 @@ async function addToTemplate() {
           object-fit="contain"
           :show-center-play-btn="false"
           :enable-progress-gesture="false"
+          @timeupdate="handleTimeUpdate"
+          @error="handleError"
         />
+        <cover-image
+          v-if="showVideoCover"
+          class="exercise-detail__video-cover"
+          :src="coverUrl"
+          @load="handleCoverLoad"
+          @error="handleCoverError"
+        />
+        <cover-view
+          v-if="showVideoStatus"
+          class="exercise-detail__video-status"
+          :class="{ 'exercise-detail__video-status--error': videoFailed }"
+        >
+          {{ videoFailed ? '动作演示加载失败' : '正在加载动作演示…' }}
+        </cover-view>
         <image
-          v-else-if="demoUrl"
+          v-if="demoUrl && !isVideoDemo"
           class="exercise-detail__demo"
           :src="demoUrl"
           mode="aspectFit"
           lazy-load
         />
         <image
-          v-else-if="coverUrl"
+          v-else-if="!demoUrl && coverUrl"
           class="exercise-detail__demo"
           :src="coverUrl"
           mode="aspectFit"
         />
-        <view v-else class="exercise-detail__placeholder">
+        <view
+          v-if="(!demoUrl && !coverUrl) || (isVideoDemo && videoFailed && !coverUrl)"
+          class="exercise-detail__placeholder"
+        >
           <view class="exercise-detail__placeholder-icon">演示</view>
           <view class="muted">{{ loading ? '加载动作演示中...' : '暂无动作演示' }}</view>
         </view>
@@ -310,14 +405,27 @@ async function addToTemplate() {
       <view
         class="exercise-detail__cta"
         :class="{
-          'glass-card': isAdded || isInCurrentWorkout,
-          'gradient-fire glow-primary': !isAdded && !isInCurrentWorkout
+          'glass-card': isAdded || isInCurrentWorkout || pickerSelected || pickerLocked,
+          'exercise-detail__cta--selected': pickerSelected,
+          'gradient-fire glow-primary':
+            !isAdded && !isInCurrentWorkout && !pickerSelected && !pickerLocked
         }"
         @tap="addToWorkout"
       >
-        {{ isAdded || isInCurrentWorkout ? '已在今日训练中' : '添加到今日训练' }}
+        {{ primaryActionText }}
       </view>
-      <view class="glass-card exercise-detail__template-cta btn-press" @tap="addToTemplate">
+      <view
+        v-if="pickerSelected && pickerContext !== 'REPLACE'"
+        class="exercise-detail__cancel-selection btn-press"
+        @tap="cancelPickerSelection"
+      >
+        取消选择
+      </view>
+      <view
+        v-if="!pickerContext"
+        class="glass-card exercise-detail__template-cta btn-press"
+        @tap="addToTemplate"
+      >
         添加到模板
       </view>
     </view>
@@ -349,6 +457,7 @@ async function addToTemplate() {
   }
 
   &__preview {
+    position: relative;
     min-height: 0;
     aspect-ratio: 16 / 9;
     border-radius: 36rpx;
@@ -361,6 +470,44 @@ async function addToTemplate() {
     height: 100%;
     display: block;
     background: #fff;
+  }
+
+  &__video {
+    position: absolute;
+    inset: 0;
+    transform: scale(1.02);
+    transform-origin: center;
+  }
+
+  &__video-cover {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    transform: scale(1.02);
+    transform-origin: center;
+  }
+
+  &__video-status {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 3;
+    transform: translate(-50%, -50%);
+    padding: 10rpx 18rpx;
+    border-radius: 999rpx;
+    background: rgba(255, 255, 255, 0.9);
+    color: #ff501e;
+    font-size: 20rpx;
+    line-height: 1.4;
+    white-space: nowrap;
+
+    &--error {
+      background: rgba(255, 242, 242, 0.94);
+      color: #c73838;
+    }
   }
 
   &__placeholder,
@@ -522,6 +669,21 @@ async function addToTemplate() {
   &__template-cta {
     margin-top: 18rpx;
     color: #ff7a32;
+  }
+
+  &__cta--selected {
+    color: var(--app-accent);
+  }
+
+  &__cancel-selection {
+    min-height: 76rpx;
+    margin-top: 10rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--app-danger, #df4242);
+    font-size: 24rpx;
+    font-weight: 800;
   }
 }
 </style>

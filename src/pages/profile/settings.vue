@@ -103,7 +103,9 @@ async function changeUnit(unit: 'kg' | 'lb') {
   }
 }
 
-async function saveTrainingPreference(next: Parameters<typeof profileStore.saveTrainingPreferences>[0]) {
+async function saveTrainingPreference(
+  next: Parameters<typeof profileStore.saveTrainingPreferences>[0]
+) {
   if (saving.value) return
   saving.value = true
   try {
@@ -129,6 +131,20 @@ function stepTrainingPreference(
 function toggleRestVibration() {
   void saveTrainingPreference({ restVibration: !profileStore.restVibration })
 }
+
+async function toggleEffortPrompt() {
+  if (saving.value) return
+  saving.value = true
+  try {
+    await profileStore.saveSettings({
+      weightUnit: profileStore.unit,
+      restSeconds: profileStore.restSeconds,
+      effortPromptEnabled: !profileStore.effortPromptEnabled
+    })
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <template>
@@ -150,10 +166,27 @@ function toggleRestVibration() {
       <view class="settings__control glass-card">
         <view class="settings__label-row">
           <view>
+            <view class="settings__label">完成动作后询问训练感受</view>
+            <view class="settings__hint">用于优化下次训练建议，可随时跳过，所有用户均可使用。</view>
+          </view>
+          <switch
+            color="#ff501e"
+            :checked="profileStore.effortPromptEnabled"
+            :disabled="saving"
+            @change="toggleEffortPrompt"
+          />
+        </view>
+      </view>
+
+      <view class="settings__control glass-card">
+        <view class="settings__label-row">
+          <view>
             <view class="settings__label">外观主题</view>
             <view class="settings__hint">切换后立即应用，并在下次启动时保留</view>
           </view>
-          <view class="settings__saving">{{ themeStore.resolvedTheme === 'dark' ? '暗色' : '亮色' }}</view>
+          <view class="settings__saving">{{
+            themeStore.resolvedTheme === 'dark' ? '暗色' : '亮色'
+          }}</view>
         </view>
         <view class="settings__theme-row">
           <view
@@ -285,8 +318,16 @@ function toggleRestVibration() {
               <view class="settings__hint">当前 {{ profileStore.weightStepKg }}kg</view>
             </view>
             <view class="settings__mini-steps">
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('weightStepKg', -0.5)">-</view>
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('weightStepKg', 0.5)">+</view>
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('weightStepKg', -0.5)"
+                >-</view
+              >
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('weightStepKg', 0.5)"
+                >+</view
+              >
             </view>
           </view>
           <view class="settings__preference-row">
@@ -295,8 +336,16 @@ function toggleRestVibration() {
               <view class="settings__hint">当前 {{ profileStore.weightStepLb }}lb</view>
             </view>
             <view class="settings__mini-steps">
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('weightStepLb', -1)">-</view>
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('weightStepLb', 1)">+</view>
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('weightStepLb', -1)"
+                >-</view
+              >
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('weightStepLb', 1)"
+                >+</view
+              >
             </view>
           </view>
           <view class="settings__preference-row">
@@ -305,8 +354,16 @@ function toggleRestVibration() {
               <view class="settings__hint">当前 {{ profileStore.repsStep }} 次</view>
             </view>
             <view class="settings__mini-steps">
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('repsStep', -1)">-</view>
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('repsStep', 1)">+</view>
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('repsStep', -1)"
+                >-</view
+              >
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('repsStep', 1)"
+                >+</view
+              >
             </view>
           </view>
           <view class="settings__preference-row">
@@ -315,8 +372,16 @@ function toggleRestVibration() {
               <view class="settings__hint">当前 {{ profileStore.durationStepSeconds }} 秒</view>
             </view>
             <view class="settings__mini-steps">
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('durationStepSeconds', -5)">-</view>
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('durationStepSeconds', 5)">+</view>
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('durationStepSeconds', -5)"
+                >-</view
+              >
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('durationStepSeconds', 5)"
+                >+</view
+              >
             </view>
           </view>
           <view class="settings__preference-row">
@@ -325,8 +390,16 @@ function toggleRestVibration() {
               <view class="settings__hint">当前 {{ profileStore.barWeightKg }}kg</view>
             </view>
             <view class="settings__mini-steps">
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('barWeightKg', -2.5)">-</view>
-              <view class="settings__mini-step btn-press" @tap="stepTrainingPreference('barWeightKg', 2.5)">+</view>
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('barWeightKg', -2.5)"
+                >-</view
+              >
+              <view
+                class="settings__mini-step btn-press"
+                @tap="stepTrainingPreference('barWeightKg', 2.5)"
+                >+</view
+              >
             </view>
           </view>
         </view>

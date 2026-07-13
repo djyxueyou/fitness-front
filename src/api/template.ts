@@ -20,6 +20,7 @@ export interface TemplateItemResponse {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  restSeconds?: number | null
   effectiveTargetWeightKg?: number
   effectiveTargetReps?: number
   effectiveTargetDurationSeconds?: number
@@ -47,6 +48,7 @@ export interface UpsertTemplateItemRequest {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  restSeconds?: number | null
 }
 
 export interface UpsertTemplateRequest {

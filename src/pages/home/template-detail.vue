@@ -349,7 +349,9 @@ function copyShareText() {
             {{ detail.description || '按模板动作顺序完成训练，可在训练中调整重量、次数和组数。' }}
           </view>
           <view class="template-detail__hero-actions">
-            <view class="template-detail__share btn-press" @tap="openTemplateShareCard">分享模板</view>
+            <view class="template-detail__share btn-press" @tap="openTemplateShareCard"
+              >分享模板</view
+            >
           </view>
           <view class="template-detail__stats">
             <view class="template-detail__stat">

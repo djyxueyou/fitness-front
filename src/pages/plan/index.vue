@@ -1,19 +1,23 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onHide, onShow } from '@dcloudio/uni-app'
 import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
+import CalendarView from '@/components/training-hub/calendar-view.vue'
+import HistoryView from '@/components/training-hub/history-view.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
+import { getToken } from '@/api/http'
 import { usePlanStore } from '@/stores/plan'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
+import { useTrainingHubStore, type TrainingHubView } from '@/stores/training-hub'
 import {
   fetchPlanActivationOptions,
   type ActivePlanSummaryResponse,
@@ -33,6 +37,7 @@ const planStore = usePlanStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const themeStore = useThemeStore()
+const trainingHubStore = useTrainingHubStore()
 const activeTab = ref<'recommended' | 'mine'>('recommended')
 const busyPlanId = ref<number | null>(null)
 const activePlanSummary = ref<ActivePlanSummaryResponse | null>(null)
@@ -86,6 +91,11 @@ const tabs = computed(() => [
   { key: 'recommended' as const, label: `推荐计划 ${recommendedPlanCount.value}` },
   { key: 'mine' as const, label: `我的计划 ${userPlanCount.value}` }
 ])
+const hubTabs: Array<{ key: TrainingHubView; label: string }> = [
+  { key: 'plan', label: '计划' },
+  { key: 'calendar', label: '日历' },
+  { key: 'history', label: '历史' }
+]
 const completedWeekCount = computed(() => activePlanSummary.value?.completedThisWeek ?? 0)
 const remainingWeekCount = computed(() => activePlanSummary.value?.remainingThisWeek ?? 0)
 const weekProgressText = computed(() => {
@@ -127,22 +137,57 @@ function summaryStatusText(status?: string) {
 }
 
 onShow(async () => {
-  const ok = await ensureFeatureAuth('训练计划')
-  if (!ok) {
-    uni.switchTab({ url: routes.home })
+  const requestedView = trainingHubStore.consumeRequestedView()
+  if (requestedView) trainingHubStore.setActiveView(requestedView)
+  if (trainingHubStore.activeView !== 'plan') return
+  await loadPlanView()
+})
+
+onHide(() => {
+  trainingHubStore.setActiveView('plan')
+})
+
+async function loadPlanView() {
+  if (!getToken()) {
+    activeTab.value = 'recommended'
+    activePlanSummary.value = null
+    planStore.clearPersonalPlanState()
+    await planStore.fetchRecommendedPlanList({ force: true })
     return
   }
+  await loadAuthenticatedPlans()
+}
+
+async function selectHubView(view: TrainingHubView) {
+  if (view !== 'plan' && !(await ensureFeatureAuth(view === 'calendar' ? '训练日历' : '训练记录')))
+    return
+  trainingHubStore.setActiveView(view)
+  if (view === 'plan') await loadPlanView()
+}
+
+async function loadAuthenticatedPlans() {
   await planStore.fetchPlans({ force: true })
   await planStore.loadCurrentPlan()
   await planStore.loadRecommendation()
   await loadActivePlanSummary()
-})
+}
+
+async function selectTab(tab: 'recommended' | 'mine') {
+  if (tab === 'recommended') {
+    activeTab.value = tab
+    return
+  }
+  if (!(await ensureFeatureAuth('我的训练计划'))) return
+  activeTab.value = tab
+  await loadAuthenticatedPlans()
+}
 
 async function loadActivePlanSummary() {
   activePlanSummary.value = planStore.currentPlanSummary
 }
 
-function goDetail(id: number) {
+async function goDetail(id: number) {
+  if (!(await ensureFeatureAuth('我的训练计划'))) return
   uni.navigateTo({ url: `${routes.planDetail}?id=${id}` })
 }
 
@@ -150,8 +195,14 @@ function goRecommendedDetail(id: number) {
   uni.navigateTo({ url: `${routes.planDetail}?id=${id}&source=recommended` })
 }
 
-function goCreatePlan() {
+async function goCreatePlan() {
+  if (!(await ensureFeatureAuth('创建训练计划'))) return
   uni.navigateTo({ url: routes.planCreate })
+}
+
+async function openMyTemplates() {
+  if (!(await ensureFeatureAuth('我的模板'))) return
+  uni.navigateTo({ url: routes.templateManager })
 }
 
 function goActivePlan() {
@@ -170,6 +221,7 @@ async function focusPlanList() {
 }
 
 async function activatePlan(item: TrainingPlanListItemResponse) {
+  if (!(await ensureFeatureAuth('启用训练计划'))) return
   if (busyPlanId.value || item.active) return
   if (activePlanSummary.value && activePlanSummary.value.planId !== item.id) {
     openSwitchPlanSheet(item)
@@ -260,7 +312,8 @@ async function copyPlan(item: TrainingPlanListItemResponse) {
   }
 }
 
-function customizeRecommendedPlan(item: RecommendedPlanListItemResponse) {
+async function customizeRecommendedPlan(item: RecommendedPlanListItemResponse) {
+  if (!(await ensureFeatureAuth('定制训练计划'))) return
   uni.navigateTo({ url: `${routes.planCustomize}?id=${item.id}` })
 }
 
@@ -457,149 +510,183 @@ async function openDraftFab() {
     :scroll-into-view="scrollTarget"
   >
     <view class="page-shell tab-page plan-page safe-bottom" :class="themeStore.themeClass">
-      <AppHeader title="训练计划" subtitle="安排接下来怎么练，按计划推进训练进度" />
+      <AppHeader title="训练" subtitle="计划接下来怎么练，也看见每一次完成" />
 
-      <view class="glass-card plan-page__hero">
-        <view class="plan-page__hero-top">
-          <view>
-            <view class="plan-page__active-label">当前计划</view>
-            <view class="plan-page__active-name">{{ activePlanName }}</view>
-          </view>
-          <view class="plan-page__active-pill">{{ activePlanStatusText }}</view>
-        </view>
-        <view class="plan-page__next-card">
-          <view class="plan-page__next-copy">
-            <view class="plan-page__next-label">下一步</view>
-            <view class="plan-page__next-title">
-              {{ activePlanRecommendationTitle || activePlanActionText }}
-            </view>
-            <view class="plan-page__active-next">{{ activePlanSubtitle }}</view>
-          </view>
-          <view class="plan-page__active-start btn-press" @tap.stop="goActivePlan">
-            {{ activePlanActionText }}
-          </view>
-        </view>
-        <view class="plan-page__progress-summary">
-          <view class="plan-page__progress-copy">
-            <view>
-              <view class="plan-page__progress-label">本周进度</view>
-              <view class="plan-page__progress-value">
-                {{
-                  activePlanSummary
-                    ? `${weekProgressText} 已完成 · 剩余 ${remainingWeekCount} 次`
-                    : '启用计划后显示进度'
-                }}
-              </view>
-            </view>
-            <view class="plan-page__next-day">
-              <view class="plan-page__progress-label">下一次</view>
-              <view class="plan-page__next-day-value">{{ nextTrainingDayText }}</view>
-            </view>
-          </view>
-          <view class="plan-page__progress-track">
-            <view class="plan-page__progress-fill" :style="{ width: `${weekProgressPercent}%` }" />
-          </view>
-        </view>
-      </view>
-
-      <view id="plan-list-anchor" class="section-heading plan-page__section-head">
-        <view>
-          <view class="section-title">选择计划</view>
-          <view class="plan-page__section-sub">推荐计划会按频率、器械和不适部位生成训练安排。</view>
-        </view>
-        <view v-if="activeTab === 'mine'" class="plan-page__create btn-press" @tap="goCreatePlan"
-          >+ 新建计划</view
-        >
-      </view>
-
-      <view class="plan-page__tabs">
+      <view class="training-hub__tabs">
         <view
-          v-for="tab in tabs"
+          v-for="tab in hubTabs"
           :key="tab.key"
-          class="plan-page__tab btn-press"
-          :class="{ 'plan-page__tab--active': activeTab === tab.key }"
-          @tap="activeTab = tab.key"
+          class="training-hub__tab btn-press"
+          :class="{ 'training-hub__tab--active': trainingHubStore.activeView === tab.key }"
+          @tap="selectHubView(tab.key)"
         >
           {{ tab.label }}
         </view>
       </view>
 
-      <view v-if="planStore.loading && !visiblePlans.length" class="plan-page__state muted">
-        加载训练计划...
-      </view>
+      <template v-if="trainingHubStore.activeView === 'plan'">
+        <view class="glass-card plan-page__hero">
+          <view class="plan-page__hero-top">
+            <view>
+              <view class="plan-page__active-label">当前计划</view>
+              <view class="plan-page__active-name">{{ activePlanName }}</view>
+            </view>
+            <view class="plan-page__active-pill">{{ activePlanStatusText }}</view>
+          </view>
+          <view class="plan-page__next-card">
+            <view class="plan-page__next-copy">
+              <view class="plan-page__next-label">下一步</view>
+              <view class="plan-page__next-title">
+                {{ activePlanRecommendationTitle || activePlanActionText }}
+              </view>
+              <view class="plan-page__active-next">{{ activePlanSubtitle }}</view>
+            </view>
+            <view class="plan-page__active-start btn-press" @tap.stop="goActivePlan">
+              {{ activePlanActionText }}
+            </view>
+          </view>
+          <view class="plan-page__progress-summary">
+            <view class="plan-page__progress-copy">
+              <view>
+                <view class="plan-page__progress-label">本周进度</view>
+                <view class="plan-page__progress-value">
+                  {{
+                    activePlanSummary
+                      ? `${weekProgressText} 已完成 · 剩余 ${remainingWeekCount} 次`
+                      : '启用计划后显示进度'
+                  }}
+                </view>
+              </view>
+              <view class="plan-page__next-day">
+                <view class="plan-page__progress-label">下一次</view>
+                <view class="plan-page__next-day-value">{{ nextTrainingDayText }}</view>
+              </view>
+            </view>
+            <view class="plan-page__progress-track">
+              <view
+                class="plan-page__progress-fill"
+                :style="{ width: `${weekProgressPercent}%` }"
+              />
+            </view>
+          </view>
+        </view>
 
-      <view v-else-if="planStore.listError" class="plan-page__state">
-        <EmptyState
-          icon="!"
-          title="计划加载失败"
-          description="网络或服务暂时不可用，请稍后重试。"
-        />
-      </view>
+        <view id="plan-list-anchor" class="section-heading plan-page__section-head">
+          <view>
+            <view class="section-title">选择计划</view>
+            <view class="plan-page__section-sub"
+              >推荐计划会按频率、器械和不适部位生成训练安排。</view
+            >
+          </view>
+          <view v-if="activeTab === 'mine'" class="plan-page__create btn-press" @tap="goCreatePlan"
+            >+ 新建计划</view
+          >
+        </view>
 
-      <view v-else class="plan-page__list">
-        <view v-if="!visiblePlans.length" class="glass-card plan-page__empty">
-          还没有我的计划。可以先从推荐计划生成一套安排。
+        <view class="plan-page__tabs">
+          <view
+            v-for="tab in tabs"
+            :key="tab.key"
+            class="plan-page__tab btn-press"
+            :class="{ 'plan-page__tab--active': activeTab === tab.key }"
+            @tap="selectTab(tab.key)"
+          >
+            {{ tab.label }}
+          </view>
         </view>
 
         <view
-          v-for="item in visiblePlans"
-          :key="item.id"
-          class="glass-card plan-page__item btn-press"
-          :class="{
-            'plan-page__item--active': activeTab === 'mine' && 'active' in item && item.active
-          }"
-          @tap="activeTab === 'recommended' ? goRecommendedDetail(item.id) : goDetail(item.id)"
+          v-if="activeTab === 'mine'"
+          class="training-hub__template-entry btn-press"
+          @tap="openMyTemplates"
         >
+          <view>
+            <view class="training-hub__asset-title">我的模板</view>
+            <view class="training-hub__asset-subtitle">管理可重复使用的动作组合</view>
+          </view>
+          <view class="training-hub__asset-value">›</view>
+        </view>
+
+        <view v-if="planStore.loading && !visiblePlans.length" class="plan-page__state muted">
+          加载训练计划...
+        </view>
+
+        <view v-else-if="planStore.listError" class="plan-page__state">
+          <EmptyState
+            icon="!"
+            title="计划加载失败"
+            description="网络或服务暂时不可用，请稍后重试。"
+          />
+        </view>
+
+        <view v-else class="plan-page__list">
+          <view v-if="!visiblePlans.length" class="glass-card plan-page__empty">
+            还没有我的计划。可以先从推荐计划生成一套安排。
+          </view>
+
           <view
-            v-if="activeTab === 'mine'"
-            class="plan-page__more btn-press"
-            @tap.stop="openPlanActions(item as TrainingPlanListItemResponse)"
-            >...</view
+            v-for="item in visiblePlans"
+            :key="item.id"
+            class="glass-card plan-page__item btn-press"
+            :class="{
+              'plan-page__item--active': activeTab === 'mine' && 'active' in item && item.active
+            }"
+            @tap="activeTab === 'recommended' ? goRecommendedDetail(item.id) : goDetail(item.id)"
           >
-          <view class="plan-page__item-main">
-            <view class="plan-page__tag-row">
-              <view class="plan-page__tag">{{
-                activeTab === 'recommended' ? '推荐' : '我的'
-              }}</view>
-              <view
-                v-if="activeTab === 'mine' && 'active' in item && item.active"
-                class="plan-page__tag plan-page__tag--active"
-              >
-                {{ executionStatusText(item as TrainingPlanListItemResponse) || '进行中' }}
-              </view>
-              <view
-                v-else-if="
-                  activeTab === 'mine' && executionStatusText(item as TrainingPlanListItemResponse)
-                "
-                class="plan-page__tag"
-              >
-                {{ executionStatusText(item as TrainingPlanListItemResponse) }}
-              </view>
-            </view>
-            <view class="plan-page__name">{{ item.name }}</view>
-            <view class="plan-page__meta">
-              {{ item.cycleWeeks }} 周 · {{ difficultyText(item.difficultyLevel) }} ·
-              {{ goalText(item.goal) }}
-            </view>
-          </view>
-          <view v-if="activeTab === 'recommended'" class="plan-page__actions">
             <view
-              class="plan-page__btn plan-page__btn--primary btn-press"
-              @tap.stop="customizeRecommendedPlan(item as RecommendedPlanListItemResponse)"
+              v-if="activeTab === 'mine'"
+              class="plan-page__more btn-press"
+              @tap.stop="openPlanActions(item as TrainingPlanListItemResponse)"
+              >...</view
             >
-              定制
+            <view class="plan-page__item-main">
+              <view class="plan-page__tag-row">
+                <view class="plan-page__tag">{{
+                  activeTab === 'recommended' ? '推荐' : '我的'
+                }}</view>
+                <view
+                  v-if="activeTab === 'mine' && 'active' in item && item.active"
+                  class="plan-page__tag plan-page__tag--active"
+                >
+                  {{ executionStatusText(item as TrainingPlanListItemResponse) || '进行中' }}
+                </view>
+                <view
+                  v-else-if="
+                    activeTab === 'mine' &&
+                    executionStatusText(item as TrainingPlanListItemResponse)
+                  "
+                  class="plan-page__tag"
+                >
+                  {{ executionStatusText(item as TrainingPlanListItemResponse) }}
+                </view>
+              </view>
+              <view class="plan-page__name">{{ item.name }}</view>
+              <view class="plan-page__meta">
+                {{ item.cycleWeeks }} 周 · {{ difficultyText(item.difficultyLevel) }} ·
+                {{ goalText(item.goal) }}
+              </view>
             </view>
-          </view>
-          <view v-else-if="'active' in item && !item.active" class="plan-page__actions">
-            <view
-              class="plan-page__btn plan-page__btn--primary btn-press"
-              @tap.stop="activatePlan(item as TrainingPlanListItemResponse)"
-            >
-              {{ busyPlanId === item.id ? '处理中' : '启用' }}
+            <view v-if="activeTab === 'recommended'" class="plan-page__actions">
+              <view
+                class="plan-page__btn plan-page__btn--primary btn-press"
+                @tap.stop="customizeRecommendedPlan(item as RecommendedPlanListItemResponse)"
+              >
+                定制
+              </view>
+            </view>
+            <view v-else-if="'active' in item && !item.active" class="plan-page__actions">
+              <view
+                class="plan-page__btn plan-page__btn--primary btn-press"
+                @tap.stop="activatePlan(item as TrainingPlanListItemResponse)"
+              >
+                {{ busyPlanId === item.id ? '处理中' : '启用' }}
+              </view>
             </view>
           </view>
         </view>
-      </view>
+      </template>
+      <CalendarView v-else-if="trainingHubStore.activeView === 'calendar'" />
+      <HistoryView v-else />
     </view>
   </scroll-view>
   <AppActionSheet
@@ -617,6 +704,66 @@ async function openDraftFab() {
 </template>
 
 <style lang="scss" scoped>
+.training-hub {
+  &__tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8rpx;
+    margin: 22rpx 0 24rpx;
+    padding: 8rpx;
+    border: 1rpx solid var(--app-border);
+    border-radius: 24rpx;
+    background: var(--app-surface);
+  }
+
+  &__tab {
+    min-height: 68rpx;
+    border-radius: 18rpx;
+    color: var(--app-text-muted);
+    font-size: 24rpx;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--active {
+      color: #fff;
+      background: var(--app-accent);
+    }
+  }
+
+  &__template-entry {
+    min-height: 104rpx;
+    margin-bottom: 18rpx;
+    padding: 20rpx 24rpx;
+    border: 1rpx solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20rpx;
+  }
+
+  &__asset-title {
+    color: var(--app-text);
+    font-size: 27rpx;
+    font-weight: 800;
+  }
+
+  &__asset-subtitle {
+    margin-top: 6rpx;
+    color: var(--app-text-muted);
+    font-size: 22rpx;
+  }
+
+  &__asset-value {
+    flex-shrink: 0;
+    color: var(--app-text-muted);
+    font-size: 26rpx;
+  }
+}
+
 .plan-page {
   &__hero {
     margin-top: 24rpx;

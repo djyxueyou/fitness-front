@@ -39,7 +39,8 @@ function setRecentTemplateIds(ids: number[]) {
 function toTemplate(detail: TemplateDetailResponse, index: number): Template {
   const exercises = detail.items.length
   const isSystem = detail.templateType === 'SYSTEM'
-  const coverItem = detail.items.find((item) => item.thumbnailUrl || item.thumbnailPath) || detail.items[0]
+  const coverItem =
+    detail.items.find((item) => item.thumbnailUrl || item.thumbnailPath) || detail.items[0]
   return {
     id: detail.id,
     name: detail.name,
@@ -199,7 +200,8 @@ export const useTemplateStore = defineStore('template', () => {
         targetSets: item.targetSets,
         targetWeightKg: item.targetWeightKg,
         targetReps: item.targetReps,
-        targetDurationSeconds: item.targetDurationSeconds
+        targetDurationSeconds: item.targetDurationSeconds,
+        restSeconds: item.restSeconds
       }))
     }
     await updateTemplate(id, payload)

@@ -253,8 +253,7 @@ async function confirmLogin() {
 .auth-login {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 100, 24, 0.08), transparent 34%),
-    var(--app-bg);
+    radial-gradient(circle at 50% 0%, rgba(255, 100, 24, 0.08), transparent 34%), var(--app-bg);
   color: var(--app-text);
   position: relative;
   display: flex;

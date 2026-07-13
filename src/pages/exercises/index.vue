@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import CustomExerciseDialog from '@/components/custom-exercise-dialog/index.vue'
+import ExerciseFilterSheet from '@/components/exercise-filter-sheet/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import ExerciseItem from '@/components/exercise-item/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
@@ -16,6 +17,7 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { offAuthChanged, onAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
+import type { ExerciseFilterState } from '@/utils/exercise-filters'
 
 type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
 type ExerciseScope = 'ALL' | 'CUSTOM' | 'FAVORITES'
@@ -77,7 +79,9 @@ const equipmentOptions = [
   { label: '单杠', value: 'PULL_UP_BAR' },
   { label: '双杠', value: 'PARALLEL_BARS' },
   { label: '弹力带', value: 'RESISTANCE_BAND' },
-  { label: '壶铃', value: 'KETTLEBELL' }
+  { label: '壶铃', value: 'KETTLEBELL' },
+  { label: '训练凳', value: 'BENCH' },
+  { label: '墙面', value: 'WALL' }
 ]
 const difficultyOptions = [
   { label: '全部难度', value: '' },
@@ -100,17 +104,25 @@ const hasClearableConditions = computed(
   () => !!searchText.value.trim() || activeFilterCount.value > 0
 )
 const visibleExercises = computed(() => {
-  const source =
-    activeScope.value === 'FAVORITES' ? exerciseStore.favorites : exerciseStore.items
+  const source = activeScope.value === 'FAVORITES' ? exerciseStore.favorites : exerciseStore.items
   return source.filter((item) => {
     const keyword = searchText.value.trim().toLowerCase()
     const matchesKeyword =
       !keyword ||
-      [item.name, item.category, item.muscle, item.equipment, item.equipmentName, item.equipmentDetail]
+      [
+        item.name,
+        item.category,
+        item.muscle,
+        item.equipment,
+        item.equipmentName,
+        item.equipmentDetail
+      ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword))
-    const matchesEquipment = !activeEquipmentCode.value || item.equipmentCode === activeEquipmentCode.value
-    const matchesDifficulty = !activeDifficultyCode.value || item.difficultyCode === activeDifficultyCode.value
+    const matchesEquipment =
+      !activeEquipmentCode.value || item.equipmentCode === activeEquipmentCode.value
+    const matchesDifficulty =
+      !activeDifficultyCode.value || item.difficultyCode === activeDifficultyCode.value
     const matchesRecordType = !activeRecordType.value || item.recordType === activeRecordType.value
     return matchesKeyword && matchesEquipment && matchesDifficulty && matchesRecordType
   })
@@ -122,6 +134,17 @@ const filterSummary = computed(() =>
     `类型：${findOptionLabel(recordTypeOptions, activeRecordType.value)}`
   ].join(' · ')
 )
+const sharedFilterState = computed<ExerciseFilterState>(() => ({
+  categoryCode: activeCategoryCode.value,
+  equipmentCode: activeEquipmentCode.value,
+  difficultyCode: activeDifficultyCode.value,
+  recordType: activeRecordType.value
+}))
+const sharedFilterMetadata = computed(() => ({
+  equipment: equipmentOptions.filter((item) => item.value),
+  difficulty: difficultyOptions.filter((item) => item.value),
+  recordTypes: recordTypeOptions.filter((item) => item.value)
+}))
 
 onLoad(async () => {
   onAuthChanged(refreshAfterAuthChanged)
@@ -252,6 +275,13 @@ function applyAdvancedFilters() {
   if (changed && activeScope.value !== 'FAVORITES') {
     exerciseStore.fetchExercises({ reset: true, ...currentQueryOptions() })
   }
+}
+
+function applySharedFilters(value: ExerciseFilterState) {
+  draftEquipmentCode.value = value.equipmentCode
+  draftDifficultyCode.value = value.difficultyCode
+  draftRecordType.value = value.recordType
+  applyAdvancedFilters()
 }
 
 function clearConditions() {
@@ -418,7 +448,10 @@ async function deleteCustomExercise(id: number) {
             <view v-if="activeRecordType" class="exercises__filter-tag">
               {{ findOptionLabel(recordTypeOptions, activeRecordType) }}
             </view>
-            <view v-if="!activeFilterCount" class="exercises__filter-tag exercises__filter-tag--muted">
+            <view
+              v-if="!activeFilterCount"
+              class="exercises__filter-tag exercises__filter-tag--muted"
+            >
               {{ filterSummary }}
             </view>
           </view>
@@ -530,76 +563,14 @@ async function deleteCustomExercise(id: number) {
       @close="closeCustomDialog"
       @submit="submitCustomExercise"
     />
-    <view
-      v-if="filterSheetVisible"
-      class="exercises__sheet-mask"
-      catchtouchmove="true"
-      @tap="closeFilterSheet"
-    >
-      <view class="exercises__sheet glass-card" @tap.stop>
-        <view class="exercises__sheet-header">
-          <view>
-            <view class="exercises__sheet-title">筛选动作</view>
-            <view class="exercises__sheet-subtitle"
-              >身体部位仍在左侧选择，这里只调整器械、难度和记录类型。</view
-            >
-          </view>
-          <view class="exercises__sheet-close btn-press" @tap="closeFilterSheet">×</view>
-        </view>
-
-        <view class="exercises__filter-group">
-          <view class="exercises__filter-group-title">器械</view>
-          <view class="exercises__filter-grid">
-            <view
-              v-for="item in equipmentOptions"
-              :key="item.value || 'sheet-equipment-all'"
-              class="exercises__filter-chip btn-press"
-              :class="{ 'exercises__filter-chip--active': draftEquipmentCode === item.value }"
-              @tap="switchFilter('equipment', item.value)"
-            >
-              {{ item.label }}
-            </view>
-          </view>
-        </view>
-
-        <view class="exercises__filter-group">
-          <view class="exercises__filter-group-title">难度</view>
-          <view class="exercises__filter-grid">
-            <view
-              v-for="item in difficultyOptions"
-              :key="item.value || 'sheet-difficulty-all'"
-              class="exercises__filter-chip btn-press"
-              :class="{ 'exercises__filter-chip--active': draftDifficultyCode === item.value }"
-              @tap="switchFilter('difficulty', item.value)"
-            >
-              {{ item.label }}
-            </view>
-          </view>
-        </view>
-
-        <view class="exercises__filter-group">
-          <view class="exercises__filter-group-title">记录类型</view>
-          <view class="exercises__filter-grid">
-            <view
-              v-for="item in recordTypeOptions"
-              :key="item.value || 'sheet-record-all'"
-              class="exercises__filter-chip btn-press"
-              :class="{ 'exercises__filter-chip--active': draftRecordType === item.value }"
-              @tap="switchFilter('recordType', item.value)"
-            >
-              {{ item.label }}
-            </view>
-          </view>
-        </view>
-
-        <view class="exercises__sheet-actions">
-          <view class="exercises__sheet-reset btn-press" @tap="clearAdvancedFilters">清空</view>
-          <view class="gradient-fire exercises__sheet-confirm btn-press" @tap="applyAdvancedFilters">
-            完成
-          </view>
-        </view>
-      </view>
-    </view>
+    <ExerciseFilterSheet
+      :visible="filterSheetVisible"
+      :model-value="sharedFilterState"
+      :metadata="sharedFilterMetadata"
+      :result-count="exerciseStore.total"
+      @close="closeFilterSheet"
+      @apply="applySharedFilters"
+    />
     <WorkoutDraftFab :class="themeStore.themeClass" variant="light" @open="openDraftFab" />
     <WorkoutDraftPrompt />
     <MembershipRequiredModal />

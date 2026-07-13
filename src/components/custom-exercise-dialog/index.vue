@@ -150,7 +150,9 @@ function submit() {
           v-for="item in DIFFICULTY_OPTIONS"
           :key="item.value"
           class="custom-exercise-dialog__difficulty-chip btn-press"
-          :class="{ 'custom-exercise-dialog__difficulty-chip--active': difficultyCode === item.value }"
+          :class="{
+            'custom-exercise-dialog__difficulty-chip--active': difficultyCode === item.value
+          }"
           @tap="selectDifficulty(item.value)"
         >
           {{ item.label }}

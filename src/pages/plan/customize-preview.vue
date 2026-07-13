@@ -4,10 +4,13 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
+import RestSecondsSheet from '@/components/rest-seconds-sheet/index.vue'
+import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import { usePlanStore } from '@/stores/plan'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
+import { planExerciseThumbnail } from '@/utils/plan-exercise-thumbnail'
 import type {
   RecommendedPlanIntroResponse,
   RecommendedPlanPersonalizationRequest,
@@ -26,8 +29,11 @@ const payload = ref<RecommendedPlanPersonalizationRequest>({
   weeklyFrequency: 3,
   unavailableBodyParts: ['NONE'],
   equipment: 'GYM',
-  durationMinutes: 35
+  durationMinutes: 35,
+  restSecondsByExerciseId: {}
 })
+type PreviewItem = RecommendedPlanPreviewResponse['days'][number]['items'][number]
+const restEditorItem = ref<{ item: PreviewItem; dayOfWeek: number } | null>(null)
 
 const previewWeeks = computed(() => {
   const total = intro.value?.cycleWeeks || 1
@@ -54,7 +60,8 @@ onLoad((options) => {
       .split(',')
       .filter(Boolean),
     equipment: normalizeEquipment(String(options?.equipment || 'GYM')),
-    durationMinutes: normalizeDuration(Number(options?.durationMinutes))
+    durationMinutes: normalizeDuration(Number(options?.durationMinutes)),
+    restSecondsByExerciseId: {}
   }
 })
 
@@ -127,6 +134,39 @@ function itemTarget(item: RecommendedPlanPreviewResponse['days'][number]['items'
   }
   if (item.targetReps) return `${sets} 组 · ${item.targetReps} 次`
   return `${sets} 组`
+}
+
+function chooseItemRest(dayOfWeek: number, item: PreviewItem) {
+  restEditorItem.value = { item, dayOfWeek }
+}
+
+function confirmItemRest(result: { restSeconds: number; scope: 'CURRENT' | 'ALL_MATCHING' }) {
+  const editor = restEditorItem.value
+  if (!editor || !preview.value) return
+  const { item, dayOfWeek } = editor
+  if (result.scope === 'ALL_MATCHING') {
+    payload.value.restSecondsByExerciseId = {
+      ...(payload.value.restSecondsByExerciseId || {}),
+      [item.exerciseId]: result.restSeconds
+    }
+  } else {
+    payload.value.restSecondsByOccurrence = {
+      ...(payload.value.restSecondsByOccurrence || {}),
+      [`${dayOfWeek}:${item.sortOrder}`]: result.restSeconds
+    }
+  }
+  preview.value.days.forEach((day) => {
+    day.items.forEach((target) => {
+      if (
+        (result.scope === 'ALL_MATCHING' && target.exerciseId === item.exerciseId) ||
+        (result.scope === 'CURRENT' &&
+          day.dayOfWeek === dayOfWeek &&
+          target.sortOrder === item.sortOrder)
+      )
+        target.plannedRestSeconds = result.restSeconds
+    })
+  })
+  restEditorItem.value = null
 }
 
 function normalizeEquipment(value: string): RecommendedPlanPersonalizationRequest['equipment'] {
@@ -205,7 +245,9 @@ function goBack() {
                   <view class="customize-preview__day-title">
                     第 {{ day.weekIndex }} 周 · {{ weekdayLabel(day.dayOfWeek) }} · {{ day.title }}
                   </view>
-                  <view class="customize-preview__day-sub">{{ day.items.length }} 个动作</view>
+                  <view class="customize-preview__day-sub">
+                    {{ day.items.length }} 个动作 · 预计 {{ payload.durationMinutes }} 分钟
+                  </view>
                 </view>
               </view>
               <view
@@ -213,13 +255,24 @@ function goBack() {
                 :key="`${day.dayOfWeek}-${item.sortOrder}`"
                 class="customize-preview__item"
               >
-                <view>
+                <ExerciseThumbnail
+                  :name="item.exerciseName"
+                  :record-type="planExerciseThumbnail(item).recordType"
+                  :url="planExerciseThumbnail(item).thumbnailUrl"
+                />
+                <view class="customize-preview__item-copy">
                   <view class="customize-preview__item-name">{{ item.exerciseName }}</view>
+                  <view class="customize-preview__item-summary">{{ itemTarget(item) }}</view>
                   <view v-if="item.replacementReason" class="customize-preview__item-reason">
                     {{ item.replacementReason }}
                   </view>
                 </view>
-                <view class="customize-preview__item-target">{{ itemTarget(item) }}</view>
+                <view
+                  class="customize-preview__rest-pill btn-press"
+                  @tap="chooseItemRest(day.dayOfWeek, item)"
+                >
+                  休息 {{ item.plannedRestSeconds ?? 60 }} 秒 ›
+                </view>
               </view>
             </view>
           </view>
@@ -235,11 +288,19 @@ function goBack() {
           </view>
 
           <view class="customize-preview__footer">
-            <view class="customize-preview__secondary btn-press" @tap="regenerate">重新生成</view>
             <PrimaryButton class="customize-preview__primary" :loading="activating" @tap="activate">
               启用计划
             </PrimaryButton>
           </view>
+          <RestSecondsSheet
+            :visible="restEditorItem !== null"
+            :exercise-name="restEditorItem?.item.exerciseName || ''"
+            :value="restEditorItem?.item.plannedRestSeconds ?? 60"
+            :allow-all-matching="true"
+            default-scope="ALL_MATCHING"
+            @close="restEditorItem = null"
+            @confirm="confirmItemRest"
+          />
         </template>
       </template>
     </view>
@@ -363,12 +424,18 @@ function goBack() {
   }
 
   &__item {
-    min-height: 62rpx;
+    min-height: 112rpx;
+    padding: 14rpx 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16rpx;
     border-bottom: 1rpx solid rgba(15, 23, 42, 0.06);
+  }
+
+  &__item-copy {
+    flex: 1;
+    min-width: 0;
   }
 
   &__item-name {
@@ -377,11 +444,25 @@ function goBack() {
     font-weight: 800;
   }
 
-  &__item-target {
+  &__item-summary {
+    margin-top: 6rpx;
+    color: var(--app-text-secondary);
+    font-size: 21rpx;
+    font-weight: 750;
+  }
+
+  &__rest-pill {
     flex-shrink: 0;
-    color: var(--app-text);
-    font-size: 22rpx;
-    font-weight: 800;
+    min-height: 56rpx;
+    padding: 0 16rpx;
+    border-radius: 999rpx;
+    display: flex;
+    align-items: center;
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+    border: 1rpx solid rgba(255, 91, 31, 0.24);
+    font-size: 20rpx;
+    font-weight: 900;
   }
 
   &__warnings {
@@ -396,8 +477,7 @@ function goBack() {
     position: sticky;
     bottom: 0;
     display: grid;
-    grid-template-columns: 180rpx minmax(0, 1fr);
-    gap: 14rpx;
+    grid-template-columns: 1fr;
     padding-top: 20rpx;
     background: linear-gradient(180deg, rgba(243, 246, 249, 0), var(--app-bg) 28%);
   }

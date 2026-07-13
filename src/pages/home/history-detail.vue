@@ -7,10 +7,7 @@ import ShareCardSheet from '@/components/share-card-sheet/index.vue'
 import TrainingLevelRewardCard from '@/components/training-level-reward-card/index.vue'
 import TrainingLevelUpgradeModal from '@/components/training-level-upgrade-modal/index.vue'
 import { fetchWorkoutSharePreview, type SharePreviewResponse } from '@/api/share'
-import {
-  settleTrainingLevel,
-  type TrainingLevelSettlementResponse
-} from '@/api/training-level'
+import { settleTrainingLevel, type TrainingLevelSettlementResponse } from '@/api/training-level'
 import { useTrainingStore } from '@/stores/training'
 import { useProfileStore } from '@/stores/profile'
 import { useThemeStore } from '@/stores/theme'

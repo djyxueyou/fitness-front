@@ -121,6 +121,15 @@ function chooseTemplate(id: number) {
   templateId.value = id
 }
 
+function editSelectedTemplate() {
+  const template = userTemplates.value.find((item) => item.id === templateId.value)
+  if (!template) {
+    uni.showToast({ title: '系统模板需先复制到我的模板', icon: 'none' })
+    return
+  }
+  uni.navigateTo({ url: `${routes.templateEdit}?id=${template.id}` })
+}
+
 function changeWeek(delta: number) {
   if (completed.value) return
   weekIndex.value = Math.min(planCycleWeeks.value, Math.max(1, weekIndex.value + delta))
@@ -238,6 +247,14 @@ async function saveDay() {
       </view>
 
       <view class="plan-day-edit__section-title">选择训练模板</view>
+
+      <view class="glass-card plan-day-edit__rest-entry btn-press" @tap="editSelectedTemplate">
+        <view>
+          <view class="plan-day-edit__template-name">调整动作与组间休息</view>
+          <view class="plan-day-edit__template-meta">每个动作可设置不同的组间休息时间</view>
+        </view>
+        <view class="plan-day-edit__template-check">去设置</view>
+      </view>
 
       <view class="plan-day-edit__template-group">
         <view class="plan-day-edit__group-title">我的模板</view>
@@ -444,8 +461,17 @@ async function saveDay() {
   }
 
   &__template,
-  &__empty {
+  &__empty,
+  &__rest-entry {
     padding: 24rpx;
+  }
+
+  &__rest-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+    margin-top: 16rpx;
   }
 
   &__template {

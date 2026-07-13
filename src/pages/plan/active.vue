@@ -2,7 +2,9 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
+import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
+import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import {
   fetchActiveTrainingPlan,
@@ -14,6 +16,7 @@ import {
 } from '@/api/plan'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
+import { planExerciseThumbnail } from '@/utils/plan-exercise-thumbnail'
 import { usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useThemeStore } from '@/stores/theme'
@@ -50,13 +53,19 @@ interface PreviewItem {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  plannedRestSeconds?: number
   replacementReason?: string
+  thumbnailSource?: string
+  thumbnailPath?: string
+  thumbnailUrl?: string
 }
 
 const planStore = usePlanStore()
 const templateStore = useTemplateStore()
 const themeStore = useThemeStore()
 const workoutStore = useWorkoutStore()
+const skipConfirmVisible = ref(false)
+const skipSubmitting = ref(false)
 const draftPromptStore = useWorkoutDraftPromptStore()
 const loading = ref(true)
 const missing = ref(false)
@@ -415,33 +424,25 @@ async function startPreviewDay() {
 async function skipSelectedDay() {
   const day = selectedDay.value
   if (!day || !canSkipDay(day)) return
-  const confirmed = await confirmModal(
-    '跳过本次安排',
-    '本次安排不会计入完成进度，也不会再进入待补练推荐。'
-  )
-  if (!confirmed) return
+  skipConfirmVisible.value = true
+}
+
+async function confirmSkipSelectedDay() {
+  const day = selectedDay.value
+  if (!day || !canSkipDay(day) || skipSubmitting.value) return
+  skipSubmitting.value = true
   try {
     await skipActiveTrainingPlanDay(day.id)
+    skipConfirmVisible.value = false
     uni.showToast({ title: '已跳过本次安排', icon: 'none' })
     selectedDayKey.value = ''
     await loadSchedule()
   } catch (err) {
     uni.showToast({ title: '跳过失败，请稍后重试', icon: 'none' })
     console.error('[plan] skip schedule day failed', err)
+  } finally {
+    skipSubmitting.value = false
   }
-}
-
-function confirmModal(title: string, content: string) {
-  return new Promise<boolean>((resolve) => {
-    uni.showModal({
-      title,
-      content,
-      confirmText: '确认跳过',
-      cancelText: '取消',
-      success: (res) => resolve(Boolean(res.confirm)),
-      fail: () => resolve(false)
-    })
-  })
 }
 
 function toPreviewItem(item: ActiveExecutionItemResponse): PreviewItem {
@@ -455,7 +456,11 @@ function toPreviewItem(item: ActiveExecutionItemResponse): PreviewItem {
     targetWeightKg: item.targetWeightKg,
     targetReps: item.targetReps,
     targetDurationSeconds: item.targetDurationSeconds,
-    replacementReason: item.replacementReason
+    plannedRestSeconds: item.plannedRestSeconds,
+    replacementReason: item.replacementReason,
+    thumbnailSource: item.thumbnailSource,
+    thumbnailPath: item.thumbnailPath,
+    thumbnailUrl: item.thumbnailUrl
   }
 }
 
@@ -471,7 +476,11 @@ function toTemplatePreviewItem(
     targetSets: item.targetSets,
     targetWeightKg: item.targetWeightKg,
     targetReps: item.targetReps,
-    targetDurationSeconds: item.targetDurationSeconds
+    targetDurationSeconds: item.targetDurationSeconds,
+    plannedRestSeconds: item.restSeconds ?? undefined,
+    thumbnailSource: item.thumbnailSource,
+    thumbnailPath: item.thumbnailPath,
+    thumbnailUrl: item.thumbnailUrl
   }
 }
 
@@ -726,7 +735,12 @@ function goBack() {
       <view v-else-if="!previewItems.length" class="active-plan__sheet-state"> 暂无动作数据 </view>
       <scroll-view v-else scroll-y class="active-plan__sheet-list">
         <view v-for="item in previewItems" :key="item.id" class="active-plan__sheet-item">
-          <view>
+          <ExerciseThumbnail
+            :name="item.exerciseName"
+            :record-type="planExerciseThumbnail(item).recordType"
+            :url="planExerciseThumbnail(item).thumbnailUrl"
+          />
+          <view class="active-plan__sheet-copy">
             <view class="active-plan__sheet-name">{{ item.exerciseName }}</view>
             <view class="active-plan__sheet-meta">
               {{ item.primaryMuscle || item.equipment || '目标动作' }}
@@ -748,6 +762,22 @@ function goBack() {
       </view>
     </view>
   </view>
+  <AppActionSheet
+    :visible="skipConfirmVisible"
+    title="跳过本次训练？"
+    subtitle="跳过后不计入完成进度，也不会进入待补练推荐。"
+    cancel-text="暂不跳过"
+    :items="[
+      {
+        key: 'confirm',
+        label: skipSubmitting ? '正在跳过...' : '确认跳过',
+        description: '本次安排将从当前待训练列表中移除',
+        danger: true
+      }
+    ]"
+    @close="skipConfirmVisible = false"
+    @select="confirmSkipSelectedDay"
+  />
   <WorkoutDraftPrompt />
 </template>
 
@@ -1186,6 +1216,11 @@ function goBack() {
     font-weight: 900;
   }
 
+  &__sheet-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
   &__sheet-target {
     color: var(--app-text);
     font-size: 23rpx;
@@ -1195,7 +1230,7 @@ function goBack() {
 
   &__sheet-reason {
     position: absolute;
-    left: 0;
+    left: 94rpx;
     right: 0;
     bottom: -4rpx;
   }

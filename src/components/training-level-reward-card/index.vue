@@ -67,8 +67,7 @@ const message = computed(() => {
   gap: 22rpx;
   border-color: rgba(255, 122, 26, 0.24);
   background:
-    radial-gradient(circle at 12% 0%, rgba(255, 122, 26, 0.12), transparent 34%),
-    var(--app-card);
+    radial-gradient(circle at 12% 0%, rgba(255, 122, 26, 0.12), transparent 34%), var(--app-card);
 
   &__body {
     min-width: 0;

@@ -146,6 +146,8 @@ export interface RecommendedPlanPersonalizationRequest {
   unavailableBodyParts: string[]
   equipment: 'GYM' | 'DUMBBELL' | 'BODYWEIGHT' | 'UNKNOWN'
   durationMinutes: 20 | 35 | 50
+  restSecondsByExerciseId?: Record<number, number>
+  restSecondsByOccurrence?: Record<string, number>
 }
 
 export interface RecommendedPlanPreviewItemResponse {
@@ -157,9 +159,14 @@ export interface RecommendedPlanPreviewItemResponse {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  plannedRestSeconds?: number
   targetSource: string
   replacedFromExerciseId?: number
   replacementReason?: string
+  recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
+  thumbnailSource?: string
+  thumbnailPath?: string
+  thumbnailUrl?: string
 }
 
 export interface RecommendedPlanPreviewDayResponse {
@@ -194,8 +201,12 @@ export interface ActiveExecutionItemResponse {
   targetWeightKg?: number
   targetReps?: number
   targetDurationSeconds?: number
+  plannedRestSeconds?: number
   replacedFromExerciseId?: number
   replacementReason?: string
+  thumbnailSource?: string
+  thumbnailPath?: string
+  thumbnailUrl?: string
 }
 
 export interface ActiveExecutionDayResponse {
@@ -277,14 +288,16 @@ export function fetchTrainingPlans(scope: 'all' | 'system' | 'mine' = 'all') {
 export function fetchRecommendedPlans() {
   return request<RecommendedPlanListItemResponse[]>({
     url: '/api/recommended-plans',
-    method: 'GET'
+    method: 'GET',
+    withAuth: false
   })
 }
 
 export function fetchRecommendedPlanIntro(id: number) {
   return request<RecommendedPlanIntroResponse>({
     url: `/api/recommended-plans/${id}/intro`,
-    method: 'GET'
+    method: 'GET',
+    withAuth: false
   })
 }
 

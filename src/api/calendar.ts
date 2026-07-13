@@ -1,4 +1,5 @@
 import { request } from '@/api/http'
+import { normalizeCalendarCoverItems } from '@/utils/calendar-cover-url'
 
 export interface CalendarMonthResponse {
   year: number
@@ -63,9 +64,14 @@ export function fetchCalendarMonth(year: number, month: number) {
   })
 }
 
-export function fetchCalendarDate(date: string) {
-  return request<CalendarDateDetailResponse>({
+export async function fetchCalendarDate(date: string) {
+  const detail = await request<CalendarDateDetailResponse>({
     url: `/api/calendar/dates/${date}`,
     method: 'GET'
   })
+  return {
+    ...detail,
+    planDays: normalizeCalendarCoverItems(detail.planDays),
+    trainingRecords: normalizeCalendarCoverItems(detail.trainingRecords)
+  }
 }

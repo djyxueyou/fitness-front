@@ -17,7 +17,9 @@ const shareLoading = ref(false)
 const sharePreview = ref<SharePreviewResponse | null>(null)
 
 const totalVolume = computed(() =>
-  review.value ? `${formatCompactWeight(Number(review.value.metrics.totalVolumeKg || 0), 'kg')} kg` : '--'
+  review.value
+    ? `${formatCompactWeight(Number(review.value.metrics.totalVolumeKg || 0), 'kg')} kg`
+    : '--'
 )
 const totalDuration = computed(() =>
   review.value ? `${Math.round(review.value.metrics.totalDurationSeconds / 60)} min` : '--'
@@ -119,7 +121,6 @@ function copyShareText() {
     success: () => uni.showToast({ title: '已复制分享文案', icon: 'none' })
   })
 }
-
 </script>
 
 <template>
@@ -206,8 +207,7 @@ function copyShareText() {
   min-height: 100vh;
   padding: 32rpx;
   background:
-    radial-gradient(circle at 80% 0%, rgba(255, 108, 38, 0.12), transparent 34%),
-    var(--app-bg);
+    radial-gradient(circle at 80% 0%, rgba(255, 108, 38, 0.12), transparent 34%), var(--app-bg);
   color: var(--app-text);
 }
 

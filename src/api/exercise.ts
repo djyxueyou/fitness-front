@@ -50,6 +50,12 @@ export interface ExerciseCategory {
   exerciseCount: number
 }
 
+export interface ExerciseFilterMetadata {
+  equipment: Array<{ value: string; label: string }>
+  difficulty: Array<{ value: string; label: string }>
+  recordTypes: Array<{ value: string; label: string }>
+}
+
 interface PageResponse<T> {
   total: number
   pageNo: number
@@ -128,6 +134,14 @@ export function fetchExerciseDetail(id: number) {
 export function fetchExerciseCategories() {
   return request<ExerciseCategory[]>({
     url: '/api/exercises/categories',
+    method: 'GET',
+    withAuth: false
+  })
+}
+
+export function fetchExerciseFilterMetadata() {
+  return request<ExerciseFilterMetadata>({
+    url: '/api/exercises/filter-metadata',
     method: 'GET',
     withAuth: false
   })

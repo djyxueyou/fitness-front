@@ -16,6 +16,7 @@ export interface UserProfileResponse {
   weightStepLb: number
   repsStep: number
   durationStepSeconds: number
+  effortPromptEnabled: boolean
 }
 
 export interface UpdateUserProfileRequest {
@@ -96,6 +97,7 @@ export interface UpdateUserSettingRequest {
   weightStepLb: number
   repsStep: number
   durationStepSeconds: number
+  effortPromptEnabled?: boolean
 }
 
 export interface UserSummaryResponse {

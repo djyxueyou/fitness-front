@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CustomExerciseDialog from '@/components/custom-exercise-dialog/index.vue'
+import ExerciseFilterSheet from '@/components/exercise-filter-sheet/index.vue'
 import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import {
   createCustomExercise,
   fetchExerciseCategories,
+  fetchExerciseFilterMetadata,
   fetchExerciseList,
   fetchFavoriteExercises,
   type ExerciseCategory,
@@ -15,6 +17,14 @@ import { getToken } from '@/api/http'
 import { useExerciseStore } from '@/stores/exercise'
 import { useThemeStore } from '@/stores/theme'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { routes } from '@/utils/navigation'
+import {
+  activeFilterChips,
+  countAdvancedFilters,
+  type ExerciseFilterMetadata
+} from '@/utils/exercise-filters'
+import { pickerCopy, type ExercisePickerContext } from '@/utils/exercise-picker-context'
+import { setPendingExerciseSelection } from '@/utils/exercise-selection-session'
 
 type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
 
@@ -32,11 +42,14 @@ const props = defineProps<{
   title?: string
   subtitle?: string
   selectedIds?: number[]
+  mode?: 'MULTIPLE_ADD' | 'SINGLE_REPLACE'
+  context?: ExercisePickerContext
 }>()
 
 const emit = defineEmits<{
   close: []
   select: [exercise: ExerciseSummary]
+  confirm: [exercises: ExerciseSummary[]]
 }>()
 
 const exerciseStore = useExerciseStore()
@@ -44,6 +57,9 @@ const themeStore = useThemeStore()
 const categoryOptions = ref<Array<{ code: string; name: string }>>([{ code: '', name: '全部' }])
 const quickFilter = ref('all')
 const activeCategoryCode = ref('')
+const activeEquipmentCode = ref('')
+const activeDifficultyCode = ref('')
+const activeRecordType = ref('')
 const keyword = ref('')
 const exerciseItems = ref<ExerciseSummary[]>([])
 const exercisePageNo = ref(0)
@@ -53,6 +69,13 @@ const customSaving = ref(false)
 const customDialogVisible = ref(false)
 const customDialogName = ref('')
 const customDialogRecordType = ref<ExerciseRecordType>('BODYWEIGHT_REPS')
+const pendingExercises = ref<ExerciseSummary[]>([])
+const filterSheetVisible = ref(false)
+const filterMetadata = ref<ExerciseFilterMetadata>({
+  equipment: [],
+  difficulty: [],
+  recordTypes: []
+})
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const trimmedKeyword = computed(() => keyword.value.trim())
@@ -62,6 +85,18 @@ const customExists = computed(() =>
 const customCreateTitle = computed(() =>
   trimmedKeyword.value ? `新建自定义动作「${trimmedKeyword.value}」` : '新建自定义动作'
 )
+const pickerContext = computed<ExercisePickerContext>(
+  () => props.context || (props.mode === 'SINGLE_REPLACE' ? 'REPLACE' : 'WORKOUT')
+)
+const copy = computed(() => pickerCopy(pickerContext.value, pendingExercises.value.length))
+const filterState = computed(() => ({
+  categoryCode: activeCategoryCode.value,
+  equipmentCode: activeEquipmentCode.value,
+  difficultyCode: activeDifficultyCode.value,
+  recordType: activeRecordType.value
+}))
+const filterChips = computed(() => activeFilterChips(filterState.value, filterMetadata.value))
+const advancedFilterCount = computed(() => countAdvancedFilters(filterState.value))
 
 function readRecentExercises() {
   try {
@@ -84,8 +119,9 @@ watch(
   () => props.visible,
   async (visible) => {
     if (!visible) return
+    pendingExercises.value = []
     if (categoryOptions.value.length <= 1) {
-      await loadCategories()
+      await Promise.all([loadCategories(), loadFilterMetadata()])
     }
     await loadExercises(true)
   }
@@ -98,6 +134,33 @@ watch(keyword, () => {
     loadExercises(true)
   }, 300)
 })
+
+async function loadFilterMetadata() {
+  try {
+    filterMetadata.value = await fetchExerciseFilterMetadata()
+  } catch {
+    filterMetadata.value = {
+      equipment: [
+        { label: '徒手', value: 'BODYWEIGHT' },
+        { label: '杠铃', value: 'BARBELL' },
+        { label: '哑铃', value: 'DUMBBELL' },
+        { label: '固定器械', value: 'MACHINE' },
+        { label: '绳索', value: 'CABLE' },
+        { label: '弹力带', value: 'RESISTANCE_BAND' }
+      ],
+      difficulty: [
+        { label: '初级', value: 'BEGINNER' },
+        { label: '中级', value: 'INTERMEDIATE' },
+        { label: '高级', value: 'ADVANCED' }
+      ],
+      recordTypes: [
+        { label: '重量次数', value: 'WEIGHT_REPS' },
+        { label: '自重次数', value: 'BODYWEIGHT_REPS' },
+        { label: '计时', value: 'DURATION' }
+      ]
+    }
+  }
+}
 
 async function loadCategories() {
   try {
@@ -142,6 +205,9 @@ async function loadExercises(reset = false) {
       pageNo: reset ? 1 : exercisePageNo.value + 1,
       pageSize: PAGE_SIZE,
       categoryCode: activeCategoryCode.value || undefined,
+      equipmentCode: activeEquipmentCode.value || undefined,
+      difficultyCode: activeDifficultyCode.value || undefined,
+      recordType: activeRecordType.value || undefined,
       keyword: trimmedKeyword.value || undefined,
       scope: quickFilter.value === 'custom' ? 'CUSTOM' : 'ALL'
     })
@@ -187,7 +253,18 @@ function filterLocalExercises(list: ExerciseSummary[]) {
       (item.equipment || '').toLowerCase().includes(word)
     const matchedCategory =
       !activeCategoryCode.value || item.categoryCode === activeCategoryCode.value
-    return matchedKeyword && matchedCategory
+    const matchedEquipment =
+      !activeEquipmentCode.value || item.equipmentCode === activeEquipmentCode.value
+    const matchedDifficulty =
+      !activeDifficultyCode.value || item.difficultyCode === activeDifficultyCode.value
+    const matchedRecordType = !activeRecordType.value || item.recordType === activeRecordType.value
+    return (
+      matchedKeyword &&
+      matchedCategory &&
+      matchedEquipment &&
+      matchedDifficulty &&
+      matchedRecordType
+    )
   })
 }
 
@@ -202,9 +279,41 @@ function switchCategory(categoryCode: string) {
   loadExercises(true)
 }
 
+function applyAdvancedFilters(value: typeof filterState.value) {
+  activeEquipmentCode.value = value.equipmentCode
+  activeDifficultyCode.value = value.difficultyCode
+  activeRecordType.value = value.recordType
+  filterSheetVisible.value = false
+  void loadExercises(true)
+}
+
+function removeFilter(key: 'equipmentCode' | 'difficultyCode' | 'recordType') {
+  if (key === 'equipmentCode') activeEquipmentCode.value = ''
+  if (key === 'difficultyCode') activeDifficultyCode.value = ''
+  if (key === 'recordType') activeRecordType.value = ''
+  void loadExercises(true)
+}
+
 function selectExercise(exercise: ExerciseSummary) {
-  writeRecentExercise(exercise)
-  emit('select', exercise)
+  if ((props.selectedIds || []).includes(exercise.id)) return
+  if (props.mode === 'SINGLE_REPLACE') {
+    writeRecentExercise(exercise)
+    emit('select', exercise)
+    return
+  }
+  setExerciseSelection(exercise, !pendingExercises.value.some((item) => item.id === exercise.id))
+}
+
+function setExerciseSelection(exercise: ExerciseSummary, selected: boolean) {
+  if ((props.selectedIds || []).includes(exercise.id)) return
+  if (selected) writeRecentExercise(exercise)
+  pendingExercises.value = setPendingExerciseSelection(pendingExercises.value, exercise, selected)
+}
+
+function confirmSelection() {
+  if (!pendingExercises.value.length) return
+  pendingExercises.value.forEach(writeRecentExercise)
+  emit('confirm', pendingExercises.value)
 }
 
 async function createCustomFromKeyword() {
@@ -244,7 +353,10 @@ async function submitCustomExercise(payload: { name: string; recordType: Exercis
     }
     closeCustomDialog()
     selectExercise(exercise)
-    uni.showToast({ title: '已创建并添加', icon: 'none' })
+    uni.showToast({
+      title: props.mode === 'SINGLE_REPLACE' ? '已创建' : '已创建并选中',
+      icon: 'none'
+    })
   } catch (err) {
     uni.showToast({ title: '新建动作失败', icon: 'none' })
     console.error('[exercise-picker] create custom exercise failed', err)
@@ -254,7 +366,33 @@ async function submitCustomExercise(payload: { name: string; recordType: Exercis
 }
 
 function isSelected(exerciseId: number) {
+  return (
+    (props.selectedIds || []).includes(exerciseId) ||
+    pendingExercises.value.some((item) => item.id === exerciseId)
+  )
+}
+
+function isAlreadyAdded(exerciseId: number) {
   return (props.selectedIds || []).includes(exerciseId)
+}
+
+function openExerciseDetail(exerciseId: number) {
+  const selected = pendingExercises.value.some((item) => item.id === exerciseId)
+  const locked = (props.selectedIds || []).includes(exerciseId)
+  uni.navigateTo({
+    url: `${routes.exerciseDetail}?id=${exerciseId}&pickerContext=${pickerContext.value}&pickerSelected=${selected ? 1 : 0}&pickerLocked=${locked ? 1 : 0}`,
+    events: {
+      exerciseSelected: (
+        payload: ExerciseSummary | { exercise: ExerciseSummary; selected: boolean }
+      ) => {
+        if ('exercise' in payload) {
+          setExerciseSelection(payload.exercise, payload.selected)
+          return
+        }
+        selectExercise(payload)
+      }
+    }
+  })
 }
 </script>
 
@@ -304,6 +442,20 @@ function isSelected(exerciseId: number) {
         </view>
       </scroll-view>
 
+      <view class="exercise-picker__advanced">
+        <view class="exercise-picker__advanced-item btn-press" @tap="filterSheetVisible = true">
+          筛选{{ advancedFilterCount ? `（${advancedFilterCount}）` : '' }}
+        </view>
+        <view
+          v-for="chip in filterChips"
+          :key="chip.key"
+          class="exercise-picker__advanced-item exercise-picker__advanced-item--active btn-press"
+          @tap="removeFilter(chip.key)"
+        >
+          {{ chip.label }} ×
+        </view>
+      </view>
+
       <scroll-view scroll-y class="exercise-picker__list" @scrolltolower="loadExercises()">
         <view
           v-if="quickFilter === 'custom'"
@@ -335,12 +487,24 @@ function isSelected(exerciseId: number) {
             <view class="exercise-picker__meta">
               {{ exercise.categoryName || '自定义' }} · {{ exercise.equipment || '-' }}
             </view>
+            <view
+              class="exercise-picker__detail btn-press"
+              @tap.stop="openExerciseDetail(exercise.id)"
+            >
+              查看详情
+            </view>
           </view>
           <view
             class="exercise-picker__action"
             :class="{ 'exercise-picker__action--selected': isSelected(exercise.id) }"
           >
-            {{ isSelected(exercise.id) ? '已添加' : '添加' }}
+            {{
+              isAlreadyAdded(exercise.id)
+                ? copy.existing
+                : isSelected(exercise.id)
+                  ? '✓ 已选'
+                  : copy.action
+            }}
           </view>
         </view>
 
@@ -354,6 +518,15 @@ function isSelected(exerciseId: number) {
           }}
         </view>
       </scroll-view>
+      <view v-if="mode !== 'SINGLE_REPLACE'" class="exercise-picker__confirm-wrap">
+        <view
+          class="exercise-picker__confirm btn-press"
+          :class="{ 'exercise-picker__confirm--disabled': !pendingExercises.length }"
+          @tap="confirmSelection"
+        >
+          {{ copy.confirm }}
+        </view>
+      </view>
     </view>
 
     <CustomExerciseDialog
@@ -364,6 +537,14 @@ function isSelected(exerciseId: number) {
       :initial-record-type="customDialogRecordType"
       @close="closeCustomDialog"
       @submit="submitCustomExercise"
+    />
+    <ExerciseFilterSheet
+      :visible="filterSheetVisible"
+      :model-value="filterState"
+      :metadata="filterMetadata"
+      :result-count="exerciseTotal"
+      @close="filterSheetVisible = false"
+      @apply="applyAdvancedFilters"
     />
   </view>
   <MembershipRequiredModal />
@@ -376,7 +557,7 @@ function isSelected(exerciseId: number) {
   right: 24rpx;
   top: 120rpx;
   bottom: 0;
-  z-index: 31;
+  z-index: var(--z-sheet, 110);
   padding: 28rpx;
   border-radius: 36rpx 36rpx 0 0;
   background: var(--app-surface-raised);
@@ -386,7 +567,7 @@ function isSelected(exerciseId: number) {
   &__mask {
     position: fixed;
     inset: 0;
-    z-index: 30;
+    z-index: var(--z-mask, 100);
     background: rgba(0, 0, 0, 0.62);
   }
 
@@ -467,6 +648,20 @@ function isSelected(exerciseId: number) {
     padding: 0 28rpx;
   }
 
+  &__advanced {
+    display: flex;
+    gap: 12rpx;
+    margin: -6rpx 0 12rpx;
+  }
+
+  &__advanced-item {
+    padding: 12rpx 18rpx;
+    border-radius: 999rpx;
+    background: var(--app-bg);
+    color: var(--app-text-secondary);
+    font-size: 22rpx;
+  }
+
   &__category {
     padding: 14rpx 22rpx;
     border-radius: 999rpx;
@@ -482,8 +677,28 @@ function isSelected(exerciseId: number) {
   }
 
   &__list {
-    height: calc(100vh - 500rpx);
+    height: calc(100vh - 620rpx);
     margin-top: 20rpx;
+  }
+
+  &__confirm-wrap {
+    position: absolute;
+    left: 28rpx;
+    right: 28rpx;
+    bottom: calc(env(safe-area-inset-bottom) + 20rpx);
+  }
+
+  &__confirm {
+    padding: 24rpx;
+    border-radius: 24rpx;
+    text-align: center;
+    color: #fff;
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
+    font-weight: 800;
+
+    &--disabled {
+      opacity: 0.42;
+    }
   }
 
   &__custom-create,
@@ -510,6 +725,12 @@ function isSelected(exerciseId: number) {
     margin-top: 8rpx;
     color: var(--app-text-muted);
     font-size: 22rpx;
+  }
+
+  &__detail {
+    margin-top: 8rpx;
+    color: var(--app-info, #2f7df7);
+    font-size: 21rpx;
   }
 
   &__custom-action {

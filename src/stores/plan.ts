@@ -48,6 +48,7 @@ export const usePlanStore = defineStore('plan', () => {
   const loadedAt = ref(0)
   const listError = ref('')
   let fetchPromise: Promise<void> | null = null
+  let recommendedFetchPromise: Promise<void> | null = null
 
   const systemPlans = computed(() => items.value.filter((item) => item.planType === 'SYSTEM'))
   const userPlans = computed(() => items.value.filter((item) => item.planType !== 'SYSTEM'))
@@ -84,6 +85,36 @@ export const usePlanStore = defineStore('plan', () => {
       fetchPromise = null
       loading.value = false
     }
+  }
+
+  async function fetchRecommendedPlanList(options?: { force?: boolean }) {
+    const cacheUsable =
+      !options?.force &&
+      recommendedPlans.value.length > 0 &&
+      Date.now() - loadedAt.value < PLAN_CACHE_MS
+    if (cacheUsable) return
+    if (recommendedFetchPromise) {
+      await recommendedFetchPromise
+      return
+    }
+
+    loading.value = true
+    listError.value = ''
+    recommendedFetchPromise = fetchRecommendedPlans()
+      .then((recommended) => {
+        recommendedPlans.value = recommended
+        loadedAt.value = Date.now()
+      })
+      .catch((err) => {
+        listError.value = '训练计划加载失败，请稍后重试'
+        console.error('[plan] recommended plans fetch failed', err)
+      })
+      .finally(() => {
+        recommendedFetchPromise = null
+        loading.value = false
+      })
+
+    await recommendedFetchPromise
   }
 
   async function getDetail(id: number, force = false) {
@@ -247,6 +278,13 @@ export const usePlanStore = defineStore('plan', () => {
     }
   }
 
+  function clearPersonalPlanState() {
+    items.value = []
+    activeExecution.value = null
+    currentPlanSummary.value = null
+    recommendation.value = null
+  }
+
   return {
     items,
     recommendedPlans,
@@ -260,6 +298,7 @@ export const usePlanStore = defineStore('plan', () => {
     loading,
     listError,
     fetchPlans,
+    fetchRecommendedPlanList,
     getDetail,
     getRecommendedIntro,
     previewRecommended,
@@ -275,6 +314,7 @@ export const usePlanStore = defineStore('plan', () => {
     createDay,
     updateDay,
     deleteDay,
-    loadRecommendation
+    loadRecommendation,
+    clearPersonalPlanState
   }
 })

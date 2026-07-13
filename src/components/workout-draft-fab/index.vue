@@ -68,7 +68,9 @@ onUnmounted(clearCollapseTimer)
     <view class="workout-draft-fab__rail" />
     <view class="workout-draft-fab__play">▶</view>
     <view v-if="!collapsed" class="workout-draft-fab__copy">
-      <view class="workout-draft-fab__title">训练草稿</view>
+      <view class="workout-draft-fab__title">
+        {{ workoutStore.draftSummary.state === 'RUNNING' ? '训练进行中' : '训练草稿' }}
+      </view>
       <view class="workout-draft-fab__sub">{{ workoutStore.draftSummary.durationText }}</view>
     </view>
   </view>

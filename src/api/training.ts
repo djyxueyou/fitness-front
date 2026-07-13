@@ -144,6 +144,7 @@ export interface SaveTrainingSetRequest {
 export interface SaveTrainingItemRequest {
   exerciseId: number
   targetSets?: number
+  restSeconds?: number
   sets: SaveTrainingSetRequest[]
 }
 
@@ -161,6 +162,8 @@ export interface SaveTrainingRequest {
   trainingName: string
   startedAt: string
   endedAt: string
+  durationSeconds?: number
+  pausedSeconds?: number
   note?: string
   items: SaveTrainingItemRequest[]
 }

@@ -5,6 +5,12 @@
 @import '@/styles/operation-pages-light.scss';
 
 page {
+  --z-sticky: 10;
+  --z-popover: 40;
+  --z-mask: 100;
+  --z-sheet: 110;
+  --z-dialog: 120;
+  --z-toast: 200;
   min-height: 100vh;
   background: var(--app-bg);
   background-color: var(--app-bg);

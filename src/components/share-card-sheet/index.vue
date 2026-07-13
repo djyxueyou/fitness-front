@@ -68,7 +68,10 @@ async function saveShareImage() {
     uni.hideLoading()
     const message = String((err as { errMsg?: string })?.errMsg || '')
     uni.showToast({
-      title: message.includes('auth') || message.includes('authorize') ? '需要相册权限才能保存分享图' : '保存失败，可先复制摘要',
+      title:
+        message.includes('auth') || message.includes('authorize')
+          ? '需要相册权限才能保存分享图'
+          : '保存失败，可先复制摘要',
       icon: 'none'
     })
   } finally {
@@ -77,8 +80,13 @@ async function saveShareImage() {
 }
 
 function isMiniProgram() {
-  const systemInfo = uni.getSystemInfoSync() as UniApp.GetSystemInfoResult & { uniPlatform?: string }
-  return systemInfo.uniPlatform === 'mp-weixin' || typeof (globalThis as { wx?: unknown }).wx !== 'undefined'
+  const systemInfo = uni.getSystemInfoSync() as UniApp.GetSystemInfoResult & {
+    uniPlatform?: string
+  }
+  return (
+    systemInfo.uniPlatform === 'mp-weixin' ||
+    typeof (globalThis as { wx?: unknown }).wx !== 'undefined'
+  )
 }
 
 function drawShareImage(preview: SharePreviewResponse, imageMap: Map<number, string>) {
@@ -98,14 +106,33 @@ function drawShareImage(preview: SharePreviewResponse, imageMap: Map<number, str
   drawText(ctx, 'FitForge', padding + 17, padding + 21, 11, '#ff5b1f', 'bold')
 
   const header = shareImageHeader(preview)
-  drawWrappedText(ctx, header.title, padding + 4, padding + 68, width - padding * 2 - 8, 24, 2, '#122033', 'bold')
+  drawWrappedText(
+    ctx,
+    header.title,
+    padding + 4,
+    padding + 68,
+    width - padding * 2 - 8,
+    24,
+    2,
+    '#122033',
+    'bold'
+  )
   if (header.meta) {
     drawText(ctx, header.meta, padding + 4, padding + 104, 13, '#8491a3', 'bold')
   }
 
   const listTitleY = isActionListOnly.value ? padding + (header.meta ? 130 : 116) : padding + 152
   if (!isActionListOnly.value && preview.summary) {
-    drawWrappedText(ctx, preview.summary, padding + 4, padding + 128, width - padding * 2 - 8, 15, 2, '#64748b')
+    drawWrappedText(
+      ctx,
+      preview.summary,
+      padding + 4,
+      padding + 128,
+      width - padding * 2 - 8,
+      15,
+      2,
+      '#64748b'
+    )
   }
   drawText(ctx, '动作列表', padding + 4, listTitleY, 14, '#122033', 'bold')
   drawRows(ctx, canvasRows.value, padding + 4, listTitleY + 16, width - padding * 2 - 8, imageMap)
@@ -137,7 +164,14 @@ function workoutDurationText(preview: SharePreviewResponse) {
   return durationMetric?.value ? `训练时长 ${durationMetric.value}` : ''
 }
 
-function drawRows(ctx: UniApp.CanvasContext, rows: ShareCardRow[], x: number, y: number, width: number, imageMap: Map<number, string>) {
+function drawRows(
+  ctx: UniApp.CanvasContext,
+  rows: ShareCardRow[],
+  x: number,
+  y: number,
+  width: number,
+  imageMap: Map<number, string>
+) {
   let currentY = y
   rows.forEach((row, index) => {
     const rowHeight = shareRowHeight(row)
@@ -158,7 +192,13 @@ function drawRows(ctx: UniApp.CanvasContext, rows: ShareCardRow[], x: number, y:
   })
 }
 
-function drawRowDetails(ctx: UniApp.CanvasContext, row: ShareCardRow, x: number, y: number, width: number) {
+function drawRowDetails(
+  ctx: UniApp.CanvasContext,
+  row: ShareCardRow,
+  x: number,
+  y: number,
+  width: number
+) {
   const details = row.details || []
   if (!details.length) return
   const columnGap = 6
@@ -228,7 +268,8 @@ function drawWrappedText(
 ) {
   ctx.setFontSize(fontSize)
   ctx.setFillStyle(color)
-  ;(ctx as UniApp.CanvasContext & { font?: string }).font = `${weight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`
+  ;(ctx as UniApp.CanvasContext & { font?: string }).font =
+    `${weight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`
   const chars = text.split('')
   const lines: string[] = []
   let current = ''
@@ -261,7 +302,8 @@ function drawText(
   ctx.setFillStyle(color)
   ctx.setFontSize(fontSize)
   ctx.setTextAlign(align)
-  ;(ctx as UniApp.CanvasContext & { font?: string }).font = `${weight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`
+  ;(ctx as UniApp.CanvasContext & { font?: string }).font =
+    `${weight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`
   ctx.fillText(text, x, y)
   ctx.setTextAlign('left')
 }
@@ -339,7 +381,9 @@ function wait(duration: number) {
 
       <scroll-view v-else-if="preview" scroll-y class="share-sheet__body">
         <view class="share-sheet__card">
-          <view class="share-sheet__card-subtitle">{{ preview.visualSubtitle || preview.subtitle }}</view>
+          <view class="share-sheet__card-subtitle">{{
+            preview.visualSubtitle || preview.subtitle
+          }}</view>
           <view class="share-sheet__card-title">{{ preview.visualTitle || preview.title }}</view>
           <view v-if="!isActionListOnly" class="share-sheet__summary">{{ preview.summary }}</view>
 
@@ -351,7 +395,11 @@ function wait(duration: number) {
           </view>
 
           <view v-if="!isActionListOnly && preview.items.length" class="share-sheet__items">
-            <view v-for="item in preview.items" :key="`${item.title}-${item.description}`" class="share-sheet__item">
+            <view
+              v-for="item in preview.items"
+              :key="`${item.title}-${item.description}`"
+              class="share-sheet__item"
+            >
               <view class="share-sheet__item-title">{{ item.title }}</view>
               <view class="share-sheet__item-desc">{{ item.description }}</view>
             </view>

@@ -131,6 +131,10 @@ onLoad((options) => {
 })
 
 onShow(async () => {
+  if (isRecommended.value) {
+    await loadDetail(true)
+    return
+  }
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) {
     uni.switchTab({ url: routes.home })
@@ -748,6 +752,7 @@ function activationErrorTitle(err: unknown) {
 
 async function handleFooterAction() {
   if (isRecommended.value && planId.value) {
+    if (!(await ensureFeatureAuth('定制训练计划'))) return
     uni.navigateTo({ url: `${routes.planCustomize}?id=${planId.value}` })
     return
   }

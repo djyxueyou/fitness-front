@@ -14,6 +14,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.mp-weixin
+!.env.mp-weixin-prod
 project.private.config.json
 
 # Editor directories and files

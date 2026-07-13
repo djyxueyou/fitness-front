@@ -11,12 +11,16 @@ interface ActionSheetItem {
   primary?: boolean
 }
 
-defineProps<{
-  visible: boolean
-  title: string
-  subtitle?: string
-  items: ActionSheetItem[]
-}>()
+withDefaults(
+  defineProps<{
+    visible: boolean
+    title: string
+    subtitle?: string
+    items: ActionSheetItem[]
+    cancelText?: string
+  }>(),
+  { cancelText: '取消' }
+)
 
 const emit = defineEmits<{
   close: []
@@ -62,7 +66,7 @@ const emit = defineEmits<{
         </view>
       </view>
 
-      <view class="app-action-sheet__cancel btn-press" @tap="emit('close')">取消</view>
+      <view class="app-action-sheet__cancel btn-press" @tap="emit('close')">{{ cancelText }}</view>
     </view>
   </view>
 </template>

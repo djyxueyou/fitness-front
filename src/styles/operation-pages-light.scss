@@ -227,6 +227,8 @@
 
   .exercise-picker__category--active {
     color: #fff;
+    background: linear-gradient(135deg, #ff501e, #ffa03c);
+    border-color: transparent;
   }
 }
 

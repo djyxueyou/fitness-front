@@ -21,6 +21,7 @@ interface TrainingPreferences {
   barWeightKg: number
   restVibration: boolean
   restSound: boolean
+  effortPromptEnabled: boolean
 }
 
 const defaultTrainingPreferences: TrainingPreferences = {
@@ -30,11 +31,14 @@ const defaultTrainingPreferences: TrainingPreferences = {
   durationStepSeconds: 10,
   barWeightKg: 20,
   restVibration: true,
-  restSound: false
+  restSound: false,
+  effortPromptEnabled: true
 }
 
 function getCachedTrainingPreferences(): TrainingPreferences {
-  const cached = uni.getStorageSync(TRAINING_PREFERENCES_KEY) as Partial<TrainingPreferences> | undefined
+  const cached = uni.getStorageSync(TRAINING_PREFERENCES_KEY) as
+    | Partial<TrainingPreferences>
+    | undefined
   return {
     ...defaultTrainingPreferences,
     ...(cached || {})
@@ -59,7 +63,10 @@ export const useProfileStore = defineStore('profile', () => {
   const weightStepKg = ref(cached?.weightStepKg ?? defaultTrainingPreferences.weightStepKg)
   const weightStepLb = ref(cached?.weightStepLb ?? defaultTrainingPreferences.weightStepLb)
   const repsStep = ref(cached?.repsStep ?? defaultTrainingPreferences.repsStep)
-  const durationStepSeconds = ref(cached?.durationStepSeconds ?? defaultTrainingPreferences.durationStepSeconds)
+  const durationStepSeconds = ref(
+    cached?.durationStepSeconds ?? defaultTrainingPreferences.durationStepSeconds
+  )
+  const effortPromptEnabled = ref(cached?.effortPromptEnabled ?? true)
   const barWeightKg = ref(cachedTrainingPreferences.barWeightKg)
   const restVibration = ref(cachedTrainingPreferences.restVibration)
   const restSound = ref(cachedTrainingPreferences.restSound)
@@ -83,6 +90,7 @@ export const useProfileStore = defineStore('profile', () => {
       weightStepLb.value = profile.weightStepLb
       repsStep.value = profile.repsStep
       durationStepSeconds.value = profile.durationStepSeconds
+      effortPromptEnabled.value = profile.effortPromptEnabled !== false
       setCachedUserProfile(profile)
     } catch (err) {
       console.error('[profile] refresh failed', err)
@@ -100,14 +108,20 @@ export const useProfileStore = defineStore('profile', () => {
     }
   }
 
-  async function saveSettings(next: { weightUnit: 'kg' | 'lb'; restSeconds: number } & Partial<TrainingPreferences>) {
+  async function saveSettings(
+    next: { weightUnit: 'kg' | 'lb'; restSeconds: number } & Partial<TrainingPreferences>
+  ) {
     const payload = {
       weightUnit: next.weightUnit,
       restSeconds: next.restSeconds,
       weightStepKg: Math.max(0.01, Number(next.weightStepKg ?? weightStepKg.value)),
       weightStepLb: Math.max(0.01, Number(next.weightStepLb ?? weightStepLb.value)),
       repsStep: Math.max(1, Math.round(Number(next.repsStep ?? repsStep.value))),
-      durationStepSeconds: Math.max(1, Math.round(Number(next.durationStepSeconds ?? durationStepSeconds.value)))
+      durationStepSeconds: Math.max(
+        1,
+        Math.round(Number(next.durationStepSeconds ?? durationStepSeconds.value))
+      ),
+      effortPromptEnabled: next.effortPromptEnabled ?? effortPromptEnabled.value
     }
     await updateUserSettings(payload)
     unit.value = next.weightUnit
@@ -116,6 +130,7 @@ export const useProfileStore = defineStore('profile', () => {
     weightStepLb.value = payload.weightStepLb
     repsStep.value = payload.repsStep
     durationStepSeconds.value = payload.durationStepSeconds
+    effortPromptEnabled.value = payload.effortPromptEnabled
     setCachedUserProfile({
       userId: userId.value || 0,
       nickname: nickname.value,
@@ -129,7 +144,8 @@ export const useProfileStore = defineStore('profile', () => {
       weightStepKg: weightStepKg.value,
       weightStepLb: weightStepLb.value,
       repsStep: repsStep.value,
-      durationStepSeconds: durationStepSeconds.value
+      durationStepSeconds: durationStepSeconds.value,
+      effortPromptEnabled: effortPromptEnabled.value
     })
   }
 
@@ -147,10 +163,11 @@ export const useProfileStore = defineStore('profile', () => {
       restSound: next.restSound ?? restSound.value
     }
 
-    const changesProgressionStep = next.weightStepKg !== undefined
-      || next.weightStepLb !== undefined
-      || next.repsStep !== undefined
-      || next.durationStepSeconds !== undefined
+    const changesProgressionStep =
+      next.weightStepKg !== undefined ||
+      next.weightStepLb !== undefined ||
+      next.repsStep !== undefined ||
+      next.durationStepSeconds !== undefined
     if (changesProgressionStep) {
       await saveSettings({
         weightUnit: unit.value,
@@ -195,6 +212,7 @@ export const useProfileStore = defineStore('profile', () => {
     weightStepLb.value = defaultTrainingPreferences.weightStepLb
     repsStep.value = defaultTrainingPreferences.repsStep
     durationStepSeconds.value = defaultTrainingPreferences.durationStepSeconds
+    effortPromptEnabled.value = true
     barWeightKg.value = defaultTrainingPreferences.barWeightKg
     restVibration.value = defaultTrainingPreferences.restVibration
     restSound.value = defaultTrainingPreferences.restSound
@@ -222,6 +240,7 @@ export const useProfileStore = defineStore('profile', () => {
     weightStepLb,
     repsStep,
     durationStepSeconds,
+    effortPromptEnabled,
     barWeightKg,
     restVibration,
     restSound,

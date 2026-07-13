@@ -28,7 +28,10 @@ function handlePrimary() {
         {{ recommendation.targetText }}
       </view>
       <view class="progression-card__reason">{{ recommendation.reasonText }}</view>
-      <view v-if="recommendation.evidence?.length && !recommendation.locked" class="progression-card__hint">
+      <view
+        v-if="recommendation.evidence?.length && !recommendation.locked"
+        class="progression-card__hint"
+      >
         依据：{{ recommendation.evidence.map((item) => item.label).join('、') }}
       </view>
       <view v-if="recommendation.effectText" class="progression-card__hint">
@@ -36,7 +39,11 @@ function handlePrimary() {
       </view>
     </view>
     <view class="progression-card__actions">
-      <view v-if="!recommendation.locked" class="progression-card__keep btn-press" @tap="$emit('keep')">
+      <view
+        v-if="!recommendation.locked"
+        class="progression-card__keep btn-press"
+        @tap="$emit('keep')"
+      >
         {{ recommendation.secondaryActionText || '保持当前' }}
       </view>
       <view class="progression-card__apply btn-press" @tap="handlePrimary">
