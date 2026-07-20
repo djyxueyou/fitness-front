@@ -8,7 +8,25 @@
 
 **Tech Stack:** Java 17、Spring Boot 4、MyBatis-Plus、MySQL、JUnit 5、Mockito、uni-app、Vue 3、TypeScript、Pinia、Vitest、SCSS
 
-**Status:** Ready for execution after plan approval
+**Status:** 2026-07-20 实现及自动化验证完成，外部验收待办。后端 focused/full、前端 full tests/verify 和数据库索引验证已完成；并发 API 与六项手工 UI 场景因缺少安全可用的免费测试账号/token，待真实免费测试账号/token 外部验收。
+
+**Verification results (2026-07-20):**
+
+- 后端 focused：48 tests，0 failures/errors/skips；后端 full：221 tests，0 failures/errors/skips。Homebrew JDK 17 环境通过 Surefire `argLine` 加载项目解析出的 Byte Buddy agent 1.17.8。
+- 前端 full tests：30 files、108 tests 全部通过；`npm run verify` 的 Prettier、TypeScript 和微信小程序构建全部通过。
+- 发布验证中修正一处 Task 8 generation 重构后的陈旧源码字符串契约，测试专用提交为 `c83c0ba`；业务源码未因该集成修复改动。
+- 本地 development `fitness` 库已应用 `20260720_free_plan_quota_and_home_weekly_rhythm.sql`，仅新增 `saved_from_execution_id` 与两个索引，未修改业务数据。
+- `idx_training_record_user_started` 已进入周查询 `possible_keys`，强制选择时使用 `user_id + started_at` 复合 range scan；由于当前周代表用户只有 2 条记录，优化器自然选择更窄的 `idx_training_record_started_at`，生产数据量下仍需复核自然选中情况。
+- 额度查询自然选择 `idx_user_plan_definition_saved` 并显示 `Using index`。
+- 环境中不存在 `PLAN_TEST_TOKEN`，因此未猜测 token、未创建并发测试计划；并发 API 验收与六项真实账号 UI 手工验收保持外部待验收状态。
+
+**Current product truth:**
+
+- 首页“本周节奏”是免费基础反馈；周统计详情、历史周趋势、周报和高级分析属于 Pro。
+- 免费用户可拥有 1 个有效“我的计划”，Pro 数量不限。
+- 系统计划执行不占额度，保存为独立副本后才占额度。
+- 计划额度由 MySQL 事务、用户行锁和索引计数保证，不使用 Redis 计数。
+- 当前安排支持停用；首页选择计划根据“我的计划”数量进入系统或我的子页。
 
 ## Global Constraints
 
@@ -1454,7 +1472,7 @@ git commit --only -m "fix: refresh template manager after writes" -- \
 - Consumes: completed implementation and verified endpoint names.
 - Produces: one consistent product source of truth for future work.
 
-- [ ] **Step 1: Update the product documents with exact current rules**
+- [x] **Step 1: Update the product documents with exact current rules**
 
 Make these statements explicit in all current-source documents:
 
@@ -1468,7 +1486,7 @@ Make these statements explicit in all current-source documents:
 
 At the top of the 2026-07-19 spec, add a link saying its weekly-stat and custom-plan conclusions are partially superseded by the 2026-07-20 spec.
 
-- [ ] **Step 2: Verify focused backend suites**
+- [x] **Step 2: Verify focused backend suites**
 
 Run:
 
@@ -1479,13 +1497,13 @@ mvn -Dtest=SchemaSmokeTest,UserPlanQuotaServiceTest,UserPlanServiceTest,PlanExec
 
 Expected: all focused tests PASS.
 
-- [ ] **Step 3: Verify all backend tests**
+- [x] **Step 3: Verify all backend tests**
 
 Run `mvn test` from `fitness-server`.
 
 Expected: BUILD SUCCESS. If an unrelated pre-existing test fails, record its exact class and failure without masking focused results.
 
-- [ ] **Step 4: Verify frontend tests and build contract**
+- [x] **Step 4: Verify frontend tests and build contract**
 
 Run:
 
@@ -1497,7 +1515,7 @@ npm run verify
 
 Expected: all Vitest tests PASS; format check, typecheck, and WeChat build PASS.
 
-- [ ] **Step 5: Verify the query plans against a development database**
+- [x] **Step 5: Verify the query plans against a development database**
 
 Run `EXPLAIN` with an existing development user ID and the current week boundaries:
 
@@ -1519,7 +1537,7 @@ WHERE user_id = 1
 
 Expected: `possible_keys` includes `idx_training_record_user_started` for the weekly query and `idx_user_plan_definition_saved` for quota count; selected `key` should use those indexes for representative data.
 
-- [ ] **Step 6: Verify free-plan concurrency against the running development service**
+- [ ] **Step 6: Verify free-plan concurrency against the running development service（待真实免费测试账号/token外部验收）**
 
 Use a free test account with zero saved plans. Export its token as `PLAN_TEST_TOKEN`, start the backend on port 8081, then run:
 
@@ -1539,7 +1557,7 @@ rg -n '"code"[[:space:]]*:[[:space:]]*(0|40311)' "${PLAN_TEST_DIR}"
 
 Expected: exactly one response contains code `0`, exactly one contains `40311`, and `GET /api/user-plans` returns one active saved plan. Delete that test plan through the normal API/UI after verification.
 
-- [ ] **Step 7: Perform the six manual UI acceptance scenarios**
+- [ ] **Step 7: Perform the six manual UI acceptance scenarios（待真实免费测试账号/token外部验收）**
 
 Use a free test account and verify:
 
@@ -1550,7 +1568,7 @@ Use a free test account and verify:
 5. “管理计划 → 停用当前计划” preserves training history and returns to system plans.
 6. Home with no active/saved plan opens system plans; Home with a saved inactive plan opens “我的计划”; mine empty state opens system plans.
 
-- [ ] **Step 8: Mark the plan complete and commit documentation only**
+- [x] **Step 8: Record verification status and commit documentation only**
 
 Change this plan’s status note to include the verification date and results. Then commit only front-repository documentation paths:
 
