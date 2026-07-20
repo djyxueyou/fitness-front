@@ -70,6 +70,7 @@ export const useTemplateStore = defineStore('template', () => {
   const detailCache = ref<Record<number, TemplateDetailResponse>>({})
   const recentIds = ref<number[]>(getRecentTemplateIds())
   let fetchPromise: Promise<void> | null = null
+  let fetchGeneration = 0
 
   const userItems = computed(() => items.value.filter((item) => item.templateType !== 'SYSTEM'))
   const systemItems = computed(() => items.value.filter((item) => item.templateType === 'SYSTEM'))
@@ -93,10 +94,12 @@ export const useTemplateStore = defineStore('template', () => {
     return [...localItems, ...historyItems].slice(0, limit)
   }
 
-  function pruneRecentIds() {
+  function pruneRecentIds(shouldCommit?: () => boolean) {
+    if (shouldCommit && !shouldCommit()) return
     const validIds = new Set(items.value.map((item) => item.id))
     const next = recentIds.value.filter((id) => validIds.has(id))
     if (next.length === recentIds.value.length) return
+    if (shouldCommit && !shouldCommit()) return
     recentIds.value = next
     setRecentTemplateIds(next)
   }
@@ -112,8 +115,27 @@ export const useTemplateStore = defineStore('template', () => {
     return items.value.find((item) => item.id === id)
   }
 
-  async function fetchTemplates(options?: { includeDetails?: boolean; force?: boolean }) {
+  function invalidateSession() {
+    fetchGeneration += 1
+    fetchPromise = null
+    loading.value = false
+    items.value = []
+    detailCache.value = {}
+    recentIds.value = []
+    setRecentTemplateIds([])
+    loadedFromServer.value = false
+    detailsLoaded.value = false
+    loadedAt.value = 0
+    listError.value = ''
+  }
+
+  async function fetchTemplates(options?: {
+    includeDetails?: boolean
+    force?: boolean
+    shouldCommit?: () => boolean
+  }) {
     const includeDetails = options?.includeDetails ?? true
+    const shouldCommit = options?.shouldCommit || (() => true)
     const cacheUsable =
       !options?.force &&
       loadedFromServer.value &&
@@ -121,15 +143,23 @@ export const useTemplateStore = defineStore('template', () => {
       (!includeDetails || detailsLoaded.value)
     if (cacheUsable) return
     if (fetchPromise) {
-      await fetchPromise
-      return
+      const pendingFetch = fetchPromise
+      await pendingFetch
+      if (!shouldCommit()) return
+      return fetchTemplates(options)
     }
+
+    const generation = fetchGeneration
+    const canCommit = () => fetchGeneration === generation && shouldCommit()
+    if (!canCommit()) return
 
     loading.value = true
     listError.value = ''
-    fetchPromise = (async () => {
+    let pendingFetch: Promise<void>
+    pendingFetch = (async () => {
       const list = await fetchTemplateList()
       if (!includeDetails) {
+        if (!canCommit()) return
         items.value = list.map((item, index) => ({
           id: item.id,
           name: item.name,
@@ -148,8 +178,11 @@ export const useTemplateStore = defineStore('template', () => {
           coverUrl: item.coverUrl,
           coverRecordType: item.coverRecordType
         }))
-        pruneRecentIds()
+        if (!canCommit()) return
+        pruneRecentIds(canCommit)
+        if (!canCommit()) return
         loadedFromServer.value = true
+        if (!canCommit()) return
         loadedAt.value = Date.now()
         return
       }
@@ -159,33 +192,47 @@ export const useTemplateStore = defineStore('template', () => {
       details.forEach((detail) => {
         cache[detail.id] = detail
       })
+      if (!canCommit()) return
       detailCache.value = cache
+      if (!canCommit()) return
       items.value = details.map((detail, index) => toTemplate(detail, index))
-      pruneRecentIds()
+      if (!canCommit()) return
+      pruneRecentIds(canCommit)
+      if (!canCommit()) return
       loadedFromServer.value = true
+      if (!canCommit()) return
       detailsLoaded.value = true
+      if (!canCommit()) return
       loadedAt.value = Date.now()
     })()
+    fetchPromise = pendingFetch
 
     try {
-      await fetchPromise
+      await pendingFetch
     } catch (err) {
-      loadedFromServer.value = false
-      listError.value = '模板加载失败，请稍后重试'
+      if (canCommit()) {
+        loadedFromServer.value = false
+        listError.value = '模板加载失败，请稍后重试'
+      }
       console.error('[template] fetch failed', err)
     } finally {
-      fetchPromise = null
-      loading.value = false
+      if (fetchPromise === pendingFetch) {
+        fetchPromise = null
+        loading.value = false
+      }
     }
   }
 
   async function getDetail(id: number) {
     const cached = detailCache.value[id]
     if (cached) return cached
+    const generation = fetchGeneration
     const detail = await fetchTemplateDetail(id)
-    detailCache.value = {
-      ...detailCache.value,
-      [id]: detail
+    if (fetchGeneration === generation) {
+      detailCache.value = {
+        ...detailCache.value,
+        [id]: detail
+      }
     }
     return detail
   }
@@ -267,6 +314,7 @@ export const useTemplateStore = defineStore('template', () => {
     recentItems,
     getRecentItemsFromHistory,
     fetchTemplates,
+    invalidateSession,
     markUsed,
     getById,
     getDetail,

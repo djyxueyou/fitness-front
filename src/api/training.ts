@@ -1,4 +1,5 @@
 import { request } from '@/api/http'
+import type { TrainingLevelSettlementResponse } from '@/api/training-level'
 
 interface PageResponse<T> {
   total: number
@@ -107,7 +108,15 @@ export interface TrainingStatsSummaryResponse {
   totalVolumeKg: number
   totalDurationSeconds: number
   lastTrainingAt?: string
-  currentStreakDays: number
+}
+
+export interface HomeWeeklyRhythmResponse {
+  weekStart: string
+  weekEnd: string
+  sessionCount: number
+  totalVolumeKg: number
+  totalDurationSeconds: number
+  trainedDates: string[]
 }
 
 export interface ExerciseLastPerformanceSetResponse {
@@ -150,8 +159,6 @@ export interface SaveTrainingItemRequest {
 
 export interface SaveTrainingRequest {
   templateId?: number | null
-  planId?: number | null
-  planDayId?: number | null
   executionId?: number | null
   executionDayId?: number | null
   sourceType?: 'FREE' | 'USER_TEMPLATE' | 'SYSTEM_EXECUTION' | 'USER_PLAN_EXECUTION' | string
@@ -164,6 +171,7 @@ export interface SaveTrainingRequest {
   endedAt: string
   durationSeconds?: number
   pausedSeconds?: number
+  suspendedSeconds?: number
   note?: string
   items: SaveTrainingItemRequest[]
 }
@@ -176,6 +184,7 @@ export interface SaveTrainingResponse {
   totalVolumeKg: number
   prCount?: number
   prs?: TrainingPrResponse[]
+  levelSettlement?: TrainingLevelSettlementResponse | null
 }
 
 export interface TrainingPrResponse {
@@ -253,6 +262,13 @@ export function fetchTrainingSummary(params?: { startedFrom?: string; startedTo?
     url: '/api/trainings/stats/summary',
     method: 'GET',
     data: params || {}
+  })
+}
+
+export function fetchHomeWeeklyRhythm() {
+  return request<HomeWeeklyRhythmResponse>({
+    url: '/api/trainings/home/weekly-rhythm',
+    method: 'GET'
   })
 }
 

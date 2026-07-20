@@ -2,16 +2,22 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import PrimaryButton from '@/components/primary-button/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import TrainingRecordCard from '@/components/training-record-card/index.vue'
 import { clearToken, getToken } from '@/api/http'
 import {
+  fetchHomeWeeklyRhythm,
   fetchTrainingHistory,
-  fetchTrainingSummary,
   type TrainingHistoryItemResponse,
-  type TrainingStatsSummaryResponse
+  type HomeWeeklyRhythmResponse
 } from '@/api/training'
+import {
+  fetchActivePlanExecution,
+  fetchActiveTrainingPlanSummary,
+  fetchTodayPlanRecommendation
+} from '@/api/plan'
 import { clearCachedUserProfile, fetchUserProfile } from '@/api/user'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { offAuthChanged, onAuthChanged } from '@/utils/auth-events'
@@ -19,17 +25,16 @@ import { offTrainingChanged, onTrainingChanged } from '@/utils/training-events'
 import { routes } from '@/utils/navigation'
 import { useProfileStore } from '@/stores/profile'
 import { usePlanStore } from '@/stores/plan'
-import { useOnboardingStore } from '@/stores/onboarding'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
 import { useTrainingHubStore, type TrainingHubView } from '@/stores/training-hub'
 import { formatCompactWeight } from '@/utils/unit'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 
 const profileStore = useProfileStore()
 const planStore = usePlanStore()
-const onboardingStore = useOnboardingStore()
 const templateStore = useTemplateStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
@@ -37,27 +42,29 @@ const themeStore = useThemeStore()
 const trainingHubStore = useTrainingHubStore()
 const HOME_CACHE_MS = 30000
 
-const summary = ref<TrainingStatsSummaryResponse | null>(null)
-const weekHistory = ref<TrainingHistoryItemResponse[]>([])
+const weeklyRhythm = ref<HomeWeeklyRhythmResponse | null>(null)
 const recentHistory = ref<TrainingHistoryItemResponse[]>([])
 const isLoggedIn = ref(Boolean(getToken()))
-const homeDataLoaded = ref(false)
 let homeLoadedAt = 0
+let homeLoadPromise: Promise<void> | null = null
+let homeLoadEpoch = 0
 
 const weightUnit = computed(() => profileStore.unit)
-const weekSessions = computed(() => (summary.value ? `${weekHistory.value.length} 次` : '--'))
+const weekSessions = computed(() =>
+  weeklyRhythm.value ? `${weeklyRhythm.value.sessionCount} 次` : '--'
+)
 const totalVolume = computed(() =>
-  summary.value
-    ? `${formatCompactWeight(summary.value.totalVolumeKg, weightUnit.value)} ${weightUnit.value}`
+  weeklyRhythm.value
+    ? `${formatCompactWeight(weeklyRhythm.value.totalVolumeKg, weightUnit.value)} ${weightUnit.value}`
     : '--'
 )
 const totalDuration = computed(() =>
-  summary.value ? `${Math.round(summary.value.totalDurationSeconds / 60)} min` : '--'
+  weeklyRhythm.value ? `${Math.round(weeklyRhythm.value.totalDurationSeconds / 60)} min` : '--'
 )
 const weekStats = computed(() => {
   const today = new Date()
   const monday = getWeekStart(today)
-  const trainedDateSet = new Set(weekHistory.value.map((item) => item.startedAt.slice(0, 10)))
+  const trainedDateSet = new Set(weeklyRhythm.value?.trainedDates || [])
 
   return ['一', '二', '三', '四', '五', '六', '日'].map((day, index) => {
     const date = new Date(monday)
@@ -71,21 +78,6 @@ const weekStats = computed(() => {
 })
 const recentTrainingRecords = computed(() => recentHistory.value.slice(0, 2))
 const hasActivePlan = computed(() => Boolean(planStore.currentPlanSummary))
-const hasExistingTrainingContext = computed(
-  () =>
-    hasActivePlan.value ||
-    recentHistory.value.length > 0 ||
-    weekHistory.value.length > 0 ||
-    Boolean(summary.value?.totalSessions) ||
-    templateStore.userItems.length > 0
-)
-const needsOnboarding = computed(
-  () =>
-    isLoggedIn.value &&
-    homeDataLoaded.value &&
-    !onboardingStore.isCompleted &&
-    !hasExistingTrainingContext.value
-)
 const recommendationType = computed(() => planStore.recommendation?.type || '')
 const isRestDay = computed(() => recommendationType.value === 'PLAN_REST')
 const todayDateLabel = computed(() => {
@@ -95,9 +87,7 @@ const todayDateLabel = computed(() => {
 })
 const isPlanStartRecommendation = computed(() => recommendationType.value === 'PLAN_TODAY')
 const hasPlanRecommendation = computed(() =>
-  Boolean(
-    hasActivePlan.value && isPlanStartRecommendation.value && planStore.recommendation?.templateId
-  )
+  Boolean(hasActivePlan.value && isPlanStartRecommendation.value)
 )
 const todayPlanStatusLabel = computed(() => {
   if (workoutStore.hasRecoverableWorkout) return '草稿训练'
@@ -110,8 +100,7 @@ const todayPlanStatusLabel = computed(() => {
 })
 const homeHeroTitle = computed(() => {
   if (workoutStore.hasRecoverableWorkout) return '继续上次训练'
-  if (!isLoggedIn.value) return '建立你的训练档案'
-  if (!hasActivePlan.value && needsOnboarding.value) return '先建立你的训练偏好'
+  if (!isLoggedIn.value) return '登录后保存训练数据'
   if (!hasActivePlan.value) return '选择一套训练计划'
   if (recommendationType.value === 'PLAN_TODAY') return '今天有计划训练'
   if (recommendationType.value === 'PLAN_TODAY_COMPLETED') return '今日训练已完成'
@@ -121,7 +110,6 @@ const homeHeroTitle = computed(() => {
 })
 const todayActionSub = computed(() => {
   if (workoutStore.hasRecoverableWorkout) return '恢复未完成训练'
-  if (!hasActivePlan.value && needsOnboarding.value) return '完成 30 秒画像，获得适合你的起步计划'
   if (!hasActivePlan.value) return '启用后首页会按日期展示训练安排'
   if (hasPlanRecommendation.value) return '按计划完成后计入进度'
   if (recommendationType.value === 'PLAN_TODAY_COMPLETED') return '可以自由训练，或查看后续安排'
@@ -133,13 +121,11 @@ const primaryCtaTitle = computed(() => {
   if (workoutStore.hasRecoverableWorkout) return '继续训练'
   if (!isLoggedIn.value) return '登录并选择训练计划'
   if (hasPlanRecommendation.value) return '开始今日计划'
-  if (!hasActivePlan.value && needsOnboarding.value) return '建立训练画像'
   if (!hasActivePlan.value) return '选择训练计划'
   if (recommendationType.value === 'PLAN_REST') return '查看本周安排'
   return '查看当前计划'
 })
 const recommendationTitle = computed(() => {
-  if (!hasActivePlan.value && needsOnboarding.value) return '建立训练画像'
   if (!hasActivePlan.value) return '选择一个训练计划'
   if (recommendationType.value !== 'PLAN_TODAY') {
     return (
@@ -170,11 +156,6 @@ onShow(() => {
   if (!workoutStore.hasActiveWorkout) {
     workoutStore.restoreDraft()
   }
-  if (getToken() && !templateStore.loadedFromServer) {
-    templateStore.fetchTemplates({ includeDetails: false }).catch((err) => {
-      console.error('[home] template fetch failed', err)
-    })
-  }
   loadHomeData()
 })
 
@@ -187,109 +168,125 @@ async function refreshAfterTrainingChanged() {
   await loadHomeData({ forceTemplates: true })
 }
 
-async function loadHomeData(options?: { forceTemplates?: boolean }) {
+function clearHomeData() {
+  homeLoadEpoch += 1
+  homeLoadPromise = null
+  isLoggedIn.value = false
+  weeklyRhythm.value = null
+  recentHistory.value = []
+  homeLoadedAt = 0
+  planStore.clearPersonalPlanState()
+  templateStore.invalidateSession()
+}
+
+function isHomeLoadActive(epoch: number) {
+  return homeLoadEpoch === epoch && Boolean(getToken())
+}
+
+function loadHomeData(options?: { forceTemplates?: boolean }) {
   if (!getToken()) {
-    isLoggedIn.value = false
-    homeDataLoaded.value = false
-    summary.value = null
-    weekHistory.value = []
-    recentHistory.value = []
-    homeLoadedAt = 0
-    return
+    clearHomeData()
+    return Promise.resolve()
   }
+
+  if (homeLoadPromise && !options?.forceTemplates) {
+    return homeLoadPromise
+  }
+
+  if (homeLoadPromise) {
+    homeLoadEpoch += 1
+    homeLoadPromise = null
+  }
+
+  const epoch = homeLoadEpoch + 1
+  homeLoadEpoch = epoch
+  let pendingLoad: Promise<void>
+  pendingLoad = loadHomeDataForEpoch(epoch, options).finally(() => {
+    if (homeLoadPromise === pendingLoad) {
+      homeLoadPromise = null
+    }
+  })
+  homeLoadPromise = pendingLoad
+  return pendingLoad
+}
+
+async function loadHomeDataForEpoch(epoch: number, options?: { forceTemplates?: boolean }) {
   isLoggedIn.value = true
 
   try {
-    const userProfile = await fetchUserProfile()
-    onboardingStore.ensureOwner(userProfile.userId)
-    try {
-      await onboardingStore.loadFromServer()
-    } catch (err) {
-      console.warn('[home] training profile load failed, local draft retained', err)
-    }
+    await fetchUserProfile()
   } catch {
+    if (!isHomeLoadActive(epoch)) return
     clearToken()
     clearCachedUserProfile()
-    isLoggedIn.value = false
-    homeDataLoaded.value = false
-    summary.value = null
-    weekHistory.value = []
-    recentHistory.value = []
-    homeLoadedAt = 0
+    clearHomeData()
     return
   }
 
-  if (!options?.forceTemplates && summary.value && Date.now() - homeLoadedAt < HOME_CACHE_MS) {
-    homeDataLoaded.value = true
+  if (!isHomeLoadActive(epoch)) return
+
+  if (!options?.forceTemplates && homeLoadedAt && Date.now() - homeLoadedAt < HOME_CACHE_MS) {
     return
   }
-
-  homeDataLoaded.value = false
 
   if (options?.forceTemplates || !templateStore.loadedFromServer) {
     await templateStore
-      .fetchTemplates({ includeDetails: false, force: options?.forceTemplates })
+      .fetchTemplates({
+        includeDetails: false,
+        force: options?.forceTemplates,
+        shouldCommit: () => isHomeLoadActive(epoch)
+      })
       .catch((err) => {
         console.error('[home] template fetch failed', err)
       })
   }
 
-  const planPromise = planStore.fetchPlans({ force: options?.forceTemplates }).catch((err) => {
-    console.error('[home] plan fetch failed', err)
-  })
+  if (!isHomeLoadActive(epoch)) return
 
-  const currentPlanPromise = planStore.loadCurrentPlan().catch((err) => {
-    console.error('[home] current plan fetch failed', err)
-  })
+  const [currentPlanResult, recommendationResult, weeklyRhythmResult, recentHistoryResult] =
+    await Promise.allSettled([
+      Promise.all([fetchActiveTrainingPlanSummary(), fetchActivePlanExecution()]),
+      fetchTodayPlanRecommendation(),
+      fetchHomeWeeklyRhythm(),
+      fetchTrainingHistory({
+        pageNo: 1,
+        pageSize: 20
+      })
+    ])
 
-  planStore.loadRecommendation().catch((err) => {
-    console.error('[home] plan recommendation fetch failed', err)
-  })
+  if (!isHomeLoadActive(epoch)) return
 
-  const range = getCurrentWeekRange()
-  fetchTrainingSummary({
-    startedFrom: range.startedFrom,
-    startedTo: range.startedTo
-  })
-    .then((nextSummary) => {
-      summary.value = nextSummary
-      homeLoadedAt = Date.now()
-    })
-    .catch((err) => {
-      summary.value = null
-      console.error('[home] summary fetch failed', err)
-    })
+  if (currentPlanResult.status === 'fulfilled') {
+    const [summary, execution] = currentPlanResult.value
+    planStore.currentPlanSummary = summary
+    planStore.activeExecution = execution && 'executionId' in execution ? execution : null
+  } else {
+    planStore.currentPlanSummary = null
+    planStore.activeExecution = null
+    console.error('[home] current plan fetch failed', currentPlanResult.reason)
+  }
 
-  fetchTrainingHistory({
-    pageNo: 1,
-    pageSize: 50,
-    startedFrom: range.startedFrom,
-    startedTo: range.startedTo
-  })
-    .then((historyPage) => {
-      weekHistory.value = historyPage.list
-    })
-    .catch((err) => {
-      weekHistory.value = []
-      console.error('[home] week history fetch failed', err)
-    })
+  if (recommendationResult.status === 'fulfilled') {
+    planStore.recommendation = recommendationResult.value
+  } else {
+    planStore.recommendation = null
+    console.error('[home] plan recommendation fetch failed', recommendationResult.reason)
+  }
 
-  const recentHistoryPromise = fetchTrainingHistory({
-    pageNo: 1,
-    pageSize: 20
-  })
-    .then((recentPage) => {
-      recentHistory.value = recentPage.list
-    })
-    .catch((err) => {
-      recentHistory.value = []
-      console.error('[home] recent history fetch failed', err)
-    })
-  Promise.allSettled([planPromise, currentPlanPromise, recentHistoryPromise]).finally(() => {
-    if (getToken()) {
-      homeDataLoaded.value = true
-    }
-  })
+  if (weeklyRhythmResult.status === 'fulfilled') {
+    weeklyRhythm.value = weeklyRhythmResult.value
+  } else {
+    weeklyRhythm.value = null
+    console.error('[home] weekly rhythm fetch failed', weeklyRhythmResult.reason)
+  }
+
+  if (recentHistoryResult.status === 'fulfilled') {
+    recentHistory.value = recentHistoryResult.value.list
+    homeLoadedAt = Date.now()
+  } else {
+    recentHistory.value = []
+    console.error('[home] recent history fetch failed', recentHistoryResult.reason)
+  }
 }
 
 function getWeekStart(date: Date) {
@@ -298,16 +295,6 @@ function getWeekStart(date: Date) {
   start.setDate(start.getDate() - day + 1)
   start.setHours(0, 0, 0, 0)
   return start
-}
-
-function getCurrentWeekRange() {
-  const start = getWeekStart(new Date())
-  const end = new Date(start)
-  end.setDate(start.getDate() + 6)
-  return {
-    startedFrom: toDateString(start),
-    startedTo: toDateString(end)
-  }
 }
 
 function toDateString(date: Date) {
@@ -342,14 +329,10 @@ async function handlePrimaryCta() {
   if (!hasActivePlan.value) {
     const ok = await ensureFeatureAuth('训练计划')
     if (!ok) return
-    if (needsOnboarding.value) {
-      uni.navigateTo({ url: routes.onboarding })
-      return
-    }
     await goPlans()
     return
   }
-  await viewRecommendedPlan()
+  await viewCurrentPlan()
 }
 
 async function startFreeWorkout() {
@@ -367,7 +350,7 @@ async function goPlans() {
   uni.switchTab({ url: routes.planIndex })
 }
 
-async function viewRecommendedPlan() {
+async function viewCurrentPlan() {
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) return
   if (hasActivePlan.value) {
@@ -379,22 +362,13 @@ async function viewRecommendedPlan() {
 
 async function startPlanRecommendation() {
   const recommendation = planStore.recommendation
-  if (recommendation?.type !== 'PLAN_TODAY' || !recommendation.templateId) {
+  if (recommendation?.type !== 'PLAN_TODAY') {
     await goPlans()
     return
   }
   const ok = await ensureFeatureAuth('训练功能')
   if (!ok) return
-  const canStart = await prepareNewWorkout(
-    recommendation.title || recommendation.planName || '计划训练'
-  )
-  if (!canStart) return
-  templateStore.markUsed(recommendation.templateId)
-  workoutStore.queueStartWorkout(recommendation.templateId, {
-    planId: recommendation.planId ?? null,
-    planDayId: recommendation.planDayId ?? null
-  })
-  uni.navigateTo({ url: routes.workoutActive })
+  uni.navigateTo({ url: routes.planActive })
 }
 
 async function goTrainingHistory() {
@@ -417,7 +391,7 @@ async function loginForStats() {
 }
 
 async function goTrend() {
-  const ok = await ensureFeatureAuth('训练分析')
+  const ok = await ensureMembershipFeature('周统计', 'advanced_analytics')
   if (!ok) return
   uni.navigateTo({ url: routes.volumeTrend })
 }
@@ -545,7 +519,7 @@ async function openDraftFab() {
           </view>
           <view class="home-page__quick-copy">
             <view class="home-page__quick-title">训练分析</view>
-            <view class="home-page__quick-sub">基础数据与深度洞察</view>
+            <view class="home-page__quick-sub">周统计与深度洞察</view>
           </view>
         </view>
       </view>
@@ -556,7 +530,7 @@ async function openDraftFab() {
             <view class="home-page__section-no">
               <text>本周节奏</text>
             </view>
-            <view class="home-page__section-title">保持连续，比一次练满更重要</view>
+            <view class="home-page__section-title">查看本周完成情况</view>
           </view>
           <view class="home-page__link btn-press" @tap="goCalendar">训练日历</view>
         </view>
@@ -564,7 +538,7 @@ async function openDraftFab() {
           <view class="home-page__week-locked-icon">⌁</view>
           <view>
             <view class="home-page__week-locked-title">登录后查看本周训练节奏</view>
-            <view class="home-page__week-locked-sub">训练场次、容量和连续训练状态会显示在这里</view>
+            <view class="home-page__week-locked-sub">训练场次、容量和每周训练趋势会显示在这里</view>
           </view>
           <view class="home-page__week-locked-arrow">→</view>
         </view>
@@ -641,6 +615,7 @@ async function openDraftFab() {
   </scroll-view>
   <WorkoutDraftFab :class="themeStore.themeClass" variant="light" @open="openDraftFab" />
   <WorkoutDraftPrompt />
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>
