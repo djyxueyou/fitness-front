@@ -9,7 +9,8 @@ import {
   fetchTemplateList,
   updateTemplate,
   type TemplateDetailResponse,
-  type UpsertTemplateItemRequest
+  type UpsertTemplateItemRequest,
+  type UpsertTemplateRequest
 } from '@/api/template'
 import { fetchExerciseList } from '@/api/exercise'
 import type { TrainingHistoryItemResponse } from '@/api/training'
@@ -70,6 +71,7 @@ export const useTemplateStore = defineStore('template', () => {
   const detailCache = ref<Record<number, TemplateDetailResponse>>({})
   const recentIds = ref<number[]>(getRecentTemplateIds())
   let fetchPromise: Promise<void> | null = null
+  let sessionGeneration = 0
   let fetchGeneration = 0
 
   const userItems = computed(() => items.value.filter((item) => item.templateType !== 'SYSTEM'))
@@ -115,10 +117,30 @@ export const useTemplateStore = defineStore('template', () => {
     return items.value.find((item) => item.id === id)
   }
 
-  function invalidateSession() {
+  function upsertDetail(detail: TemplateDetailResponse) {
+    listError.value = ''
+    detailCache.value = { ...detailCache.value, [detail.id]: detail }
+    const next = toTemplate(detail, 0)
+    items.value = [next, ...items.value.filter((item) => item.id !== detail.id)]
+    loadedFromServer.value = true
+    loadedAt.value = Date.now()
+  }
+
+  function invalidateTemplateReads() {
     fetchGeneration += 1
     fetchPromise = null
     loading.value = false
+  }
+
+  function commitWrite(detail: TemplateDetailResponse, mutationSession: number) {
+    if (sessionGeneration !== mutationSession) return
+    invalidateTemplateReads()
+    upsertDetail(detail)
+  }
+
+  function invalidateSession() {
+    sessionGeneration += 1
+    invalidateTemplateReads()
     items.value = []
     detailCache.value = {}
     recentIds.value = []
@@ -142,15 +164,25 @@ export const useTemplateStore = defineStore('template', () => {
       Date.now() - loadedAt.value < TEMPLATE_CACHE_MS &&
       (!includeDetails || detailsLoaded.value)
     if (cacheUsable) return
+    const requestSession = sessionGeneration
+    const requestGeneration = fetchGeneration
     if (fetchPromise) {
       const pendingFetch = fetchPromise
       await pendingFetch
-      if (!shouldCommit()) return
+      if (
+        sessionGeneration !== requestSession ||
+        fetchGeneration !== requestGeneration ||
+        !shouldCommit()
+      ) {
+        return
+      }
       return fetchTemplates(options)
     }
 
-    const generation = fetchGeneration
-    const canCommit = () => fetchGeneration === generation && shouldCommit()
+    const canCommit = () =>
+      sessionGeneration === requestSession &&
+      fetchGeneration === requestGeneration &&
+      shouldCommit()
     if (!canCommit()) return
 
     loading.value = true
@@ -226,9 +258,10 @@ export const useTemplateStore = defineStore('template', () => {
   async function getDetail(id: number) {
     const cached = detailCache.value[id]
     if (cached) return cached
-    const generation = fetchGeneration
+    const detailSession = sessionGeneration
+    const detailGeneration = fetchGeneration
     const detail = await fetchTemplateDetail(id)
-    if (fetchGeneration === generation) {
+    if (sessionGeneration === detailSession && fetchGeneration === detailGeneration) {
       detailCache.value = {
         ...detailCache.value,
         [id]: detail
@@ -251,8 +284,14 @@ export const useTemplateStore = defineStore('template', () => {
         restSeconds: item.restSeconds
       }))
     }
-    await updateTemplate(id, payload)
-    await fetchTemplates({ force: true })
+    return save(payload, id)
+  }
+
+  async function save(payload: UpsertTemplateRequest, id?: number) {
+    const mutationSession = sessionGeneration
+    const detail = id ? await updateTemplate(id, payload) : await createTemplate(payload)
+    commitWrite(detail, mutationSession)
+    return detail
   }
 
   async function remove(id: number) {
@@ -265,24 +304,21 @@ export const useTemplateStore = defineStore('template', () => {
   }
 
   async function duplicate(id: number) {
-    await copyTemplate(id)
-    await fetchTemplates({ force: true })
+    const mutationSession = sessionGeneration
+    const detail = await copyTemplate(id)
+    commitWrite(detail, mutationSession)
+    return detail
   }
 
   async function saveFromTraining(trainingId: number, name?: string) {
-    const result = await createTemplateFromTraining(trainingId, name)
-    detailCache.value = {}
-    detailsLoaded.value = false
-    await fetchTemplates({ force: true })
-    return result
+    const mutationSession = sessionGeneration
+    const detail = await createTemplateFromTraining(trainingId, name)
+    commitWrite(detail, mutationSession)
+    return detail
   }
 
   async function saveFromPlan(name: string, items: UpsertTemplateItemRequest[]) {
-    const result = await createTemplate({ name, items })
-    detailCache.value = {}
-    detailsLoaded.value = false
-    await fetchTemplates({ force: true })
-    return result
+    return save({ name, items })
   }
 
   async function createDefaultTemplate() {
@@ -291,7 +327,7 @@ export const useTemplateStore = defineStore('template', () => {
     if (!sourceItems.length) {
       throw new Error('动作库为空，无法新建模板')
     }
-    await createTemplate({
+    return save({
       name: `新模板 ${new Date().toLocaleTimeString()}`,
       items: sourceItems.map((item) => ({
         exerciseId: item.id,
@@ -301,7 +337,6 @@ export const useTemplateStore = defineStore('template', () => {
         targetDurationSeconds: item.recordType === 'DURATION' ? 60 : undefined
       }))
     })
-    await fetchTemplates({ force: true })
   }
 
   return {
@@ -318,6 +353,7 @@ export const useTemplateStore = defineStore('template', () => {
     markUsed,
     getById,
     getDetail,
+    save,
     rename,
     remove,
     duplicate,

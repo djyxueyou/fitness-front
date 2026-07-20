@@ -56,10 +56,6 @@ export interface UpsertTemplateRequest {
   items: UpsertTemplateItemRequest[]
 }
 
-export interface UpsertTemplateResponse {
-  id: number
-}
-
 export function fetchTemplateList() {
   return request<TemplateListItemResponse[]>({
     url: '/api/templates',
@@ -75,7 +71,7 @@ export function fetchTemplateDetail(id: number) {
 }
 
 export function createTemplate(payload: UpsertTemplateRequest) {
-  return request<UpsertTemplateResponse>({
+  return request<TemplateDetailResponse>({
     url: '/api/templates',
     method: 'POST',
     data: payload,
@@ -84,7 +80,7 @@ export function createTemplate(payload: UpsertTemplateRequest) {
 }
 
 export function updateTemplate(id: number, payload: UpsertTemplateRequest) {
-  return request<UpsertTemplateResponse>({
+  return request<TemplateDetailResponse>({
     url: `/api/templates/${id}`,
     method: 'PUT',
     data: payload,
@@ -101,7 +97,7 @@ export function deleteTemplate(id: number) {
 }
 
 export function copyTemplate(id: number) {
-  return request<UpsertTemplateResponse>({
+  return request<TemplateDetailResponse>({
     url: `/api/templates/${id}/copy`,
     method: 'POST',
     timeoutMs: 30000
@@ -110,7 +106,7 @@ export function copyTemplate(id: number) {
 
 export function createTemplateFromTraining(trainingId: number, name?: string) {
   const encodedName = name ? `?name=${encodeURIComponent(name)}` : ''
-  return request<UpsertTemplateResponse>({
+  return request<TemplateDetailResponse>({
     url: `/api/templates/from-training/${trainingId}${encodedName}`,
     method: 'POST',
     timeoutMs: 30000

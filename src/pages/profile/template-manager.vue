@@ -6,7 +6,7 @@ import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import TemplateCover from '@/components/template-cover/index.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
-import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { ensureMembershipFeature, handleMembershipRequiredError } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import { useThemeStore } from '@/stores/theme'
@@ -80,6 +80,7 @@ async function saveRename() {
     cancelRename()
     uni.showToast({ title: '已重命名', icon: 'none' })
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义模板', 'custom_template')) return
     uni.showToast({ title: '重命名失败', icon: 'none' })
     console.error('[template] rename failed', err)
   } finally {
@@ -95,6 +96,7 @@ async function duplicateTemplate(id: number) {
     await templateStore.duplicate(id)
     uni.showToast({ title: '已复制到我的模板', icon: 'none' })
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义模板', 'custom_template')) return
     uni.showToast({ title: '复制失败', icon: 'none' })
     console.error('[template] duplicate failed', err)
   } finally {
@@ -186,13 +188,19 @@ function handleTemplateAction(action: ActionSheetItem) {
             class="template-manager__item"
           >
             <template v-if="editingId === item.id">
-              <input v-model="editName" class="template-manager__input" focus />
+              <input
+                v-model="editName"
+                class="template-manager__input"
+                focus
+                maxlength="30"
+                :disabled="saving"
+              />
               <view class="template-manager__rename-actions">
                 <view
                   class="template-manager__small-btn template-manager__small-btn--primary"
                   @tap="saveRename"
                 >
-                  保存
+                  {{ saving ? '保存中…' : '保存' }}
                 </view>
                 <view class="template-manager__small-btn" @tap="cancelRename">取消</view>
               </view>
@@ -508,11 +516,20 @@ function handleTemplateAction(action: ActionSheetItem) {
   }
 
   &__input {
-    min-height: 78rpx;
-    color: #f5f5fa;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 84rpx;
+    padding: 0 22rpx;
+    border: 1rpx solid var(--app-border-strong);
+    border-radius: 20rpx;
+    background: var(--app-surface-subtle);
+    color: var(--app-text);
     font-size: 30rpx;
     font-weight: 800;
-    border-bottom: 1px solid rgba(255, 80, 30, 0.6);
+  }
+
+  &__input:focus {
+    border-color: var(--app-accent);
   }
 
   &__empty {

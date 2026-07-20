@@ -6,16 +6,11 @@ import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
 import ExercisePicker from '@/components/exercise-picker/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
 import RestSecondsSheet from '@/components/rest-seconds-sheet/index.vue'
-import {
-  createTemplate,
-  updateTemplate,
-  type TemplateDetailResponse,
-  type UpsertTemplateItemRequest
-} from '@/api/template'
+import type { TemplateDetailResponse, UpsertTemplateItemRequest } from '@/api/template'
 import type { ExerciseSummary } from '@/api/exercise'
 import { fetchExerciseLastPerformance } from '@/api/training'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
-import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { ensureMembershipFeature, handleMembershipRequiredError } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import { useProfileStore } from '@/stores/profile'
@@ -147,15 +142,11 @@ async function saveTemplate() {
 
   try {
     if (!(await ensureMembershipFeature('自定义模板'))) return
-    if (templateId.value) {
-      await updateTemplate(templateId.value, payload)
-    } else {
-      await createTemplate(payload)
-    }
-    await templateStore.fetchTemplates()
+    await templateStore.save(payload, templateId.value || undefined)
     uni.showToast({ title: '模板已保存', icon: 'none' })
     uni.navigateBack()
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义模板', 'custom_template')) return
     uni.showToast({ title: '保存失败', icon: 'none' })
     console.error('[template-edit] save failed', err)
   } finally {
