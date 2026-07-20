@@ -66,7 +66,7 @@ describe('free plan entitlement contract', () => {
       ],
       [
         'src/pages/plan/active.vue',
-        /catch \(err\) \{\s*showPlanWriteError\(err, '计划保存失败，请重试'\)/
+        /catch \(err\) \{\s*showPlanWriteError\(err, '保存到我的计划失败，请重试'\)/
       ]
     ]
 
@@ -111,16 +111,19 @@ describe('free plan entitlement contract', () => {
 
   it('hydrates and resets the server-owned saved execution state', () => {
     const apiSource = readSource('src/api/plan.ts')
+    const storeSource = readSource('src/stores/plan.ts')
     const activeSource = readSource('src/pages/plan/active.vue')
 
     expect(apiSource).toMatch(
       /export interface ActiveExecutionResponse \{[\s\S]*?savedDefinitionId\?: number \| null[\s\S]*?\n\}/
     )
     expect(activeSource).toContain(
-      'savedDefinitionId.value = activeExecution.savedDefinitionId ?? null'
+      'const savedDefinitionId = computed(() => execution.value?.savedDefinitionId ?? null)'
     )
-    expect(activeSource).toContain('savedDefinitionId.value = null')
     expect(activeSource).toContain('!savedDefinitionId.value')
+    expect(storeSource).toMatch(
+      /if \(activeExecution\.value\?\.executionId === executionId\) \{[\s\S]*?savedDefinitionId: detail\.id/
+    )
   })
 
   it('keeps plan deletion available without a membership pre-check', () => {

@@ -149,6 +149,8 @@ function summaryStatusText(status?: string) {
 onShow(async () => {
   const requestedView = trainingHubStore.consumeRequestedView()
   if (requestedView) trainingHubStore.setActiveView(requestedView)
+  const requestedPlanTab = trainingHubStore.consumeRequestedPlanTab()
+  if (requestedPlanTab) activeTab.value = requestedPlanTab
   if (trainingHubStore.activeView !== 'plan') return
   await loadPlanView()
 })
@@ -384,10 +386,9 @@ function openPlanActions(item: TrainingPlanListItemResponse) {
           ...(item.active
             ? [
                 {
-                  key: 'deactivate',
-                  label: '停用计划',
-                  description: '首页不再按此计划推荐训练，历史训练记录会保留。',
-                  danger: true
+                  key: 'manage-active',
+                  label: '管理当前计划',
+                  description: '前往当前安排保存副本或停用计划。'
                 }
               ]
             : []),
@@ -439,10 +440,8 @@ async function handlePlanAction(item: ActionSheetItem) {
     uni.navigateTo({ url: `${routes.planDayEdit}?id=${target.id}` })
     return
   }
-  if (item.key === 'deactivate') {
-    await planStore.deactivateActive()
-    activePlanSummary.value = null
-    uni.showToast({ title: '已停用计划', icon: 'none' })
+  if (item.key === 'manage-active') {
+    uni.navigateTo({ url: routes.planActive })
     return
   }
   if (item.key === 'delete') {
@@ -663,8 +662,17 @@ async function openDraftFab() {
         </view>
 
         <view v-else class="plan-page__list">
-          <view v-if="!visiblePlans.length" class="glass-card plan-page__empty">
-            还没有我的计划。可以先从系统计划生成一套安排。
+          <EmptyState
+            v-if="!visiblePlans.length && activeTab === 'mine'"
+            icon="+"
+            title="还没有我的计划"
+            description="可以先从系统计划生成一套安排。"
+            action-text="浏览系统计划"
+            @action="focusPlanList"
+          />
+
+          <view v-else-if="!visiblePlans.length" class="glass-card plan-page__empty">
+            暂无符合筛选条件的系统计划。
           </view>
 
           <view

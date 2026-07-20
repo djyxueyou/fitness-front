@@ -12,27 +12,27 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { planExerciseThumbnail } from '@/utils/plan-exercise-thumbnail'
 import type {
-  RecommendedPlanIntroResponse,
-  RecommendedPlanPersonalizationRequest,
-  RecommendedPlanPreviewResponse
+  SystemPlanDetailResponse,
+  SystemPlanCustomizationRequest,
+  SystemPlanPreviewResponse
 } from '@/api/plan'
 
 const planStore = usePlanStore()
 const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
-const intro = ref<RecommendedPlanIntroResponse | null>(null)
-const preview = ref<RecommendedPlanPreviewResponse | null>(null)
+const intro = ref<SystemPlanDetailResponse | null>(null)
+const preview = ref<SystemPlanPreviewResponse | null>(null)
 const loading = ref(false)
 const activating = ref(false)
 const selectedWeek = ref(1)
-const payload = ref<RecommendedPlanPersonalizationRequest>({
+const payload = ref<SystemPlanCustomizationRequest>({
   weeklyFrequency: 3,
   unavailableBodyParts: ['NONE'],
   equipment: 'GYM',
   durationMinutes: 35,
   restSecondsByExerciseId: {}
 })
-type PreviewItem = RecommendedPlanPreviewResponse['days'][number]['items'][number]
+type PreviewItem = SystemPlanPreviewResponse['days'][number]['items'][number]
 const restEditorItem = ref<{ item: PreviewItem; dayOfWeek: number } | null>(null)
 
 const previewWeeks = computed(() => {
@@ -41,10 +41,7 @@ const previewWeeks = computed(() => {
 })
 const visibleDays = computed(() => {
   if (!preview.value) return []
-  return preview.value.days.map((day) => ({
-    ...day,
-    weekIndex: selectedWeek.value
-  }))
+  return preview.value.days.filter((day) => day.weekIndex === selectedWeek.value)
 })
 const summaryText = computed(() => {
   if (!intro.value) return ''
@@ -79,8 +76,8 @@ async function loadPreview() {
   loading.value = true
   try {
     const [introResult, previewResult] = await Promise.all([
-      planStore.getRecommendedIntro(planId.value),
-      planStore.previewRecommended(planId.value, payload.value)
+      planStore.getSystemPlanDetail(planId.value),
+      planStore.previewSystem(planId.value, payload.value)
     ])
     intro.value = introResult
     preview.value = previewResult
@@ -97,12 +94,12 @@ async function activate() {
   if (!planId.value || activating.value) return
   activating.value = true
   try {
-    await planStore.activateRecommended(planId.value, payload.value)
+    await planStore.activateSystem(planId.value, payload.value)
     uni.showToast({ title: '已启用计划', icon: 'none' })
     uni.redirectTo({ url: routes.planActive })
   } catch (err) {
     uni.showToast({ title: '启用失败', icon: 'none' })
-    console.error('[plan] activate recommended failed', err)
+    console.error('[plan] activate system plan failed', err)
   } finally {
     activating.value = false
   }
@@ -126,7 +123,7 @@ function weekdayLabel(value: number) {
   return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][value % 7] || `周${value}`
 }
 
-function itemTarget(item: RecommendedPlanPreviewResponse['days'][number]['items'][number]) {
+function itemTarget(item: SystemPlanPreviewResponse['days'][number]['items'][number]) {
   const sets = item.targetSets || 1
   if (item.targetDurationSeconds) return `${sets} 组 · ${item.targetDurationSeconds} 秒`
   if (item.targetWeightKg != null && item.targetReps) {
@@ -169,9 +166,9 @@ function confirmItemRest(result: { restSeconds: number; scope: 'CURRENT' | 'ALL_
   restEditorItem.value = null
 }
 
-function normalizeEquipment(value: string): RecommendedPlanPersonalizationRequest['equipment'] {
-  if (['GYM', 'DUMBBELL', 'BODYWEIGHT', 'UNKNOWN'].includes(value)) {
-    return value as RecommendedPlanPersonalizationRequest['equipment']
+function normalizeEquipment(value: string): SystemPlanCustomizationRequest['equipment'] {
+  if (['GYM', 'DUMBBELL', 'BODYWEIGHT'].includes(value)) {
+    return value as SystemPlanCustomizationRequest['equipment']
   }
   return 'GYM'
 }
@@ -193,7 +190,7 @@ function goBack() {
       :class="themeStore.themeClass"
     >
       <AppHeader
-        title="计划预览"
+        title="安排预览"
         :subtitle="summaryText || '查看动作后启用'"
         show-back
         @back="goBack"
@@ -215,7 +212,7 @@ function goBack() {
               {{ preview?.replacementSummary || summaryText }}
             </view>
           </view>
-          <view class="customize-preview__change btn-press" @tap="regenerate">重新生成</view>
+          <view class="customize-preview__change btn-press" @tap="regenerate">调整设置</view>
         </view>
 
         <view v-if="loading" class="customize-preview__state">正在生成动作安排...</view>
@@ -242,9 +239,11 @@ function goBack() {
             >
               <view class="customize-preview__day-head">
                 <view>
-                  <view class="customize-preview__day-title">
-                    第 {{ day.weekIndex }} 周 · {{ weekdayLabel(day.dayOfWeek) }} · {{ day.title }}
+                  <view class="customize-preview__day-schedule">
+                    {{ weekdayLabel(day.dayOfWeek) }} ·
+                    {{ day.phaseLabel || `第 ${day.weekIndex} 周` }}
                   </view>
+                  <view class="customize-preview__day-title">{{ day.title }}</view>
                   <view class="customize-preview__day-sub">
                     {{ day.items.length }} 个动作 · 预计 {{ payload.durationMinutes }} 分钟
                   </view>
@@ -326,6 +325,7 @@ function goBack() {
 
   &__eyebrow,
   &__sub,
+  &__day-schedule,
   &__day-sub,
   &__item-reason,
   &__state,
@@ -413,6 +413,7 @@ function goBack() {
   }
 
   &__day-title {
+    margin-top: 6rpx;
     color: var(--app-text);
     font-size: 28rpx;
     font-weight: 950;

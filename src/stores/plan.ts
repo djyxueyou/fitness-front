@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
-  activateRecommendedPlan,
+  activateSystemPlan,
   activateTrainingPlan,
   copyTrainingPlan,
   createTrainingPlan,
@@ -11,12 +11,13 @@ import {
   deleteTrainingPlanDay,
   fetchActivePlanExecution,
   fetchActiveTrainingPlanSummary,
-  fetchRecommendedPlanIntro,
-  fetchRecommendedPlans,
+  fetchSystemPlanDetail,
+  fetchSystemPlans,
   fetchTodayPlanRecommendation,
   fetchTrainingPlanDetail,
   fetchTrainingPlans,
-  previewRecommendedPlan,
+  previewSystemPlan,
+  savePlanExecutionAsMyPlan,
   updateTrainingPlan,
   updateTrainingPlanDay,
   type ActiveExecutionResponse,
@@ -24,10 +25,10 @@ import {
   type CreateTrainingPlanDayRequest,
   type CreateTrainingPlanRequest,
   type PlanRecommendationResponse,
-  type RecommendedPlanIntroResponse,
-  type RecommendedPlanListItemResponse,
-  type RecommendedPlanPersonalizationRequest,
-  type RecommendedPlanPreviewResponse,
+  type SystemPlanDetailResponse,
+  type SystemPlanListItemResponse,
+  type SystemPlanCustomizationRequest,
+  type SystemPlanPreviewResponse,
   type TrainingPlanDetailResponse,
   type TrainingPlanListItemResponse,
   type UpdateTrainingPlanDayRequest,
@@ -38,9 +39,9 @@ const PLAN_CACHE_MS = 30000
 
 export const usePlanStore = defineStore('plan', () => {
   const items = ref<TrainingPlanListItemResponse[]>([])
-  const recommendedPlans = ref<RecommendedPlanListItemResponse[]>([])
+  const systemPlans = ref<SystemPlanListItemResponse[]>([])
   const detailCache = ref<Record<number, TrainingPlanDetailResponse>>({})
-  const recommendedIntroCache = ref<Record<number, RecommendedPlanIntroResponse>>({})
+  const systemPlanDetailCache = ref<Record<number, SystemPlanDetailResponse>>({})
   const activeExecution = ref<ActiveExecutionResponse | null>(null)
   const currentPlanSummary = ref<ActivePlanSummaryResponse | null>(null)
   const recommendation = ref<PlanRecommendationResponse | null>(null)
@@ -48,73 +49,119 @@ export const usePlanStore = defineStore('plan', () => {
   const loadedAt = ref(0)
   const listError = ref('')
   let fetchPromise: Promise<void> | null = null
-  let recommendedFetchPromise: Promise<void> | null = null
+  let systemPlanFetchPromise: Promise<void> | null = null
+  let currentPlanPromise: Promise<void> | null = null
+  let recommendationPromise: Promise<void> | null = null
+  let stateEpoch = 0
+  let planListRequestEpoch = 0
+  let systemPlanRequestEpoch = 0
+  let currentPlanRequestEpoch = 0
+  let recommendationRequestEpoch = 0
+  let planListLoadingOwner: symbol | null = null
+  let systemPlanLoadingOwner: symbol | null = null
 
-  const systemPlans = computed(() => items.value.filter((item) => item.planType === 'SYSTEM'))
-  const userPlans = computed(() => items.value.filter((item) => item.planType !== 'SYSTEM'))
+  const userPlans = computed(() => items.value)
   const activePlan = computed(() => items.value.find((item) => item.active) || null)
   const hasCurrentPlan = computed(() => Boolean(currentPlanSummary.value))
+
+  function syncLoading() {
+    loading.value = Boolean(planListLoadingOwner || systemPlanLoadingOwner)
+  }
+
+  function invalidatePendingRequests() {
+    stateEpoch += 1
+    planListRequestEpoch += 1
+    systemPlanRequestEpoch += 1
+    currentPlanRequestEpoch += 1
+    recommendationRequestEpoch += 1
+    fetchPromise = null
+    systemPlanFetchPromise = null
+    currentPlanPromise = null
+    recommendationPromise = null
+    planListLoadingOwner = null
+    systemPlanLoadingOwner = null
+    syncLoading()
+  }
 
   async function fetchPlans(options?: { force?: boolean }) {
     const cacheUsable =
       !options?.force && items.value.length > 0 && Date.now() - loadedAt.value < PLAN_CACHE_MS
     if (cacheUsable) return
-    if (fetchPromise) {
+    if (!options?.force && fetchPromise) {
       await fetchPromise
       return
     }
 
-    loading.value = true
+    const requestEpoch = ++planListRequestEpoch
+    const catalogEpoch = ++systemPlanRequestEpoch
+    const requestStateEpoch = stateEpoch
+    const loadingOwner = Symbol('plan-list-request')
+    planListLoadingOwner = loadingOwner
+    syncLoading()
     listError.value = ''
-    fetchPromise = (async () => {
-      const [recommended, legacyPlans] = await Promise.all([
-        fetchRecommendedPlans(),
-        fetchTrainingPlans('all')
+    const request = (async () => {
+      const [catalogPlans, savedPlans] = await Promise.all([
+        fetchSystemPlans(),
+        fetchTrainingPlans()
       ])
-      recommendedPlans.value = recommended
-      items.value = legacyPlans
+      if (requestStateEpoch !== stateEpoch || requestEpoch !== planListRequestEpoch) return
+      if (catalogEpoch === systemPlanRequestEpoch) systemPlans.value = catalogPlans
+      items.value = savedPlans
       loadedAt.value = Date.now()
     })()
+    fetchPromise = request
 
     try {
-      await fetchPromise
+      await request
     } catch (err) {
-      listError.value = '训练计划加载失败，请稍后重试'
+      if (requestStateEpoch === stateEpoch && requestEpoch === planListRequestEpoch) {
+        listError.value = '训练计划加载失败，请稍后重试'
+      }
       console.error('[plan] fetch plans failed', err)
     } finally {
-      fetchPromise = null
-      loading.value = false
+      if (fetchPromise === request) fetchPromise = null
+      if (planListLoadingOwner === loadingOwner) planListLoadingOwner = null
+      syncLoading()
     }
   }
 
-  async function fetchRecommendedPlanList(options?: { force?: boolean }) {
+  async function fetchSystemPlanList(options?: { force?: boolean }) {
     const cacheUsable =
-      !options?.force &&
-      recommendedPlans.value.length > 0 &&
-      Date.now() - loadedAt.value < PLAN_CACHE_MS
+      !options?.force && systemPlans.value.length > 0 && Date.now() - loadedAt.value < PLAN_CACHE_MS
     if (cacheUsable) return
-    if (recommendedFetchPromise) {
-      await recommendedFetchPromise
+    if (!options?.force && systemPlanFetchPromise) {
+      await systemPlanFetchPromise
       return
     }
 
-    loading.value = true
+    const requestEpoch = ++systemPlanRequestEpoch
+    const requestStateEpoch = stateEpoch
+    const loadingOwner = Symbol('system-plan-request')
+    systemPlanLoadingOwner = loadingOwner
+    syncLoading()
     listError.value = ''
-    recommendedFetchPromise = fetchRecommendedPlans()
-      .then((recommended) => {
-        recommendedPlans.value = recommended
+    const request = (async () => {
+      try {
+        const catalogPlans = await fetchSystemPlans()
+        if (requestStateEpoch !== stateEpoch || requestEpoch !== systemPlanRequestEpoch) return
+        systemPlans.value = catalogPlans
         loadedAt.value = Date.now()
-      })
-      .catch((err) => {
-        listError.value = '训练计划加载失败，请稍后重试'
-        console.error('[plan] recommended plans fetch failed', err)
-      })
-      .finally(() => {
-        recommendedFetchPromise = null
-        loading.value = false
-      })
+      } catch (err) {
+        if (requestStateEpoch === stateEpoch && requestEpoch === systemPlanRequestEpoch) {
+          listError.value = '训练计划加载失败，请稍后重试'
+        }
+        console.error('[plan] system plans fetch failed', err)
+      }
+    })()
+    systemPlanFetchPromise = request
 
-    await recommendedFetchPromise
+    try {
+      await request
+    } finally {
+      if (systemPlanFetchPromise === request) systemPlanFetchPromise = null
+      if (systemPlanLoadingOwner === loadingOwner) systemPlanLoadingOwner = null
+      syncLoading()
+    }
   }
 
   async function getDetail(id: number, force = false) {
@@ -127,47 +174,65 @@ export const usePlanStore = defineStore('plan', () => {
     return detail
   }
 
-  async function getRecommendedIntro(id: number, force = false) {
-    if (!force && recommendedIntroCache.value[id]) return recommendedIntroCache.value[id]
-    const intro = await fetchRecommendedPlanIntro(id)
-    recommendedIntroCache.value = {
-      ...recommendedIntroCache.value,
+  async function getSystemPlanDetail(id: number, force = false) {
+    if (!force && systemPlanDetailCache.value[id]) return systemPlanDetailCache.value[id]
+    const intro = await fetchSystemPlanDetail(id)
+    systemPlanDetailCache.value = {
+      ...systemPlanDetailCache.value,
       [id]: intro
     }
     return intro
   }
 
-  async function previewRecommended(
+  async function previewSystem(
     id: number,
-    payload: RecommendedPlanPersonalizationRequest
-  ): Promise<RecommendedPlanPreviewResponse> {
-    return previewRecommendedPlan(id, payload)
+    payload: SystemPlanCustomizationRequest
+  ): Promise<SystemPlanPreviewResponse> {
+    return previewSystemPlan(id, payload)
   }
 
-  async function activateRecommended(
+  async function activateSystem(
     id: number,
-    payload: RecommendedPlanPersonalizationRequest
+    payload: SystemPlanCustomizationRequest
   ): Promise<ActivePlanSummaryResponse> {
-    const summary = await activateRecommendedPlan(id, payload)
+    const summary = await activateSystemPlan(id, payload)
+    invalidatePendingRequests()
     currentPlanSummary.value = summary
-    await loadCurrentPlan()
+    await loadCurrentPlan({ force: true })
     await fetchPlans({ force: true })
-    await loadRecommendation()
+    await loadRecommendation({ force: true })
     return summary
   }
 
-  async function loadCurrentPlan() {
-    try {
+  async function loadCurrentPlan(options?: { force?: boolean }) {
+    if (!options?.force && currentPlanPromise) {
+      await currentPlanPromise
+      return currentPlanSummary.value
+    }
+
+    const requestEpoch = ++currentPlanRequestEpoch
+    const requestStateEpoch = stateEpoch
+    const request = (async () => {
       const [summary, execution] = await Promise.all([
         fetchActiveTrainingPlanSummary(),
         fetchActivePlanExecution()
       ])
+      if (requestStateEpoch !== stateEpoch || requestEpoch !== currentPlanRequestEpoch) return
       currentPlanSummary.value = summary
       activeExecution.value = execution && 'executionId' in execution ? execution : null
+    })()
+    currentPlanPromise = request
+
+    try {
+      await request
     } catch (err) {
-      currentPlanSummary.value = null
-      activeExecution.value = null
+      if (requestStateEpoch === stateEpoch && requestEpoch === currentPlanRequestEpoch) {
+        currentPlanSummary.value = null
+        activeExecution.value = null
+      }
       console.error('[plan] current plan fetch failed', err)
+    } finally {
+      if (currentPlanPromise === request) currentPlanPromise = null
     }
     return currentPlanSummary.value
   }
@@ -179,6 +244,7 @@ export const usePlanStore = defineStore('plan', () => {
 
   async function activate(id: number, mode: 'THIS_WEEK' | 'NEXT_WEEK' = 'THIS_WEEK') {
     await activateTrainingPlan(id, mode)
+    invalidatePendingRequests()
     await fetchPlans({ force: true })
     const cached = detailCache.value[id]
     if (cached) {
@@ -187,8 +253,8 @@ export const usePlanStore = defineStore('plan', () => {
         [id]: { ...cached, active: true }
       }
     }
-    await loadCurrentPlan()
-    await loadRecommendation()
+    await loadCurrentPlan({ force: true })
+    await loadRecommendation({ force: true })
   }
 
   async function createPlan(payload: CreateTrainingPlanRequest) {
@@ -200,13 +266,30 @@ export const usePlanStore = defineStore('plan', () => {
 
   async function deactivateActive() {
     await deactivateActiveTrainingPlan()
+    invalidatePendingRequests()
     activeExecution.value = null
     currentPlanSummary.value = null
+    recommendation.value = null
+    items.value = items.value.map((item) => ({ ...item, active: false }))
     detailCache.value = Object.fromEntries(
       Object.entries(detailCache.value).map(([id, detail]) => [id, { ...detail, active: false }])
     )
     await fetchPlans({ force: true })
-    await loadRecommendation()
+    await loadRecommendation({ force: true })
+  }
+
+  async function saveActiveToMyPlans(executionId: number) {
+    const detail = await savePlanExecutionAsMyPlan(executionId)
+    invalidatePendingRequests()
+    if (activeExecution.value?.executionId === executionId) {
+      activeExecution.value = {
+        ...activeExecution.value,
+        savedDefinitionId: detail.id
+      }
+    }
+    detailCache.value = { ...detailCache.value, [detail.id]: detail }
+    await fetchPlans({ force: true })
+    return detail
   }
 
   async function duplicate(id: number) {
@@ -226,7 +309,7 @@ export const usePlanStore = defineStore('plan', () => {
       [id]: detail
     }
     await fetchPlans({ force: true })
-    await loadRecommendation()
+    await loadRecommendation({ force: true })
     return detail
   }
 
@@ -236,7 +319,7 @@ export const usePlanStore = defineStore('plan', () => {
     delete nextCache[id]
     detailCache.value = nextCache
     await fetchPlans({ force: true })
-    await loadRecommendation()
+    await loadRecommendation({ force: true })
   }
 
   async function createDay(id: number, payload: CreateTrainingPlanDayRequest) {
@@ -245,7 +328,7 @@ export const usePlanStore = defineStore('plan', () => {
       ...detailCache.value,
       [id]: detail
     }
-    await loadRecommendation()
+    await loadRecommendation({ force: true })
     return detail
   }
 
@@ -255,7 +338,7 @@ export const usePlanStore = defineStore('plan', () => {
       ...detailCache.value,
       [id]: detail
     }
-    await loadRecommendation()
+    await loadRecommendation({ force: true })
     return detail
   }
 
@@ -265,20 +348,39 @@ export const usePlanStore = defineStore('plan', () => {
       ...detailCache.value,
       [id]: detail
     }
-    await loadRecommendation()
+    await loadRecommendation({ force: true })
     return detail
   }
 
-  async function loadRecommendation() {
+  async function loadRecommendation(options?: { force?: boolean }) {
+    if (!options?.force && recommendationPromise) {
+      await recommendationPromise
+      return
+    }
+
+    const requestEpoch = ++recommendationRequestEpoch
+    const requestStateEpoch = stateEpoch
+    const request = (async () => {
+      const nextRecommendation = await fetchTodayPlanRecommendation()
+      if (requestStateEpoch !== stateEpoch || requestEpoch !== recommendationRequestEpoch) return
+      recommendation.value = nextRecommendation
+    })()
+    recommendationPromise = request
+
     try {
-      recommendation.value = await fetchTodayPlanRecommendation()
+      await request
     } catch (err) {
-      recommendation.value = null
+      if (requestStateEpoch === stateEpoch && requestEpoch === recommendationRequestEpoch) {
+        recommendation.value = null
+      }
       console.error('[plan] recommendation fetch failed', err)
+    } finally {
+      if (recommendationPromise === request) recommendationPromise = null
     }
   }
 
   function clearPersonalPlanState() {
+    invalidatePendingRequests()
     items.value = []
     activeExecution.value = null
     currentPlanSummary.value = null
@@ -287,7 +389,6 @@ export const usePlanStore = defineStore('plan', () => {
 
   return {
     items,
-    recommendedPlans,
     systemPlans,
     userPlans,
     activePlan,
@@ -298,15 +399,16 @@ export const usePlanStore = defineStore('plan', () => {
     loading,
     listError,
     fetchPlans,
-    fetchRecommendedPlanList,
+    fetchSystemPlanList,
     getDetail,
-    getRecommendedIntro,
-    previewRecommended,
-    activateRecommended,
+    getSystemPlanDetail,
+    previewSystem,
+    activateSystem,
     loadCurrentPlan,
     loadActiveExecution,
     activate,
     createPlan,
+    saveActiveToMyPlans,
     deactivateActive,
     duplicate,
     updatePlan,

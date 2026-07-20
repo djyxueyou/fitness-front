@@ -8,22 +8,30 @@ import { usePlanStore } from '@/stores/plan'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
-import type {
-  RecommendedPlanIntroResponse,
-  RecommendedPlanPersonalizationRequest
-} from '@/api/plan'
+import type { SystemPlanDetailResponse, SystemPlanCustomizationRequest } from '@/api/plan'
 
 const planStore = usePlanStore()
 const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
-const intro = ref<RecommendedPlanIntroResponse | null>(null)
+const detail = ref<SystemPlanDetailResponse | null>(null)
 const loading = ref(false)
 const weeklyFrequency = ref(3)
 const unavailableBodyParts = ref<string[]>(['NONE'])
-const equipment = ref<RecommendedPlanPersonalizationRequest['equipment']>('GYM')
+const equipment = ref<SystemPlanCustomizationRequest['equipment']>('GYM')
 const durationMinutes = ref<20 | 35 | 50>(35)
 
-const frequencyOptions = [2, 3, 4, 5]
+const frequencyOptions = computed(() => {
+  if (!detail.value) return []
+  const values: number[] = []
+  for (
+    let value = detail.value.minWeeklyFrequency;
+    value <= detail.value.maxWeeklyFrequency;
+    value += 1
+  ) {
+    values.push(value)
+  }
+  return values
+})
 const bodyPartOptions = [
   { label: '无不适', value: 'NONE' },
   { label: '肩', value: 'SHOULDER' },
@@ -31,17 +39,19 @@ const bodyPartOptions = [
   { label: '膝', value: 'KNEE' },
   { label: '腕', value: 'WRIST' }
 ]
-const equipmentOptions: Array<{
-  label: string
-  value: RecommendedPlanPersonalizationRequest['equipment']
-}> = [
-  { label: '健身房', value: 'GYM' },
-  { label: '哑铃', value: 'DUMBBELL' },
-  { label: '徒手', value: 'BODYWEIGHT' },
-  { label: '先不确定', value: 'UNKNOWN' }
-]
-const durationOptions: Array<20 | 35 | 50> = [20, 35, 50]
-const payload = computed<RecommendedPlanPersonalizationRequest>(() => ({
+const equipmentLabels: Record<SystemPlanCustomizationRequest['equipment'], string> = {
+  GYM: '健身房',
+  DUMBBELL: '哑铃',
+  BODYWEIGHT: '徒手'
+}
+const equipmentOptions = computed(() =>
+  (detail.value?.supportedEquipment || []).map((value) => ({
+    label: equipmentLabels[value],
+    value
+  }))
+)
+const durationOptions = computed(() => detail.value?.supportedDurations || [])
+const payload = computed<SystemPlanCustomizationRequest>(() => ({
   weeklyFrequency: weeklyFrequency.value,
   unavailableBodyParts: unavailableBodyParts.value,
   equipment: equipment.value,
@@ -62,17 +72,16 @@ onShow(async () => {
 })
 
 async function loadIntro() {
-  if (!planId.value || intro.value || loading.value) return
+  if (!planId.value || detail.value || loading.value) return
   loading.value = true
   try {
-    intro.value = await planStore.getRecommendedIntro(planId.value)
-    weeklyFrequency.value = Math.min(
-      intro.value.maxWeeklyFrequency,
-      Math.max(intro.value.minWeeklyFrequency, weeklyFrequency.value)
-    )
+    detail.value = await planStore.getSystemPlanDetail(planId.value)
+    weeklyFrequency.value = detail.value.defaultWeeklyFrequency
+    equipment.value = detail.value.defaultEquipment
+    durationMinutes.value = detail.value.defaultDurationMinutes
   } catch (err) {
     uni.showToast({ title: '计划加载失败', icon: 'none' })
-    console.error('[plan] recommended intro failed', err)
+    console.error('[plan] system plan detail failed', err)
   } finally {
     loading.value = false
   }
@@ -93,7 +102,7 @@ function setWeeklyFrequency(value: number) {
   weeklyFrequency.value = value
 }
 
-function setEquipment(value: RecommendedPlanPersonalizationRequest['equipment']) {
+function setEquipment(value: SystemPlanCustomizationRequest['equipment']) {
   equipment.value = value
 }
 
@@ -128,13 +137,18 @@ function goBack() {
       class="page-shell secondary-page plan-customize safe-bottom"
       :class="themeStore.themeClass"
     >
-      <AppHeader title="定制计划" :subtitle="intro?.name || '推荐计划'" show-back @back="goBack" />
+      <AppHeader
+        title="设置训练安排"
+        :subtitle="detail?.name || '系统计划'"
+        show-back
+        @back="goBack"
+      />
 
       <EmptyState
-        v-if="!loading && !intro"
+        v-if="!loading && !detail"
         icon="!"
         title="计划不可用"
-        description="请返回后重新选择推荐计划。"
+        description="请返回后重新选择系统计划。"
       />
 
       <template v-else>
@@ -154,7 +168,7 @@ function goBack() {
         </view>
 
         <view class="glass-card plan-customize__panel">
-          <view class="plan-customize__label">暂时不适合练</view>
+          <view class="plan-customize__label">需要避开的部位</view>
           <view class="plan-customize__chips">
             <view
               v-for="item in bodyPartOptions"
@@ -205,7 +219,7 @@ function goBack() {
           </view>
         </view>
 
-        <PrimaryButton class="plan-customize__submit" @tap="generatePlan">生成计划</PrimaryButton>
+        <PrimaryButton class="plan-customize__submit" @tap="generatePlan">预览安排</PrimaryButton>
       </template>
     </view>
   </scroll-view>

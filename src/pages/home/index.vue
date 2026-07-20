@@ -347,6 +347,7 @@ async function startFreeWorkout() {
 async function goPlans() {
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) return
+  trainingHubStore.requestPlanTab(planStore.userPlans.length ? 'mine' : 'system')
   uni.switchTab({ url: routes.planIndex })
 }
 
@@ -357,6 +358,7 @@ async function viewCurrentPlan() {
     uni.navigateTo({ url: routes.planActive })
     return
   }
+  trainingHubStore.requestPlanTab(planStore.userPlans.length ? 'mine' : 'system')
   uni.switchTab({ url: routes.planIndex })
 }
 

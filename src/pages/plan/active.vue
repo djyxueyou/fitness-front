@@ -16,12 +16,21 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { planExerciseThumbnail } from '@/utils/plan-exercise-thumbnail'
 import { showPlanWriteError } from '@/utils/plan-write-feedback'
+import { emitTrainingChanged } from '@/utils/training-events'
 import { usePlanStore } from '@/stores/plan'
+import { useTrainingHubStore } from '@/stores/training-hub'
 import { useThemeStore } from '@/stores/theme'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 
 type ScheduleSource = 'PLAN_EXECUTION'
+
+interface ActionSheetItem {
+  key: string
+  label: string
+  description?: string
+  danger?: boolean
+}
 
 interface ScheduleDay {
   source: ScheduleSource
@@ -56,12 +65,15 @@ interface PreviewItem {
 }
 
 const planStore = usePlanStore()
+const trainingHubStore = useTrainingHubStore()
 const themeStore = useThemeStore()
 const workoutStore = useWorkoutStore()
 const skipConfirmVisible = ref(false)
 const skipSubmitting = ref(false)
 const savingToMyPlans = ref(false)
-const savedDefinitionId = ref<number | null>(null)
+const manageVisible = ref(false)
+const deactivateConfirmVisible = ref(false)
+const deactivating = ref(false)
 const draftPromptStore = useWorkoutDraftPromptStore()
 const loading = ref(true)
 const missing = ref(false)
@@ -74,12 +86,22 @@ const previewItems = ref<PreviewItem[]>([])
 
 const summary = computed(() => planStore.currentPlanSummary)
 const execution = computed(() => planStore.activeExecution)
+const savedDefinitionId = computed(() => execution.value?.savedDefinitionId ?? null)
 const canSaveSystemPlan = computed(
   () =>
-    summary.value?.sourceType === 'SYSTEM_PLAN_EXECUTION' &&
-    Boolean(execution.value?.executionId) &&
-    !savedDefinitionId.value
+    summary.value?.sourceType === 'SYSTEM_PLAN_EXECUTION' && Boolean(execution.value?.executionId)
 )
+const manageItems = computed(() => [
+  ...(canSaveSystemPlan.value && !savedDefinitionId.value
+    ? [{ key: 'save', label: '存为我的计划', description: '生成可独立编辑的副本' }]
+    : []),
+  {
+    key: 'deactivate',
+    label: '停用当前计划',
+    description: '保留训练记录和历史进度',
+    danger: true
+  }
+])
 const planName = computed(() => summary.value?.planName || execution.value?.planName || '当前计划')
 const currentWeek = computed(() => summary.value?.weekIndex || execution.value?.currentWeek || 1)
 const totalWeeks = computed(() => summary.value?.cycleWeeks || execution.value?.cycleWeeks || 1)
@@ -169,7 +191,6 @@ const heroSubtitle = computed(() => {
 onShow(loadSchedule)
 
 async function loadSchedule() {
-  savedDefinitionId.value = null
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) {
     uni.switchTab({ url: routes.home })
@@ -185,9 +206,7 @@ async function loadSchedule() {
       missing.value = true
       return
     }
-    savedDefinitionId.value = activeExecution.savedDefinitionId ?? null
   } catch (err) {
-    savedDefinitionId.value = null
     missing.value = true
     console.error('[plan] active schedule failed', err)
   } finally {
@@ -501,14 +520,47 @@ async function saveToMyPlans() {
     return
   savingToMyPlans.value = true
   try {
-    const saved = await planStore.saveActiveToMyPlans(executionId)
-    savedDefinitionId.value = saved.id
+    await planStore.saveActiveToMyPlans(executionId)
     uni.showToast({ title: '已保存独立副本', icon: 'none' })
   } catch (err) {
-    showPlanWriteError(err, '计划保存失败，请重试')
+    showPlanWriteError(err, '保存到我的计划失败，请重试')
     console.error('[plan] save execution as my plan failed', err)
   } finally {
     savingToMyPlans.value = false
+  }
+}
+
+function openManagePlan() {
+  if (deactivating.value) return
+  manageVisible.value = true
+}
+
+async function handleManageAction(item: ActionSheetItem) {
+  manageVisible.value = false
+  if (item.key === 'save') {
+    await saveToMyPlans()
+    return
+  }
+  if (item.key === 'deactivate') {
+    deactivateConfirmVisible.value = true
+  }
+}
+
+async function confirmDeactivate() {
+  if (deactivating.value) return
+  deactivating.value = true
+  try {
+    await planStore.deactivateActive()
+    deactivateConfirmVisible.value = false
+    trainingHubStore.requestPlanTab('system')
+    emitTrainingChanged()
+    uni.showToast({ title: '已停用当前计划', icon: 'none' })
+    uni.switchTab({ url: routes.planIndex })
+  } catch (err) {
+    showPlanWriteError(err, '停用当前计划失败，请重试')
+    console.error('[plan] deactivate current plan failed', err)
+  } finally {
+    deactivating.value = false
   }
 }
 </script>
@@ -527,14 +579,7 @@ async function saveToMyPlans() {
               <view class="active-plan__title">{{ planName }}</view>
             </view>
             <view class="active-plan__hero-actions">
-              <view
-                v-if="canSaveSystemPlan"
-                class="active-plan__save btn-press"
-                :class="{ 'active-plan__save--done': savedDefinitionId }"
-                @tap="saveToMyPlans"
-              >
-                {{ savedDefinitionId ? '已保存' : savingToMyPlans ? '保存中...' : '存为我的计划' }}
-              </view>
+              <view class="active-plan__save btn-press" @tap="openManagePlan"> 管理计划 </view>
               <view class="active-plan__status">{{ statusText }}</view>
             </view>
           </view>
@@ -722,6 +767,30 @@ async function saveToMyPlans() {
       </view>
     </view>
   </view>
+  <AppActionSheet
+    :visible="manageVisible"
+    title="管理计划"
+    subtitle="保存副本或结束当前训练安排"
+    :items="manageItems"
+    @close="manageVisible = false"
+    @select="handleManageAction"
+  />
+  <AppActionSheet
+    :visible="deactivateConfirmVisible"
+    title="停用当前计划？"
+    subtitle="停用后首页不再展示该计划的训练安排，已完成的训练记录和进度历史会保留。"
+    cancel-text="继续训练"
+    :items="[
+      {
+        key: 'confirm',
+        label: deactivating ? '正在停用...' : '确认停用',
+        description: '我的计划副本不会被删除',
+        danger: true
+      }
+    ]"
+    @close="deactivateConfirmVisible = false"
+    @select="confirmDeactivate"
+  />
   <AppActionSheet
     :visible="skipConfirmVisible"
     title="跳过本次训练？"
