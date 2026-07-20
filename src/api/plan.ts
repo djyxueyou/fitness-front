@@ -46,7 +46,7 @@ export interface TrainingPlanDetailResponse {
   difficultyLevel?: string
   cycleWeeks: number
   active: boolean
-  userTrainingPlanId?: number
+  executionId?: number
   executionStatus?:
     | 'SCHEDULED'
     | 'ACTIVE'
@@ -75,18 +75,17 @@ export interface PlanRecommendationResponse {
   subtitle: string
   reason?: string
   templateId?: number
-  planId?: number
+  definitionId?: number
   planName?: string
-  planDayId?: number
+  executionDayId?: number
   weekIndex?: number
   dayOfWeek?: number
 }
 
 export interface ActivePlanSummaryResponse {
-  sourceType?: 'RECOMMENDED_EXECUTION' | 'MY_PLAN' | string
-  userTrainingPlanId?: number | null
+  sourceType?: 'SYSTEM_PLAN_EXECUTION' | 'USER_PLAN_EXECUTION' | string
   executionId?: number | null
-  planId: number
+  definitionId: number
   sourceSystemPlanId?: number | null
   planName: string
   executionStatus: string
@@ -108,7 +107,7 @@ export interface ActivePlanSummaryResponse {
   nextScheduledDate?: string
 }
 
-export interface RecommendedPlanListItemResponse {
+export interface SystemPlanListItemResponse {
   id: number
   name: string
   subtitle?: string
@@ -117,16 +116,19 @@ export interface RecommendedPlanListItemResponse {
   cycleWeeks: number
   minWeeklyFrequency: number
   maxWeeklyFrequency: number
+  collectionCodes: string[]
+  supportedEquipment: Array<'GYM' | 'DUMBBELL' | 'BODYWEIGHT'>
+  supportedDurations: Array<20 | 35 | 50>
 }
 
-export interface RecommendedPlanBlueprintSummaryResponse {
+export interface SystemPlanBlueprintSummaryResponse {
   blueprintId: number
   name: string
   description?: string
   estimatedMinutes?: number
 }
 
-export interface RecommendedPlanIntroResponse {
+export interface SystemPlanDetailResponse {
   id: number
   name: string
   subtitle?: string
@@ -137,20 +139,26 @@ export interface RecommendedPlanIntroResponse {
   cycleWeeks: number
   minWeeklyFrequency: number
   maxWeeklyFrequency: number
+  defaultWeeklyFrequency: number
+  collectionCodes: string[]
+  supportedEquipment: Array<'GYM' | 'DUMBBELL' | 'BODYWEIGHT'>
+  defaultEquipment: 'GYM' | 'DUMBBELL' | 'BODYWEIGHT'
+  supportedDurations: Array<20 | 35 | 50>
+  defaultDurationMinutes: 20 | 35 | 50
   safetyNotes?: string
-  blueprints: RecommendedPlanBlueprintSummaryResponse[]
+  blueprints: SystemPlanBlueprintSummaryResponse[]
 }
 
-export interface RecommendedPlanPersonalizationRequest {
+export interface SystemPlanCustomizationRequest {
   weeklyFrequency: number
   unavailableBodyParts: string[]
-  equipment: 'GYM' | 'DUMBBELL' | 'BODYWEIGHT' | 'UNKNOWN'
+  equipment: 'GYM' | 'DUMBBELL' | 'BODYWEIGHT'
   durationMinutes: 20 | 35 | 50
   restSecondsByExerciseId?: Record<number, number>
   restSecondsByOccurrence?: Record<string, number>
 }
 
-export interface RecommendedPlanPreviewItemResponse {
+export interface SystemPlanPreviewItemResponse {
   exerciseId: number
   exerciseName: string
   movementPattern?: string
@@ -169,22 +177,23 @@ export interface RecommendedPlanPreviewItemResponse {
   thumbnailUrl?: string
 }
 
-export interface RecommendedPlanPreviewDayResponse {
+export interface SystemPlanPreviewDayResponse {
   sourceBlueprintDayId?: number
   blueprintId?: number
   weekIndex: number
   dayOfWeek: number
   title: string
+  phaseLabel?: string
   frequencyBucket?: string
-  items: RecommendedPlanPreviewItemResponse[]
+  items: SystemPlanPreviewItemResponse[]
 }
 
-export interface RecommendedPlanPreviewResponse {
+export interface SystemPlanPreviewResponse {
   systemPlanId: number
   displayName: string
   weeklyFrequency: number
   durationMinutes: number
-  days: RecommendedPlanPreviewDayResponse[]
+  days: SystemPlanPreviewDayResponse[]
   replacementSummary?: string
   warnings: string[]
 }
@@ -229,6 +238,7 @@ export interface ActiveExecutionResponse {
   executionId: number
   definitionId: number
   sourceSystemPlanId?: number
+  savedDefinitionId?: number | null
   planName: string
   status: 'SCHEDULED' | 'ACTIVE' | 'FINISHING' | 'COMPLETED' | 'STOPPED' | 'REPLACED' | string
   currentWeek: number
@@ -238,12 +248,14 @@ export interface ActiveExecutionResponse {
   days: ActiveExecutionDayResponse[]
 }
 
-type ActivePlanEndpointResponse = TrainingPlanDetailResponse | ActiveExecutionResponse
-
-function isActiveExecutionResponse(
-  value: ActivePlanEndpointResponse | null
-): value is ActiveExecutionResponse {
-  return Boolean(value && typeof value === 'object' && 'executionId' in value)
+export interface PlanWorkoutSnapshotResponse {
+  planName: string
+  definitionId: number
+  definitionDayId: number
+  title: string
+  weekIndex: number
+  dayOfWeek: number
+  items: ActiveExecutionItemResponse[]
 }
 
 export interface UpdateTrainingPlanRequest {
@@ -278,41 +290,50 @@ export interface CreateTrainingPlanDayRequest extends UpdateTrainingPlanDayReque
   clientRequestId: string
 }
 
-export function fetchTrainingPlans(scope: 'all' | 'system' | 'mine' = 'all') {
+export function fetchTrainingPlans() {
   return request<TrainingPlanListItemResponse[]>({
-    url: `/api/plans?scope=${encodeURIComponent(scope)}`,
+    url: '/api/user-plans',
     method: 'GET'
   })
 }
 
-export function fetchRecommendedPlans() {
-  return request<RecommendedPlanListItemResponse[]>({
-    url: '/api/recommended-plans',
+export function fetchSystemPlans(params?: {
+  collection?: string
+  goal?: string
+  difficulty?: string
+}) {
+  const query: string[] = []
+  if (params?.collection) query.push(`collection=${encodeURIComponent(params.collection)}`)
+  if (params?.goal) query.push(`goal=${encodeURIComponent(params.goal)}`)
+  if (params?.difficulty) query.push(`difficulty=${encodeURIComponent(params.difficulty)}`)
+  const suffix = query.join('&')
+  return request<SystemPlanListItemResponse[]>({
+    url: `/api/system-plans${suffix ? `?${suffix}` : ''}`,
     method: 'GET',
     withAuth: false
   })
 }
 
-export function fetchRecommendedPlanIntro(id: number) {
-  return request<RecommendedPlanIntroResponse>({
-    url: `/api/recommended-plans/${id}/intro`,
+export function fetchSystemPlanDetail(id: number) {
+  return request<SystemPlanDetailResponse>({
+    url: `/api/system-plans/${id}`,
     method: 'GET',
     withAuth: false
   })
 }
 
-export function previewRecommendedPlan(id: number, data: RecommendedPlanPersonalizationRequest) {
-  return request<RecommendedPlanPreviewResponse>({
-    url: `/api/recommended-plans/${id}/personalization/preview`,
+export function previewSystemPlan(id: number, data: SystemPlanCustomizationRequest) {
+  return request<SystemPlanPreviewResponse>({
+    url: `/api/system-plans/${id}/preview`,
     method: 'POST',
     data,
     timeoutMs: 30000
   })
 }
 
-export function activateRecommendedPlan(id: number, data: RecommendedPlanPersonalizationRequest) {
+export function activateSystemPlan(id: number, data: SystemPlanCustomizationRequest) {
   return request<ActivePlanSummaryResponse>({
-    url: `/api/recommended-plans/${id}/personalization/activate`,
+    url: `/api/system-plans/${id}/activate`,
     method: 'POST',
     data,
     timeoutMs: 30000
@@ -321,14 +342,21 @@ export function activateRecommendedPlan(id: number, data: RecommendedPlanPersona
 
 export function fetchTrainingPlanDetail(id: number) {
   return request<TrainingPlanDetailResponse>({
-    url: `/api/plans/${id}`,
+    url: `/api/user-plans/${id}`,
+    method: 'GET'
+  })
+}
+
+export function fetchPlanDayWorkout(id: number, dayId: number) {
+  return request<PlanWorkoutSnapshotResponse>({
+    url: `/api/user-plans/${id}/days/${dayId}/workout`,
     method: 'GET'
   })
 }
 
 export function copyTrainingPlan(id: number) {
   return request<TrainingPlanDetailResponse>({
-    url: `/api/plans/${id}/copy`,
+    url: `/api/user-plans/${id}/copy`,
     method: 'POST',
     timeoutMs: 30000
   })
@@ -336,7 +364,7 @@ export function copyTrainingPlan(id: number) {
 
 export function createTrainingPlan(payload: CreateTrainingPlanRequest) {
   return request<TrainingPlanDetailResponse>({
-    url: '/api/plans',
+    url: '/api/user-plans',
     method: 'POST',
     data: payload,
     timeoutMs: 30000
@@ -345,14 +373,14 @@ export function createTrainingPlan(payload: CreateTrainingPlanRequest) {
 
 export function fetchPlanActivationOptions(id: number) {
   return request<PlanActivationOptionResponse[]>({
-    url: `/api/user/plans/${id}/activation-options`,
+    url: `/api/user-plans/${id}/activation-options`,
     method: 'GET'
   })
 }
 
 export function activateTrainingPlan(id: number, mode: 'THIS_WEEK' | 'NEXT_WEEK' = 'THIS_WEEK') {
   return request<void>({
-    url: `/api/user/plans/${id}/activate`,
+    url: `/api/user-plans/${id}/activate`,
     method: 'POST',
     data: { mode },
     timeoutMs: 30000
@@ -361,7 +389,7 @@ export function activateTrainingPlan(id: number, mode: 'THIS_WEEK' | 'NEXT_WEEK'
 
 export function deactivateActiveTrainingPlan() {
   return request<void>({
-    url: '/api/user/plans/active/deactivate',
+    url: '/api/plan-executions/active/deactivate',
     method: 'POST',
     timeoutMs: 30000
   })
@@ -369,7 +397,7 @@ export function deactivateActiveTrainingPlan() {
 
 export function updateTrainingPlan(id: number, payload: UpdateTrainingPlanRequest) {
   return request<TrainingPlanDetailResponse>({
-    url: `/api/plans/${id}`,
+    url: `/api/user-plans/${id}`,
     method: 'PUT',
     data: payload,
     timeoutMs: 30000
@@ -378,7 +406,7 @@ export function updateTrainingPlan(id: number, payload: UpdateTrainingPlanReques
 
 export function deleteTrainingPlan(id: number) {
   return request<void>({
-    url: `/api/plans/${id}`,
+    url: `/api/user-plans/${id}`,
     method: 'DELETE',
     timeoutMs: 30000
   })
@@ -386,7 +414,7 @@ export function deleteTrainingPlan(id: number) {
 
 export function createTrainingPlanDay(id: number, payload: CreateTrainingPlanDayRequest) {
   return request<TrainingPlanDetailResponse>({
-    url: `/api/plans/${id}/days`,
+    url: `/api/user-plans/${id}/days`,
     method: 'POST',
     data: payload,
     timeoutMs: 30000
@@ -399,7 +427,7 @@ export function updateTrainingPlanDay(
   payload: UpdateTrainingPlanDayRequest
 ) {
   return request<TrainingPlanDetailResponse>({
-    url: `/api/plans/${id}/days/${dayId}`,
+    url: `/api/user-plans/${id}/days/${dayId}`,
     method: 'PUT',
     data: payload,
     timeoutMs: 30000
@@ -408,60 +436,62 @@ export function updateTrainingPlanDay(
 
 export function deleteTrainingPlanDay(id: number, dayId: number) {
   return request<TrainingPlanDetailResponse>({
-    url: `/api/plans/${id}/days/${dayId}`,
+    url: `/api/user-plans/${id}/days/${dayId}`,
     method: 'DELETE',
     timeoutMs: 30000
   })
 }
 
 function fetchActivePlanEndpoint() {
-  return request<ActivePlanEndpointResponse | null>({
-    url: '/api/user/plans/active',
+  return request<ActiveExecutionResponse | null>({
+    url: '/api/plan-executions/active',
     method: 'GET'
   })
 }
 
-export async function fetchActiveTrainingPlan() {
-  const active = await fetchActivePlanEndpoint()
-  return isActiveExecutionResponse(active) ? null : active
+export async function fetchActivePlanExecution() {
+  return fetchActivePlanEndpoint()
 }
 
-export async function fetchActivePlanExecution() {
-  const active = await fetchActivePlanEndpoint()
-  return isActiveExecutionResponse(active) ? active : null
+export function savePlanExecutionAsMyPlan(executionId: number) {
+  return request<TrainingPlanDetailResponse>({
+    url: `/api/plan-executions/${executionId}/save-as-my-plan`,
+    method: 'POST',
+    timeoutMs: 30000
+  })
 }
 
 export function fetchActiveTrainingPlanSummary() {
   return request<ActivePlanSummaryResponse | null>({
-    url: '/api/user/plans/active/summary',
+    url: '/api/plan-executions/active/summary',
     method: 'GET'
   })
 }
 
 export function fetchTodayPlanRecommendation() {
   return request<PlanRecommendationResponse>({
-    url: '/api/user/plans/recommendation/today',
+    url: '/api/plan-executions/today-guidance',
     method: 'GET'
   })
 }
 
 export function skipActiveTrainingPlanDay(dayId: number) {
   return request<void>({
-    url: `/api/user/plans/active/days/${dayId}/skip`,
+    url: `/api/plan-executions/active/days/${dayId}/skip`,
     method: 'POST'
   })
 }
 
 export function unskipActiveTrainingPlanDay(dayId: number) {
   return request<void>({
-    url: `/api/user/plans/active/days/${dayId}/skip`,
+    url: `/api/plan-executions/active/days/${dayId}/skip`,
     method: 'DELETE'
   })
 }
 
 export function finishActiveTrainingPlan() {
   return request<void>({
-    url: '/api/user/plans/active/finish',
+    url: '/api/plan-executions/active/finish',
     method: 'POST'
   })
 }

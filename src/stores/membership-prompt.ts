@@ -5,24 +5,29 @@ import { routes } from '@/utils/navigation'
 
 let resolver: ((value: boolean) => void) | null = null
 
+export interface MembershipPromptOptions {
+  secondaryActionText?: string
+  onSecondary?: () => void
+}
+
 function defaultDescription(featureName: string) {
   if (featureName.includes('收藏')) {
     return '开通会员后可收藏常用动作，训练和动作库中都能快速找到。'
   }
   if (featureName.includes('训练计划') || featureName.includes('计划')) {
-    return '开通会员后可复制系统计划，并编辑自己的多周训练安排。'
+    return '免费版可拥有 1 个我的计划，开通会员后可无限创建、复制和编辑。'
   }
   if (featureName.includes('分析') || featureName.includes('报告')) {
-    return '开通会员后可查看训练容量趋势、肌群分布、PR 变化和长期训练报告。'
+    return '开通会员后可查看周统计、训练容量趋势、肌群分布、PR 变化和长期训练报告。'
   }
   if (featureName.includes('自定义动作') || featureName.includes('动作')) {
-    return '开通会员后可创建只属于你的动作库，支持自重、负重和计时类型。'
+    return '免费版可创建 1 个自定义动作，开通会员后可无限创建和编辑。'
   }
   if (featureName.includes('自定义模板') || featureName.includes('模板')) {
-    return '开通会员后可自由创建、复制和编辑训练模板。'
+    return '免费版可创建 1 个自定义训练模板，开通会员后可无限创建、复制和编辑。'
   }
   if (featureName.includes('训练')) {
-    return '本周免费训练次数已用完，开通会员后可继续保存训练记录。'
+    return '训练记录永久免费；周统计和进阶分析属于会员权益。'
   }
   return `开通会员后可继续使用「${featureName}」。`
 }
@@ -33,14 +38,23 @@ export const useMembershipPromptStore = defineStore('membershipPrompt', () => {
   const description = ref('')
   const bullets = ref<string[]>([])
   const primaryActionText = ref('开通会员')
+  const secondaryActionText = ref('暂不开通')
   const entryPoint = ref('')
+  let secondaryAction: (() => void) | null = null
 
-  function open(featureName: string, customDescription?: string, valueEntryPoint?: string) {
+  function open(
+    featureName: string,
+    customDescription?: string,
+    valueEntryPoint?: string,
+    options: MembershipPromptOptions = {}
+  ) {
     resolver?.(false)
     title.value = '会员功能'
     description.value = customDescription || defaultDescription(featureName)
     bullets.value = []
     primaryActionText.value = '开通会员'
+    secondaryActionText.value = options.secondaryActionText || '暂不开通'
+    secondaryAction = options.onSecondary || null
     entryPoint.value = valueEntryPoint || ''
     visible.value = true
 
@@ -49,7 +63,7 @@ export const useMembershipPromptStore = defineStore('membershipPrompt', () => {
         .then((value) => {
           if (!visible.value || entryPoint.value !== valueEntryPoint) return
           title.value = value.title
-          description.value = value.description
+          if (!customDescription) description.value = value.description
           bullets.value = value.bullets || []
           primaryActionText.value = value.primaryActionText || primaryActionText.value
         })
@@ -66,9 +80,17 @@ export const useMembershipPromptStore = defineStore('membershipPrompt', () => {
   function close(result = false) {
     visible.value = false
     bullets.value = []
+    secondaryActionText.value = '暂不开通'
+    secondaryAction = null
     entryPoint.value = ''
     resolver?.(result)
     resolver = null
+  }
+
+  function runSecondary() {
+    const action = secondaryAction
+    close(false)
+    action?.()
   }
 
   function goMembership() {
@@ -84,8 +106,10 @@ export const useMembershipPromptStore = defineStore('membershipPrompt', () => {
     description,
     bullets,
     primaryActionText,
+    secondaryActionText,
     open,
     close,
+    runSecondary,
     goMembership
   }
 })

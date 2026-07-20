@@ -1,4 +1,5 @@
 import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ApiError } from '@/api/http'
 import { useMembershipStore } from '@/stores/membership'
 import { useMembershipPromptStore } from '@/stores/membership-prompt'
 
@@ -19,6 +20,17 @@ export async function ensureMembershipFeature(
   const authed = await ensureFeatureAuth(featureName)
   if (!authed) return false
 
+  // Scheme A gives every user one custom exercise, template, and plan.
+  // The server owns the atomic quota check; Pro prompts are shown only when
+  // that free quota is actually exceeded.
+  if (
+    featureName.includes('自定义动作') ||
+    featureName.includes('自定义模板') ||
+    featureName.includes('自定义训练计划')
+  ) {
+    return true
+  }
+
   const membershipStore = useMembershipStore()
   try {
     const status = await membershipStore.refreshStatus()
@@ -36,4 +48,18 @@ export async function ensureMembershipFeature(
     undefined,
     entryPoint || inferEntryPoint(featureName)
   )
+}
+
+export function handleMembershipRequiredError(
+  error: unknown,
+  featureName: string,
+  entryPoint?: string
+) {
+  if (!(error instanceof ApiError) || error.code !== 40311) return false
+  void useMembershipPromptStore().open(
+    featureName,
+    error.message,
+    entryPoint || inferEntryPoint(featureName)
+  )
+  return true
 }

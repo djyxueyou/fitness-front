@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import AppHeader from '@/components/app-header/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
 import { usePlanStore } from '@/stores/plan'
 import { useThemeStore } from '@/stores/theme'
 import { routes } from '@/utils/navigation'
+import { showPlanWriteError } from '@/utils/plan-write-feedback'
 
 const planStore = usePlanStore()
 const themeStore = useThemeStore()
@@ -34,7 +36,7 @@ async function save() {
     })
     uni.redirectTo({ url: `${routes.planDetail}?id=${detail.id}` })
   } catch (err) {
-    uni.showToast({ title: '创建计划失败', icon: 'none' })
+    showPlanWriteError(err, '计划创建失败，请重试')
     console.error('[plan] create failed', err)
   } finally {
     busy.value = false
@@ -81,6 +83,7 @@ async function save() {
       }}</PrimaryButton>
     </view>
   </view>
+  <MembershipRequiredModal />
 </template>
 
 <style scoped lang="scss">

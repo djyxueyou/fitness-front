@@ -5,32 +5,27 @@ import AppHeader from '@/components/app-header/index.vue'
 import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import {
-  fetchActiveTrainingPlan,
   skipActiveTrainingPlanDay,
   type ActiveExecutionDayResponse,
-  type ActiveExecutionItemResponse,
-  type TrainingPlanDayResponse,
-  type TrainingPlanDetailResponse
+  type ActiveExecutionItemResponse
 } from '@/api/plan'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { planExerciseThumbnail } from '@/utils/plan-exercise-thumbnail'
+import { showPlanWriteError } from '@/utils/plan-write-feedback'
 import { usePlanStore } from '@/stores/plan'
-import { useTemplateStore } from '@/stores/template'
 import { useThemeStore } from '@/stores/theme'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
-import type { TemplateDetailResponse } from '@/api/template'
 
-type ScheduleSource = 'RECOMMENDED_EXECUTION' | 'MY_PLAN'
+type ScheduleSource = 'PLAN_EXECUTION'
 
 interface ScheduleDay {
   source: ScheduleSource
   id: number
-  planDayId?: number
-  templateId?: number
   title: string
   weekIndex: number
   date?: string
@@ -61,15 +56,15 @@ interface PreviewItem {
 }
 
 const planStore = usePlanStore()
-const templateStore = useTemplateStore()
 const themeStore = useThemeStore()
 const workoutStore = useWorkoutStore()
 const skipConfirmVisible = ref(false)
 const skipSubmitting = ref(false)
+const savingToMyPlans = ref(false)
+const savedDefinitionId = ref<number | null>(null)
 const draftPromptStore = useWorkoutDraftPromptStore()
 const loading = ref(true)
 const missing = ref(false)
-const activePlan = ref<TrainingPlanDetailResponse | null>(null)
 const selectedDayKey = ref('')
 const showFullSchedule = ref(false)
 const previewVisible = ref(false)
@@ -79,15 +74,15 @@ const previewItems = ref<PreviewItem[]>([])
 
 const summary = computed(() => planStore.currentPlanSummary)
 const execution = computed(() => planStore.activeExecution)
-const planName = computed(() => summary.value?.planName || activePlan.value?.name || '当前计划')
-const currentWeek = computed(
+const canSaveSystemPlan = computed(
   () =>
-    summary.value?.weekIndex || execution.value?.currentWeek || activePlan.value?.currentWeek || 1
+    summary.value?.sourceType === 'SYSTEM_PLAN_EXECUTION' &&
+    Boolean(execution.value?.executionId) &&
+    !savedDefinitionId.value
 )
-const totalWeeks = computed(
-  () =>
-    summary.value?.cycleWeeks || execution.value?.cycleWeeks || activePlan.value?.cycleWeeks || 1
-)
+const planName = computed(() => summary.value?.planName || execution.value?.planName || '当前计划')
+const currentWeek = computed(() => summary.value?.weekIndex || execution.value?.currentWeek || 1)
+const totalWeeks = computed(() => summary.value?.cycleWeeks || execution.value?.cycleWeeks || 1)
 const completedThisWeek = computed(
   () => summary.value?.completedThisWeek ?? countCurrentWeekCompleted()
 )
@@ -105,13 +100,12 @@ const progressPercent = computed(() =>
     : 0
 )
 const statusText = computed(() =>
-  summaryStatusText(summary.value?.executionStatus || activePlan.value?.executionStatus)
+  summaryStatusText(summary.value?.executionStatus || execution.value?.status)
 )
 const scheduleDays = computed<ScheduleDay[]>(() => {
-  if (execution.value?.days.length) {
-    return execution.value.days.map((day) => toExecutionScheduleDay(day)).sort(sortScheduleDay)
-  }
-  return (activePlan.value?.days || []).map((day) => toPlanScheduleDay(day)).sort(sortScheduleDay)
+  return (execution.value?.days || [])
+    .map((day) => toExecutionScheduleDay(day))
+    .sort(sortScheduleDay)
 })
 const currentWeekDays = computed(() =>
   scheduleDays.value.filter((day) => day.weekIndex === currentWeek.value)
@@ -175,6 +169,7 @@ const heroSubtitle = computed(() => {
 onShow(loadSchedule)
 
 async function loadSchedule() {
+  savedDefinitionId.value = null
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) {
     uni.switchTab({ url: routes.home })
@@ -183,17 +178,16 @@ async function loadSchedule() {
 
   loading.value = true
   missing.value = false
-  activePlan.value = null
   try {
     await planStore.loadCurrentPlan()
-    if (planStore.activeExecution?.days.length) return
-    const active = await fetchActiveTrainingPlan()
-    if (!active) {
+    const activeExecution = planStore.activeExecution
+    if (!activeExecution?.days.length) {
       missing.value = true
       return
     }
-    activePlan.value = active
+    savedDefinitionId.value = activeExecution.savedDefinitionId ?? null
   } catch (err) {
+    savedDefinitionId.value = null
     missing.value = true
     console.error('[plan] active schedule failed', err)
   } finally {
@@ -204,7 +198,7 @@ async function loadSchedule() {
 
 function toExecutionScheduleDay(day: ActiveExecutionDayResponse): ScheduleDay {
   return {
-    source: 'RECOMMENDED_EXECUTION',
+    source: 'PLAN_EXECUTION',
     id: day.id,
     title: day.title,
     weekIndex: day.weekIndex,
@@ -215,23 +209,6 @@ function toExecutionScheduleDay(day: ActiveExecutionDayResponse): ScheduleDay {
     completedTrainingId: day.completedTrainingRecordId,
     itemCount: day.items.length,
     executionItems: day.items
-  }
-}
-
-function toPlanScheduleDay(day: TrainingPlanDayResponse): ScheduleDay {
-  return {
-    source: 'MY_PLAN',
-    id: day.id,
-    planDayId: day.id,
-    templateId: day.templateId,
-    title: day.title,
-    weekIndex: day.weekIndex,
-    date: day.scheduledDate,
-    status: day.status || 'UPCOMING',
-    actionType: day.actionType,
-    canSkip: ['START', 'START_EARLY', 'MAKE_UP'].includes(day.actionType || ''),
-    completedTrainingId: day.completedTrainingId,
-    templateName: day.templateName
   }
 }
 
@@ -364,13 +341,7 @@ async function openDay(day: ScheduleDay | null) {
     await startScheduleDay(day)
     return
   }
-  if (day.source === 'RECOMMENDED_EXECUTION') {
-    uni.navigateTo({ url: `${routes.planExecutionDay}?dayId=${day.id}` })
-    return
-  }
-  if (day.templateId) {
-    uni.navigateTo({ url: `${routes.templateDetail}?id=${day.templateId}` })
-  }
+  uni.navigateTo({ url: `${routes.planExecutionDay}?dayId=${day.id}` })
 }
 
 function openSelectedDay() {
@@ -388,17 +359,10 @@ async function openActionPreview(day: ScheduleDay) {
   previewItems.value = []
   previewLoading.value = true
   try {
-    if (day.source === 'RECOMMENDED_EXECUTION') {
-      const executionDay = execution.value?.days.find((item) => item.id === day.id)
-      previewItems.value = (executionDay?.items || day.executionItems || []).map((item) =>
-        toPreviewItem(item)
-      )
-      return
-    }
-    if (day.templateId) {
-      const detail = await templateStore.getDetail(day.templateId)
-      previewItems.value = detail.items.map((item, index) => toTemplatePreviewItem(item, index))
-    }
+    const executionDay = execution.value?.days.find((item) => item.id === day.id)
+    previewItems.value = (executionDay?.items || day.executionItems || []).map((item) =>
+      toPreviewItem(item)
+    )
   } catch (err) {
     previewItems.value = []
     uni.showToast({ title: '动作加载失败', icon: 'none' })
@@ -464,26 +428,6 @@ function toPreviewItem(item: ActiveExecutionItemResponse): PreviewItem {
   }
 }
 
-function toTemplatePreviewItem(
-  item: TemplateDetailResponse['items'][number],
-  index: number
-): PreviewItem {
-  return {
-    id: `template-${item.exerciseId}-${index}`,
-    exerciseName: item.exerciseName,
-    equipment: item.equipment,
-    recordType: item.recordType,
-    targetSets: item.targetSets,
-    targetWeightKg: item.targetWeightKg,
-    targetReps: item.targetReps,
-    targetDurationSeconds: item.targetDurationSeconds,
-    plannedRestSeconds: item.restSeconds ?? undefined,
-    thumbnailSource: item.thumbnailSource,
-    thumbnailPath: item.thumbnailPath,
-    thumbnailUrl: item.thumbnailUrl
-  }
-}
-
 function previewTarget(item: PreviewItem) {
   const sets = item.targetSets || 1
   if (item.recordType === 'DURATION' || item.targetDurationSeconds) {
@@ -504,28 +448,17 @@ async function startScheduleDay(day: ScheduleDay) {
   const canStart = await prepareNewWorkout(day.title)
   if (!canStart) return
 
-  if (day.source === 'RECOMMENDED_EXECUTION') {
-    const currentExecution = execution.value
-    const executionDay = currentExecution?.days.find((item) => item.id === day.id)
-    if (!currentExecution || !executionDay?.items.length) {
-      uni.navigateTo({ url: `${routes.planExecutionDay}?dayId=${day.id}` })
-      return
-    }
-    workoutStore.queueStartWorkout(null, {
-      executionId: currentExecution.executionId,
-      executionDayId: executionDay.id,
-      executionDayTitle: executionDay.title,
-      executionItems: executionDay.items
-    })
-    uni.navigateTo({ url: routes.workoutActive })
+  const currentExecution = execution.value
+  const executionDay = currentExecution?.days.find((item) => item.id === day.id)
+  if (!currentExecution || !executionDay?.items.length) {
+    uni.navigateTo({ url: `${routes.planExecutionDay}?dayId=${day.id}` })
     return
   }
-
-  if (!day.templateId) return
-  templateStore.markUsed(day.templateId)
-  workoutStore.queueStartWorkout(day.templateId, {
-    planId: summary.value?.planId || activePlan.value?.id || null,
-    planDayId: day.planDayId || day.id
+  workoutStore.queueStartWorkout(null, {
+    executionId: currentExecution.executionId,
+    executionDayId: executionDay.id,
+    executionDayTitle: executionDay.title,
+    executionItems: executionDay.items
   })
   uni.navigateTo({ url: routes.workoutActive })
 }
@@ -561,6 +494,23 @@ function goBack() {
   }
   uni.switchTab({ url: routes.planIndex })
 }
+
+async function saveToMyPlans() {
+  const executionId = execution.value?.executionId
+  if (!executionId || !canSaveSystemPlan.value || savingToMyPlans.value || savedDefinitionId.value)
+    return
+  savingToMyPlans.value = true
+  try {
+    const saved = await planStore.saveActiveToMyPlans(executionId)
+    savedDefinitionId.value = saved.id
+    uni.showToast({ title: '已保存独立副本', icon: 'none' })
+  } catch (err) {
+    showPlanWriteError(err, '计划保存失败，请重试')
+    console.error('[plan] save execution as my plan failed', err)
+  } finally {
+    savingToMyPlans.value = false
+  }
+}
 </script>
 
 <template>
@@ -576,7 +526,17 @@ function goBack() {
               <view class="active-plan__eyebrow">当前计划</view>
               <view class="active-plan__title">{{ planName }}</view>
             </view>
-            <view class="active-plan__status">{{ statusText }}</view>
+            <view class="active-plan__hero-actions">
+              <view
+                v-if="canSaveSystemPlan"
+                class="active-plan__save btn-press"
+                :class="{ 'active-plan__save--done': savedDefinitionId }"
+                @tap="saveToMyPlans"
+              >
+                {{ savedDefinitionId ? '已保存' : savingToMyPlans ? '保存中...' : '存为我的计划' }}
+              </view>
+              <view class="active-plan__status">{{ statusText }}</view>
+            </view>
           </view>
           <view class="active-plan__progress-row">
             <view>
@@ -713,7 +673,7 @@ function goBack() {
         <EmptyState
           icon="+"
           title="还没有启用计划"
-          description="请返回计划页，从推荐计划或我的计划中启用一套安排。"
+          description="请返回计划页，从系统计划或我的计划中启用一套安排。"
         />
         <view class="active-plan__empty-action btn-press" @tap="goPlans">返回计划页</view>
       </template>
@@ -779,6 +739,7 @@ function goBack() {
     @select="confirmSkipSelectedDay"
   />
   <WorkoutDraftPrompt />
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>
@@ -843,6 +804,27 @@ function goBack() {
 
   &__status {
     padding: 10rpx 18rpx;
+  }
+
+  &__hero-actions {
+    display: flex;
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 12rpx;
+  }
+
+  &__save {
+    padding: 10rpx 18rpx;
+    border: 1rpx solid var(--app-accent);
+    border-radius: 999rpx;
+    color: var(--app-accent);
+    font-size: 21rpx;
+    font-weight: 800;
+  }
+
+  &__save--done {
+    border-color: var(--app-border);
+    color: var(--app-text-muted);
   }
 
   &__progress-row {

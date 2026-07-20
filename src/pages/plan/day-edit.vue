@@ -10,6 +10,7 @@ import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
+import { showPlanWriteError } from '@/utils/plan-write-feedback'
 
 const weekdays = [
   { value: 1, label: '周一' },
@@ -169,7 +170,7 @@ async function saveDay() {
     uni.showToast({ title: isCreateMode.value ? '已新增训练日' : '已更新训练日', icon: 'none' })
     uni.redirectTo({ url: `${routes.planDetail}?id=${planId.value}` })
   } catch (err) {
-    uni.showToast({ title: '保存失败', icon: 'none' })
+    showPlanWriteError(err, '训练日保存失败，请重试')
     console.error('[plan] day save failed', err)
   } finally {
     saving.value = false

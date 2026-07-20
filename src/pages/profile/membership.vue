@@ -16,20 +16,28 @@ const valueInfo = ref<MembershipValueResponse | null>(null)
 
 const benefits = [
   {
-    title: '不限训练记录',
-    desc: '免费版每周保存次数有限，会员可不限次数记录训练。'
+    title: '训练记录永久免费',
+    desc: '核心训练记录、历史查看不限次数，不需要开通会员。'
   },
   {
     title: '动作收藏',
     desc: '收藏常用动作，在动作库和训练中快速调用。'
   },
   {
-    title: '自定义动作库',
-    desc: '创建只属于你的动作，支持自重、负重和计时类型。'
+    title: '无限自定义动作',
+    desc: '免费版可创建 1 个自定义动作；会员可无限创建和编辑。'
   },
   {
-    title: '训练模板与计划管理',
-    desc: '新建、复制和编辑训练模板，启用系统计划并复制、编辑自己的多周训练计划。'
+    title: '无限自定义训练模板',
+    desc: '免费版可创建 1 个自定义训练模板；会员可无限新建、复制和编辑。'
+  },
+  {
+    title: '无限我的计划',
+    desc: '免费版可拥有 1 个我的计划；会员可无限创建、复制和编辑。'
+  },
+  {
+    title: '周统计与训练分析',
+    desc: '查看周统计、周复盘、容量趋势、肌群分布和 PR 变化。'
   },
   {
     title: '进阶训练分析',
@@ -44,18 +52,18 @@ const benefits = [
 const statusTitle = computed(() => {
   const status = membershipStore.status
   if (!status) return '会员状态加载中'
-  if (status.trial) return '30 天试用中'
   if (status.active) return '会员已开通'
-  return '会员已过期'
+  if (status.expired) return '会员已过期'
+  return '当前为免费版'
 })
 
 const statusSub = computed(() => {
   const status = membershipStore.status
   if (!status) return '正在读取当前账号权益。'
   if (status.active) {
-    return `剩余 ${status.remainingDays} 天，可使用不限训练记录、动作收藏、自定义动作、训练模板与计划管理和进阶训练分析。`
+    return `剩余 ${status.remainingDays} 天，可使用动作收藏、无限自定义内容、周统计和进阶训练分析。`
   }
-  return '免费版每周可保存 1 次训练，开通会员后解锁完整训练记录、自定义内容、训练计划管理和进阶分析。'
+  return '训练记录永久免费；免费版含 1 个自定义动作、1 个自定义训练模板和 1 个我的计划，开通会员后解锁收藏、周统计和无限自定义内容。'
 })
 
 const expirationWarning = computed(() => {
@@ -64,15 +72,13 @@ const expirationWarning = computed(() => {
   if (status.active && status.remainingDays <= 7) {
     return {
       type: 'warning',
-      text: status.trial
-        ? `试用将在 ${status.remainingDays} 天后到期，续费后可继续使用会员权益。`
-        : `会员将在 ${status.remainingDays} 天后到期，请及时续费。`
+      text: `会员将在 ${status.remainingDays} 天后到期，请及时续费。`
     }
   }
   if (status.expired) {
     return {
       type: 'expired',
-      text: '会员已过期。历史训练、已创建模板和计划会保留；但不能继续收藏、新建、复制或编辑自定义内容，也不能使用进阶分析。'
+      text: '会员已过期。历史训练和已有内容会保留；超出免费额度的自定义内容可删除但不能继续编辑，收藏和周统计将暂停使用。'
     }
   }
   return null
@@ -160,13 +166,13 @@ async function buy(planCode: string) {
     <view class="page-shell membership safe-bottom" :class="themeStore.themeClass">
       <AppHeader
         title="会员中心"
-        subtitle="解锁不限训练记录、训练模板与计划管理和进阶训练分析"
+        subtitle="解锁动作收藏、周统计和无限自定义内容"
         show-back
         @back="goBack"
       />
 
       <view class="glass-card membership__status">
-        <view class="membership__badge">{{ membershipStore.status?.trial ? 'TRIAL' : 'VIP' }}</view>
+        <view class="membership__badge">{{ membershipStore.active ? 'PRO' : 'FREE' }}</view>
         <view class="membership__status-title">{{ statusTitle }}</view>
         <view class="membership__status-sub">{{ statusSub }}</view>
       </view>
@@ -223,7 +229,7 @@ async function buy(planCode: string) {
       </view>
 
       <view class="membership__note">
-        说明：会员到期后，历史训练、已创建模板和计划会保留；但不能继续收藏、新建、复制或编辑自定义内容，也不能使用进阶分析。
+        说明：会员到期后，训练历史和已有内容会保留；仍可删除超额内容，但需缩减到免费额度后才能继续编辑。训练记录永久免费。
       </view>
 
       <view

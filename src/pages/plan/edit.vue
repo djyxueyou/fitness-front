@@ -9,6 +9,7 @@ import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
+import { showPlanWriteError } from '@/utils/plan-write-feedback'
 
 const goalOptions = [
   { label: '增肌', value: '增肌' },
@@ -99,7 +100,7 @@ async function savePlan() {
     uni.showToast({ title: '已保存计划', icon: 'none' })
     uni.navigateBack()
   } catch (err) {
-    uni.showToast({ title: '保存失败', icon: 'none' })
+    showPlanWriteError(err, '计划保存失败，请重试')
     console.error('[plan] save failed', err)
   } finally {
     saving.value = false

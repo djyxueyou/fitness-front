@@ -19,8 +19,8 @@ const promptStore = useMembershipPromptStore()
         </view>
       </view>
       <view class="membership-modal__actions">
-        <view class="membership-modal__secondary btn-press" @tap="promptStore.close(false)">
-          暂不开通
+        <view class="membership-modal__secondary btn-press" @tap="promptStore.runSecondary">
+          {{ promptStore.secondaryActionText }}
         </view>
         <view
           class="gradient-fire membership-modal__primary btn-press"

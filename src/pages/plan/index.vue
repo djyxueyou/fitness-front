@@ -12,6 +12,7 @@ import HistoryView from '@/components/training-hub/history-view.vue'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
+import { showPlanWriteError } from '@/utils/plan-write-feedback'
 import { getToken } from '@/api/http'
 import { usePlanStore } from '@/stores/plan'
 import { useWorkoutStore } from '@/stores/workout'
@@ -21,7 +22,7 @@ import { useTrainingHubStore, type TrainingHubView } from '@/stores/training-hub
 import {
   fetchPlanActivationOptions,
   type ActivePlanSummaryResponse,
-  type RecommendedPlanListItemResponse,
+  type SystemPlanListItemResponse,
   type TrainingPlanListItemResponse
 } from '@/api/plan'
 
@@ -38,7 +39,7 @@ const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const themeStore = useThemeStore()
 const trainingHubStore = useTrainingHubStore()
-const activeTab = ref<'recommended' | 'mine'>('recommended')
+const activeTab = ref<'system' | 'mine'>('system')
 const busyPlanId = ref<number | null>(null)
 const activePlanSummary = ref<ActivePlanSummaryResponse | null>(null)
 const scrollTarget = ref('')
@@ -47,12 +48,25 @@ const sheetTitle = ref('')
 const sheetSubtitle = ref('')
 const sheetItems = ref<ActionSheetItem[]>([])
 const sheetTargetPlan = ref<TrainingPlanListItemResponse | null>(null)
+const selectedCollection = ref('ALL')
+const planCollections = [
+  { code: 'ALL', label: '全部' },
+  { code: 'BEGINNER', label: '新手入门' },
+  { code: 'HOME', label: '居家训练' },
+  { code: 'GYM', label: '健身房' },
+  { code: 'HYPERTROPHY', label: '增肌' },
+  { code: 'STRENGTH', label: '力量' },
+  { code: 'BODY_SHAPING', label: '塑形' },
+  { code: 'TIME_SAVING', label: '短时训练' }
+]
 
-const visiblePlans = computed(() =>
-  activeTab.value === 'recommended'
-    ? planStore.recommendedPlans
-    : sortActiveFirst(planStore.userPlans)
-)
+const visiblePlans = computed(() => {
+  if (activeTab.value === 'mine') return sortActiveFirst(planStore.userPlans)
+  if (selectedCollection.value === 'ALL') return planStore.systemPlans
+  return planStore.systemPlans.filter((plan) =>
+    plan.collectionCodes.includes(selectedCollection.value)
+  )
+})
 const hasCurrentPlan = computed(() => Boolean(activePlanSummary.value))
 const activePlanName = computed(() => activePlanSummary.value?.planName || '未启用')
 const activePlanStatusText = computed(() => {
@@ -60,11 +74,7 @@ const activePlanStatusText = computed(() => {
   return summaryStatusText(activePlanSummary.value.executionStatus)
 })
 const hasActivePlanRecommendation = computed(() =>
-  Boolean(
-    hasCurrentPlan.value &&
-    planStore.recommendation?.templateId &&
-    planStore.recommendation.type === 'PLAN_TODAY'
-  )
+  Boolean(hasCurrentPlan.value && planStore.recommendation?.type === 'PLAN_TODAY')
 )
 const isTodayCompletedRecommendation = computed(
   () => planStore.recommendation?.type === 'PLAN_TODAY_COMPLETED'
@@ -79,16 +89,16 @@ const activePlanSubtitle = computed(() => {
     return planStore.recommendation?.reason || '今天的计划训练已经完成'
   }
   if (activePlanSummary.value) return '进入当前安排查看训练日和后续排期'
-  return '先选择一套推荐计划，按你的频率和器械生成安排'
+  return '先选择一套系统计划，按你的频率和器械生成安排'
 })
 const activePlanActionText = computed(() => {
   if (activePlanSummary.value) return '查看当前安排'
   return '去启用'
 })
-const recommendedPlanCount = computed(() => planStore.recommendedPlans.length)
+const systemPlanCount = computed(() => planStore.systemPlans.length)
 const userPlanCount = computed(() => planStore.userPlans.length)
 const tabs = computed(() => [
-  { key: 'recommended' as const, label: `推荐计划 ${recommendedPlanCount.value}` },
+  { key: 'system' as const, label: `系统计划 ${systemPlanCount.value}` },
   { key: 'mine' as const, label: `我的计划 ${userPlanCount.value}` }
 ])
 const hubTabs: Array<{ key: TrainingHubView; label: string }> = [
@@ -149,10 +159,10 @@ onHide(() => {
 
 async function loadPlanView() {
   if (!getToken()) {
-    activeTab.value = 'recommended'
+    activeTab.value = 'system'
     activePlanSummary.value = null
     planStore.clearPersonalPlanState()
-    await planStore.fetchRecommendedPlanList({ force: true })
+    await planStore.fetchSystemPlanList({ force: true })
     return
   }
   await loadAuthenticatedPlans()
@@ -172,8 +182,8 @@ async function loadAuthenticatedPlans() {
   await loadActivePlanSummary()
 }
 
-async function selectTab(tab: 'recommended' | 'mine') {
-  if (tab === 'recommended') {
+async function selectTab(tab: 'system' | 'mine') {
+  if (tab === 'system') {
     activeTab.value = tab
     return
   }
@@ -191,8 +201,8 @@ async function goDetail(id: number) {
   uni.navigateTo({ url: `${routes.planDetail}?id=${id}` })
 }
 
-function goRecommendedDetail(id: number) {
-  uni.navigateTo({ url: `${routes.planDetail}?id=${id}&source=recommended` })
+function goSystemPlanDetail(id: number) {
+  uni.navigateTo({ url: `${routes.planDetail}?id=${id}&source=system` })
 }
 
 async function goCreatePlan() {
@@ -214,7 +224,7 @@ function goActivePlan() {
 }
 
 async function focusPlanList() {
-  activeTab.value = 'recommended'
+  activeTab.value = 'system'
   scrollTarget.value = ''
   await nextTick()
   scrollTarget.value = 'plan-list-anchor'
@@ -223,7 +233,7 @@ async function focusPlanList() {
 async function activatePlan(item: TrainingPlanListItemResponse) {
   if (!(await ensureFeatureAuth('启用训练计划'))) return
   if (busyPlanId.value || item.active) return
-  if (activePlanSummary.value && activePlanSummary.value.planId !== item.id) {
+  if (activePlanSummary.value && activePlanSummary.value.definitionId !== item.id) {
     openSwitchPlanSheet(item)
     return
   }
@@ -305,16 +315,30 @@ async function copyPlan(item: TrainingPlanListItemResponse) {
     activeTab.value = 'mine'
     uni.showToast({ title: '已复制到我的计划', icon: 'none' })
   } catch (err) {
-    uni.showToast({ title: '复制失败', icon: 'none' })
+    showPlanWriteError(err, '计划复制失败，请重试')
     console.error('[plan] copy failed', err)
   } finally {
     busyPlanId.value = null
   }
 }
 
-async function customizeRecommendedPlan(item: RecommendedPlanListItemResponse) {
-  if (!(await ensureFeatureAuth('定制训练计划'))) return
+async function customizeSystemPlan(item: SystemPlanListItemResponse) {
+  if (!(await ensureFeatureAuth('设置训练安排'))) return
   uni.navigateTo({ url: `${routes.planCustomize}?id=${item.id}` })
+}
+
+function selectCollection(code: string) {
+  selectedCollection.value = code
+}
+
+function systemPlanMeta(item: SystemPlanListItemResponse) {
+  const frequency =
+    item.minWeeklyFrequency === item.maxWeeklyFrequency
+      ? `每周 ${item.minWeeklyFrequency} 练`
+      : `每周 ${item.minWeeklyFrequency}-${item.maxWeeklyFrequency} 练`
+  const durations = [...item.supportedDurations].sort((a, b) => a - b)
+  const duration = durations.length ? `${durations[0]}-${durations[durations.length - 1]} 分钟` : ''
+  return [frequency, duration].filter(Boolean).join(' · ')
 }
 
 function openPlanActions(item: TrainingPlanListItemResponse) {
@@ -422,7 +446,7 @@ async function handlePlanAction(item: ActionSheetItem) {
     return
   }
   if (item.key === 'delete') {
-    if (!(await ensureMembershipFeature('自定义训练计划'))) return
+    if (!(await ensureFeatureAuth('删除训练计划'))) return
     busyPlanId.value = target.id
     try {
       await planStore.removePlan(target.id)
@@ -431,7 +455,7 @@ async function handlePlanAction(item: ActionSheetItem) {
       }
       uni.showToast({ title: '已删除计划', icon: 'none' })
     } catch (err) {
-      uni.showToast({ title: '删除失败', icon: 'none' })
+      showPlanWriteError(err, '计划删除失败，请重试')
       console.error('[plan] delete failed', err)
     } finally {
       busyPlanId.value = null
@@ -575,7 +599,7 @@ async function openDraftFab() {
           <view>
             <view class="section-title">选择计划</view>
             <view class="plan-page__section-sub"
-              >推荐计划会按频率、器械和不适部位生成训练安排。</view
+              >系统计划会按频率、器械和不适部位生成训练安排。</view
             >
           </view>
           <view v-if="activeTab === 'mine'" class="plan-page__create btn-press" @tap="goCreatePlan"
@@ -594,6 +618,25 @@ async function openDraftFab() {
             {{ tab.label }}
           </view>
         </view>
+
+        <scroll-view
+          v-if="activeTab === 'system'"
+          scroll-x
+          class="plan-page__collections"
+          :show-scrollbar="false"
+        >
+          <view class="plan-page__collection-row">
+            <view
+              v-for="collection in planCollections"
+              :key="collection.code"
+              class="plan-page__collection btn-press"
+              :class="{ 'plan-page__collection--active': selectedCollection === collection.code }"
+              @tap="selectCollection(collection.code)"
+            >
+              {{ collection.label }}
+            </view>
+          </view>
+        </scroll-view>
 
         <view
           v-if="activeTab === 'mine'"
@@ -621,7 +664,7 @@ async function openDraftFab() {
 
         <view v-else class="plan-page__list">
           <view v-if="!visiblePlans.length" class="glass-card plan-page__empty">
-            还没有我的计划。可以先从推荐计划生成一套安排。
+            还没有我的计划。可以先从系统计划生成一套安排。
           </view>
 
           <view
@@ -631,7 +674,7 @@ async function openDraftFab() {
             :class="{
               'plan-page__item--active': activeTab === 'mine' && 'active' in item && item.active
             }"
-            @tap="activeTab === 'recommended' ? goRecommendedDetail(item.id) : goDetail(item.id)"
+            @tap="activeTab === 'system' ? goSystemPlanDetail(item.id) : goDetail(item.id)"
           >
             <view
               v-if="activeTab === 'mine'"
@@ -641,9 +684,7 @@ async function openDraftFab() {
             >
             <view class="plan-page__item-main">
               <view class="plan-page__tag-row">
-                <view class="plan-page__tag">{{
-                  activeTab === 'recommended' ? '推荐' : '我的'
-                }}</view>
+                <view class="plan-page__tag">{{ activeTab === 'system' ? '系统' : '我的' }}</view>
                 <view
                   v-if="activeTab === 'mine' && 'active' in item && item.active"
                   class="plan-page__tag plan-page__tag--active"
@@ -662,16 +703,22 @@ async function openDraftFab() {
               </view>
               <view class="plan-page__name">{{ item.name }}</view>
               <view class="plan-page__meta">
-                {{ item.cycleWeeks }} 周 · {{ difficultyText(item.difficultyLevel) }} ·
-                {{ goalText(item.goal) }}
+                <template v-if="activeTab === 'system'">
+                  {{ item.cycleWeeks }} 周 ·
+                  {{ systemPlanMeta(item as SystemPlanListItemResponse) }}
+                </template>
+                <template v-else>
+                  {{ item.cycleWeeks }} 周 · {{ difficultyText(item.difficultyLevel) }} ·
+                  {{ goalText(item.goal) }}
+                </template>
               </view>
             </view>
-            <view v-if="activeTab === 'recommended'" class="plan-page__actions">
+            <view v-if="activeTab === 'system'" class="plan-page__actions">
               <view
                 class="plan-page__btn plan-page__btn--primary btn-press"
-                @tap.stop="customizeRecommendedPlan(item as RecommendedPlanListItemResponse)"
+                @tap.stop="customizeSystemPlan(item as SystemPlanListItemResponse)"
               >
-                定制
+                设置安排
               </view>
             </view>
             <view v-else-if="'active' in item && !item.active" class="plan-page__actions">
@@ -941,6 +988,37 @@ async function openDraftFab() {
       background: var(--app-accent);
       color: #fff;
       box-shadow: var(--app-shadow-cta);
+    }
+  }
+
+  &__collections {
+    width: 100%;
+    margin: -2rpx 0 20rpx;
+    white-space: nowrap;
+  }
+
+  &__collection-row {
+    display: inline-flex;
+    gap: 12rpx;
+    padding-right: 20rpx;
+  }
+
+  &__collection {
+    min-height: 56rpx;
+    padding: 0 22rpx;
+    border: 1rpx solid var(--app-border);
+    border-radius: 999rpx;
+    background: var(--app-surface);
+    color: var(--app-text-muted);
+    font-size: 22rpx;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+
+    &--active {
+      border-color: var(--app-accent);
+      background: var(--app-accent-soft);
+      color: var(--app-accent);
     }
   }
 
