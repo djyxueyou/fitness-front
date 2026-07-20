@@ -37,18 +37,30 @@ describe('home weekly rhythm contract', () => {
     expect(home).not.toContain('templateStore.fetchTemplates({ includeDetails: false }).catch')
     expect(home).toContain('shouldCommit: () => isHomeLoadActive(epoch)')
     expect(templateStore).toContain('shouldCommit?: () => boolean')
-    expect(templateStore).toContain('if (!shouldCommit()) return')
+    expect(templateStore).toMatch(
+      /const canCommit = \(\) =>\s+sessionGeneration === requestSession &&\s+fetchGeneration === requestGeneration &&\s+shouldCommit\(\)/
+    )
+    expect(templateStore).toMatch(
+      /const list = await fetchTemplateList\(\)\s+if \(!includeDetails\) {\s+if \(!canCommit\(\)\) return\s+items\.value = list\.map/
+    )
   })
 
   it('invalidates template requests across sessions and keeps fetch cleanup identity-safe', () => {
     const home = readSource('src/pages/home/index.vue')
     const templateStore = readSource('src/stores/template.ts')
     expect(home).toContain('templateStore.invalidateSession()')
+    expect(templateStore).toContain('let sessionGeneration = 0')
     expect(templateStore).toContain('let fetchGeneration = 0')
-    expect(templateStore).toContain('const generation = fetchGeneration')
-    expect(templateStore).toContain('fetchGeneration === generation && shouldCommit()')
-    expect(templateStore).toContain('function invalidateSession()')
-    expect(templateStore).toContain('fetchGeneration += 1')
+    expect(templateStore).toContain('const requestSession = sessionGeneration')
+    expect(templateStore).toContain('const requestGeneration = fetchGeneration')
+    expect(templateStore).toContain('sessionGeneration === requestSession')
+    expect(templateStore).toContain('fetchGeneration === requestGeneration')
+    expect(templateStore).toMatch(
+      /function invalidateTemplateReads\(\) {\s+fetchGeneration \+= 1\s+fetchPromise = null/
+    )
+    expect(templateStore).toMatch(
+      /function invalidateSession\(\) {\s+sessionGeneration \+= 1\s+invalidateTemplateReads\(\)/
+    )
     expect(templateStore).toContain('items.value = []')
     expect(templateStore).toContain('detailCache.value = {}')
     expect(templateStore).toContain('fetchPromise = null')
