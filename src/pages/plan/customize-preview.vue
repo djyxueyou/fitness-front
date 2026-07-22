@@ -6,7 +6,7 @@ import EmptyState from '@/components/empty-state/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
 import RestSecondsSheet from '@/components/rest-seconds-sheet/index.vue'
 import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
-import { usePlanStore } from '@/stores/plan'
+import { isStalePlanDetailError, usePlanStore } from '@/stores/plan'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
@@ -98,6 +98,7 @@ async function activate() {
     uni.showToast({ title: '已启用计划', icon: 'none' })
     uni.redirectTo({ url: routes.planActive })
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     uni.showToast({ title: '启用失败', icon: 'none' })
     console.error('[plan] activate system plan failed', err)
   } finally {

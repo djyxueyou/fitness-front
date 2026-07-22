@@ -31,6 +31,7 @@ import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
 import { useTrainingHubStore, type TrainingHubView } from '@/stores/training-hub'
 import { formatCompactWeight } from '@/utils/unit'
+import { buildWeeklyRhythmDays } from '@/utils/home-weekly-rhythm'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 
 const profileStore = useProfileStore()
@@ -61,21 +62,7 @@ const totalVolume = computed(() =>
 const totalDuration = computed(() =>
   weeklyRhythm.value ? `${Math.round(weeklyRhythm.value.totalDurationSeconds / 60)} min` : '--'
 )
-const weekStats = computed(() => {
-  const today = new Date()
-  const monday = getWeekStart(today)
-  const trainedDateSet = new Set(weeklyRhythm.value?.trainedDates || [])
-
-  return ['一', '二', '三', '四', '五', '六', '日'].map((day, index) => {
-    const date = new Date(monday)
-    date.setDate(monday.getDate() + index)
-    return {
-      day,
-      trained: trainedDateSet.has(toDateString(date)),
-      isToday: toDateString(date) === toDateString(today)
-    }
-  })
-})
+const weekStats = computed(() => buildWeeklyRhythmDays(weeklyRhythm.value))
 const recentTrainingRecords = computed(() => recentHistory.value.slice(0, 2))
 const hasActivePlan = computed(() => Boolean(planStore.currentPlanSummary))
 const recommendationType = computed(() => planStore.recommendation?.type || '')
@@ -289,14 +276,6 @@ async function loadHomeDataForEpoch(epoch: number, options?: { forceTemplates?: 
   }
 }
 
-function getWeekStart(date: Date) {
-  const start = new Date(date)
-  const day = start.getDay() || 7
-  start.setDate(start.getDate() - day + 1)
-  start.setHours(0, 0, 0, 0)
-  return start
-}
-
 function toDateString(date: Date) {
   const pad = (num: number) => String(num).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -347,7 +326,7 @@ async function startFreeWorkout() {
 async function goPlans() {
   const ok = await ensureFeatureAuth('训练计划')
   if (!ok) return
-  trainingHubStore.requestPlanTab(planStore.userPlans.length ? 'mine' : 'system')
+  trainingHubStore.requestPlanTab('auto')
   uni.switchTab({ url: routes.planIndex })
 }
 
@@ -358,7 +337,7 @@ async function viewCurrentPlan() {
     uni.navigateTo({ url: routes.planActive })
     return
   }
-  trainingHubStore.requestPlanTab(planStore.userPlans.length ? 'mine' : 'system')
+  trainingHubStore.requestPlanTab('auto')
   uni.switchTab({ url: routes.planIndex })
 }
 

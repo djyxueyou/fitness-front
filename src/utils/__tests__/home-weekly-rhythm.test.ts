@@ -1,6 +1,7 @@
 // @ts-ignore -- Vitest runs in Node; production tsconfig omits Node types.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { buildWeeklyRhythmDays, parseLocalDateOnly } from '@/utils/home-weekly-rhythm'
 
 const rootUrl = new URL('../../../', import.meta.url)
 const readSource = (path: string) => readFileSync(new URL(path, rootUrl), 'utf8')
@@ -65,5 +66,70 @@ describe('home weekly rhythm contract', () => {
     expect(templateStore).toContain('detailCache.value = {}')
     expect(templateStore).toContain('fetchPromise = null')
     expect(templateStore).toContain('if (fetchPromise === pendingFetch)')
+  })
+
+  it('anchors the seven day rhythm to the server week instead of the device current week', () => {
+    const days = buildWeeklyRhythmDays(
+      {
+        weekStart: '2026-07-06',
+        trainedDates: ['2026-07-06', '2026-07-12']
+      },
+      new Date(2026, 6, 22, 12)
+    )
+
+    expect(days.map((day) => day.date)).toEqual([
+      '2026-07-06',
+      '2026-07-07',
+      '2026-07-08',
+      '2026-07-09',
+      '2026-07-10',
+      '2026-07-11',
+      '2026-07-12'
+    ])
+    expect(days.filter((day) => day.trained).map((day) => day.date)).toEqual([
+      '2026-07-06',
+      '2026-07-12'
+    ])
+    expect(days.some((day) => day.isToday)).toBe(false)
+  })
+
+  it('parses date-only values in local time and falls back to the current local week', () => {
+    const parsed = parseLocalDateOnly('2026-07-06')
+    expect(parsed).not.toBeNull()
+    expect(parsed?.getFullYear()).toBe(2026)
+    expect(parsed?.getMonth()).toBe(6)
+    expect(parsed?.getDate()).toBe(6)
+
+    const days = buildWeeklyRhythmDays(null, new Date(2026, 6, 22, 12))
+    expect(days[0]?.date).toBe('2026-07-20')
+    expect(days[2]).toMatchObject({ date: '2026-07-22', isToday: true })
+  })
+
+  it('falls back for an invalid server week start', () => {
+    const days = buildWeeklyRhythmDays(
+      { weekStart: '2026-02-30', trainedDates: [] },
+      new Date(2026, 6, 22, 12)
+    )
+
+    expect(days[0]?.date).toBe('2026-07-20')
+    expect(days[6]?.date).toBe('2026-07-26')
+  })
+
+  it('keeps a local calendar sequence across month and year boundaries', () => {
+    const days = buildWeeklyRhythmDays(
+      { weekStart: '2025-12-29', trainedDates: ['2026-01-01'] },
+      new Date(2026, 0, 1, 12)
+    )
+
+    expect(days.map((day) => day.date)).toEqual([
+      '2025-12-29',
+      '2025-12-30',
+      '2025-12-31',
+      '2026-01-01',
+      '2026-01-02',
+      '2026-01-03',
+      '2026-01-04'
+    ])
+    expect(days[3]).toMatchObject({ trained: true, isToday: true })
   })
 })

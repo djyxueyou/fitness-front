@@ -4,7 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
-import { usePlanStore } from '@/stores/plan'
+import { isStalePlanDetailError, usePlanStore } from '@/stores/plan'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
@@ -65,6 +65,7 @@ onShow(async () => {
     goal.value = detail.goal || '综合训练'
     difficultyLevel.value = detail.difficultyLevel || 'BEGINNER'
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     uni.showToast({ title: '计划加载失败', icon: 'none' })
     console.error('[plan] edit load failed', err)
   }

@@ -13,7 +13,7 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { showPlanWriteError } from '@/utils/plan-write-feedback'
-import { usePlanStore } from '@/stores/plan'
+import { isStalePlanDetailError, usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
@@ -176,6 +176,7 @@ async function loadDetail(force = false) {
     }
     detail.value = await planStore.getDetail(planId.value, force)
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     uni.showToast({ title: '计划加载失败', icon: 'none' })
     console.error('[plan] detail fetch failed', err)
   } finally {
@@ -205,6 +206,7 @@ async function performActivatePlan(mode: 'THIS_WEEK' | 'NEXT_WEEK') {
     uni.showToast({ title: '已启用训练计划', icon: 'none' })
     setTimeout(() => uni.redirectTo({ url: routes.planActive }), 300)
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     uni.showToast({
       title: activationErrorTitle(err),
       icon: 'none'
@@ -615,6 +617,7 @@ async function deactivatePlan() {
     await loadDetail(true)
     uni.showToast({ title: '已停用计划', icon: 'none' })
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     uni.showToast({ title: '停用失败', icon: 'none' })
     console.error('[plan] deactivate failed', err)
   } finally {

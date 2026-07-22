@@ -13,12 +13,18 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { showPlanWriteError } from '@/utils/plan-write-feedback'
+import { createSessionLoadCoordinator } from '@/utils/session-load-coordinator'
+import { resetPlanViewLocalState } from '@/utils/plan-view-session-state'
 import { getToken } from '@/api/http'
-import { usePlanStore } from '@/stores/plan'
+import { isStalePlanDetailError, usePlanStore } from '@/stores/plan'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
-import { useTrainingHubStore, type TrainingHubView } from '@/stores/training-hub'
+import {
+  resolvePlanLandingTab,
+  useTrainingHubStore,
+  type TrainingHubView
+} from '@/stores/training-hub'
 import {
   fetchPlanActivationOptions,
   type ActivePlanSummaryResponse,
@@ -49,6 +55,20 @@ const sheetSubtitle = ref('')
 const sheetItems = ref<ActionSheetItem[]>([])
 const sheetTargetPlan = ref<TrainingPlanListItemResponse | null>(null)
 const selectedCollection = ref('ALL')
+const planViewLoadCoordinator = createSessionLoadCoordinator<string | undefined>({
+  onSessionChange: () => {
+    resetPlanViewLocalState({
+      activePlanSummary,
+      busyPlanId,
+      sheetVisible,
+      sheetTitle,
+      sheetSubtitle,
+      sheetItems,
+      sheetTargetPlan
+    })
+    planStore.clearPersonalPlanState()
+  }
+})
 const planCollections = [
   { code: 'ALL', label: '全部' },
   { code: 'BEGINNER', label: '新手入门' },
@@ -149,38 +169,55 @@ function summaryStatusText(status?: string) {
 onShow(async () => {
   const requestedView = trainingHubStore.consumeRequestedView()
   if (requestedView) trainingHubStore.setActiveView(requestedView)
-  const requestedPlanTab = trainingHubStore.consumeRequestedPlanTab()
-  if (requestedPlanTab) activeTab.value = requestedPlanTab
   if (trainingHubStore.activeView !== 'plan') return
-  await loadPlanView()
+  const tokenSnapshot = getToken()
+  const loadTicket = planViewLoadCoordinator.begin(tokenSnapshot, (isCurrent) =>
+    loadPlanView(tokenSnapshot, isCurrent)
+  )
+  await loadTicket.promise
+  if (!loadTicket.isCurrent()) return
+  const requestedPlanTab = trainingHubStore.consumeRequestedPlanTab()
+  if (!requestedPlanTab) return
+  activeTab.value = resolvePlanLandingTab(
+    requestedPlanTab,
+    !planStore.listError && Boolean(planStore.userPlans.length)
+  )
 })
 
 onHide(() => {
   trainingHubStore.setActiveView('plan')
 })
 
-async function loadPlanView() {
-  if (!getToken()) {
+async function loadPlanView(tokenSnapshot = getToken(), shouldCommit = () => true) {
+  if (!tokenSnapshot) {
     activeTab.value = 'system'
     activePlanSummary.value = null
     planStore.clearPersonalPlanState()
     await planStore.fetchSystemPlanList({ force: true })
     return
   }
-  await loadAuthenticatedPlans()
+  await loadAuthenticatedPlans(shouldCommit)
 }
 
 async function selectHubView(view: TrainingHubView) {
   if (view !== 'plan' && !(await ensureFeatureAuth(view === 'calendar' ? '训练日历' : '训练记录')))
     return
   trainingHubStore.setActiveView(view)
-  if (view === 'plan') await loadPlanView()
+  if (view === 'plan') {
+    const tokenSnapshot = getToken()
+    await planViewLoadCoordinator.begin(tokenSnapshot, (isCurrent) =>
+      loadPlanView(tokenSnapshot, isCurrent)
+    ).promise
+  }
 }
 
-async function loadAuthenticatedPlans() {
+async function loadAuthenticatedPlans(shouldCommit = () => true) {
   await planStore.fetchPlans({ force: true })
+  if (!shouldCommit()) return
   await planStore.loadCurrentPlan()
+  if (!shouldCommit()) return
   await planStore.loadRecommendation()
+  if (!shouldCommit()) return
   await loadActivePlanSummary()
 }
 
@@ -253,6 +290,7 @@ async function performActivatePlan(
     uni.showToast({ title: '已启用训练计划', icon: 'none' })
     setTimeout(() => uni.navigateTo({ url: routes.planActive }), 300)
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     uni.showToast({
       title: activationErrorTitle(err),
       icon: 'none'

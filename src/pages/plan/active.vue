@@ -17,7 +17,7 @@ import { routes } from '@/utils/navigation'
 import { planExerciseThumbnail } from '@/utils/plan-exercise-thumbnail'
 import { showPlanWriteError } from '@/utils/plan-write-feedback'
 import { emitTrainingChanged } from '@/utils/training-events'
-import { usePlanStore } from '@/stores/plan'
+import { isStalePlanDetailError, usePlanStore } from '@/stores/plan'
 import { useTrainingHubStore } from '@/stores/training-hub'
 import { useThemeStore } from '@/stores/theme'
 import { useWorkoutStore } from '@/stores/workout'
@@ -557,6 +557,7 @@ async function confirmDeactivate() {
     uni.showToast({ title: '已停用当前计划', icon: 'none' })
     uni.switchTab({ url: routes.planIndex })
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     showPlanWriteError(err, '停用当前计划失败，请重试')
     console.error('[plan] deactivate current plan failed', err)
   } finally {

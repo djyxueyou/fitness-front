@@ -4,7 +4,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
-import { usePlanStore } from '@/stores/plan'
+import { isStalePlanDetailError, usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
@@ -108,6 +108,7 @@ async function loadDay() {
     sortOrder.value = day.sortOrder || 0
     completed.value = !!day.completed
   } catch (err) {
+    if (isStalePlanDetailError(err)) return
     uni.showToast({ title: '训练日加载失败', icon: 'none' })
     console.error('[plan] day load failed', err)
   }
