@@ -1,5 +1,7 @@
 # FitForge 产品优化总纲设计
 
+> 会员、训练画像、等级与分享范围已于 2026-07-19 被 `2026-07-19-fitforge-product-scope-membership-level-redesign.md` 替代。冲突处以后者和根目录 `PRODUCT.md` 为准。
+
 ## 1. 文档目的
 
 本文定义 FitForge 下一阶段产品优化的统一目标、范围、设计原则、交付顺序与验收口径。详细功能分别由四份子方案描述：

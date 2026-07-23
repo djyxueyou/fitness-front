@@ -13,6 +13,7 @@ import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { showPlanWriteError } from '@/utils/plan-write-feedback'
+import { systemPlanDifficultyText, systemPlanGoalText } from '@/utils/system-plan-metadata'
 import { isStalePlanDetailError, usePlanStore } from '@/stores/plan'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
@@ -75,14 +76,12 @@ const weeks = computed(() => {
 })
 const heroMeta = computed(() => {
   if (systemPlanDetail.value) {
-    return `${systemPlanDetail.value.cycleWeeks} 周 · ${systemPlanDetail.value.minWeeklyFrequency}-${systemPlanDetail.value.maxWeeklyFrequency} 练 · ${difficultyText(
+    return `${systemPlanDetail.value.cycleWeeks} 周 · ${systemPlanDetail.value.minWeeklyFrequency}-${systemPlanDetail.value.maxWeeklyFrequency} 练 · ${systemPlanDifficultyText(
       systemPlanDetail.value.difficultyLevel
-    )} · ${goalText(systemPlanDetail.value.goal)}`
+    )} · ${systemPlanGoalText(systemPlanDetail.value.goal)}`
   }
   if (!detail.value) return ''
-  return `${detail.value.cycleWeeks} 周 · ${detail.value.days.length} 个训练日 · ${difficultyText(
-    detail.value.difficultyLevel
-  )} · ${goalText(detail.value.goal)}`
+  return `${detail.value.cycleWeeks} 周 · ${detail.value.days.length} 个训练日`
 })
 const sortedDays = computed(() =>
   [...(detail.value?.days || [])].sort(
@@ -375,16 +374,16 @@ function openPlanMoreSheet() {
   sheetItems.value = [
     {
       key: 'copy-plan',
-      label: detail.value.planType === 'SYSTEM' ? '复制到我的计划' : '复制计划',
+      label: '复制计划',
       description: '复制后可以编辑训练日和计划名称。',
-      primary: detail.value.planType === 'SYSTEM'
+      primary: false
     },
     ...(canEditSchedule.value
       ? [
           {
             key: 'edit-plan',
             label: '编辑计划',
-            description: '修改计划名称、目标和难度。'
+            description: '修改计划名称。'
           },
           {
             key: 'add-plan-day',
@@ -429,7 +428,7 @@ function openPlanMoreSheet() {
       {
         key: 'keep-browsing',
         label: '暂无更多操作',
-        description: '系统计划可以复制到我的计划后再编辑。'
+        description: '当前没有可执行的计划操作。'
       }
     ]
   }
@@ -818,29 +817,6 @@ function weekdayText(dayOfWeek: number) {
     ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][dayOfWeek - 1] || `第 ${dayOfWeek} 天`
   )
 }
-
-function difficultyText(level?: string) {
-  const map: Record<string, string> = {
-    BEGINNER: '入门',
-    BEGINNER_INTERMEDIATE: '新手到进阶',
-    INTERMEDIATE: '进阶',
-    ADVANCED: '高阶'
-  }
-  return level ? map[level] || level : '通用'
-}
-
-function goalText(goal?: string) {
-  const map: Record<string, string> = {
-    STARTER: '入门体验',
-    FOUNDATION: '基础力量',
-    MUSCLE_GAIN: '增肌分化',
-    HOME_FITNESS: '居家训练',
-    STRENGTH: '力量提升',
-    FAT_LOSS: '减脂塑形',
-    GENERAL_FITNESS: '综合训练'
-  }
-  return goal ? map[goal] || goal : '综合训练'
-}
 </script>
 
 <template>
@@ -914,9 +890,7 @@ function goalText(goal?: string) {
         <view class="glass-card plan-detail__hero">
           <view class="plan-detail__hero-more btn-press" @tap="openPlanMoreSheet">...</view>
           <view class="plan-detail__tag-row">
-            <view class="plan-detail__tag">{{
-              detail.planType === 'SYSTEM' ? '系统计划' : '我的计划'
-            }}</view>
+            <view class="plan-detail__tag">我的计划</view>
             <view v-if="detail.active" class="plan-detail__tag plan-detail__tag--active">
               {{ executionStatusText || '进行中' }}
             </view>

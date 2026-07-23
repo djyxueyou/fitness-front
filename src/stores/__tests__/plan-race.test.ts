@@ -18,7 +18,6 @@ const apiMocks = vi.hoisted(() => ({
   fetchTrainingPlanDetail: vi.fn(),
   fetchTrainingPlans: vi.fn(),
   previewSystemPlan: vi.fn(),
-  savePlanExecutionAsMyPlan: vi.fn(),
   updateTrainingPlan: vi.fn(),
   updateTrainingPlanDay: vi.fn()
 }))
@@ -590,21 +589,5 @@ describe('plan store request epochs', () => {
 
     await expect(store.getDetail(11)).resolves.toEqual(detail(11, '新会话详情'))
     expect(apiMocks.fetchTrainingPlanDetail).toHaveBeenCalledTimes(2)
-  })
-
-  it('does not cache a saved active plan that finishes after the session was cleared', async () => {
-    const staleSave = deferred<TrainingPlanDetailResponse>()
-    apiMocks.savePlanExecutionAsMyPlan.mockReturnValueOnce(staleSave.promise)
-    apiMocks.fetchTrainingPlanDetail.mockResolvedValueOnce(detail(13, '新会话详情'))
-    const store = usePlanStore()
-    store.activeExecution = activeExecution()
-
-    const saveRequest = store.saveActiveToMyPlans(10)
-    store.clearPersonalPlanState()
-    staleSave.resolve(detail(13, '旧会话保存结果'))
-    await saveRequest
-
-    await expect(store.getDetail(13)).resolves.toEqual(detail(13, '新会话详情'))
-    expect(apiMocks.fetchTrainingPlanDetail).toHaveBeenCalledTimes(1)
   })
 })

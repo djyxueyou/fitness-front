@@ -53,8 +53,6 @@ export const useProfileStore = defineStore('profile', () => {
   const avatarUrl = ref(cached?.avatarUrl || '')
   const avatarDisplayUrl = computed(() => resolveAvatarUrl(avatarUrl.value))
   const heightCm = ref<number | null>(cached?.heightCm ?? null)
-  const trainingGoal = ref(cached?.trainingGoal || '')
-  const experienceLevel = ref(cached?.experienceLevel || '')
   const currentWeightKg = ref<number | null>(cached?.currentWeightKg ?? null)
   const notifications = ref(true)
   const darkMode = ref(true)
@@ -72,7 +70,6 @@ export const useProfileStore = defineStore('profile', () => {
   const restSound = ref(cachedTrainingPreferences.restSound)
   const totalSessions = ref(0)
   const totalVolumeKg = ref(0)
-  const currentStreakDays = ref(0)
 
   async function refreshProfile() {
     try {
@@ -81,8 +78,6 @@ export const useProfileStore = defineStore('profile', () => {
       nickname.value = profile.nickname || 'LiftLog User'
       avatarUrl.value = profile.avatarUrl || ''
       heightCm.value = profile.heightCm ?? null
-      trainingGoal.value = profile.trainingGoal || ''
-      experienceLevel.value = profile.experienceLevel || ''
       currentWeightKg.value = profile.currentWeightKg ?? null
       unit.value = profile.weightUnit === 'lb' ? 'lb' : 'kg'
       restSeconds.value = profile.restSeconds
@@ -102,7 +97,6 @@ export const useProfileStore = defineStore('profile', () => {
       const summary = await fetchUserSummary()
       totalSessions.value = Number(summary.totalSessions || 0)
       totalVolumeKg.value = Number(summary.totalVolumeKg || 0)
-      currentStreakDays.value = Number(summary.currentStreakDays || 0)
     } catch (err) {
       console.error('[profile] refresh summary failed', err)
     }
@@ -136,8 +130,6 @@ export const useProfileStore = defineStore('profile', () => {
       nickname: nickname.value,
       avatarUrl: avatarUrl.value,
       heightCm: heightCm.value ?? undefined,
-      trainingGoal: trainingGoal.value || undefined,
-      experienceLevel: experienceLevel.value || undefined,
       currentWeightKg: currentWeightKg.value ?? undefined,
       weightUnit: unit.value,
       restSeconds: restSeconds.value,
@@ -185,17 +177,25 @@ export const useProfileStore = defineStore('profile', () => {
     nickname: string
     avatarUrl?: string
     heightCm?: number | null
-    trainingGoal?: string | null
-    experienceLevel?: string | null
   }) {
     await updateUserProfile({
       nickname: next.nickname,
       avatarUrl: next.avatarUrl,
-      heightCm: next.heightCm ?? null,
-      trainingGoal: next.trainingGoal || null,
-      experienceLevel: next.experienceLevel || null
+      heightCm: next.heightCm ?? null
     })
     await refreshProfile()
+  }
+
+  async function saveProfilePatch(next: {
+    nickname?: string
+    avatarUrl?: string
+    heightCm?: number | null
+  }) {
+    await saveProfile({
+      nickname: next.nickname ?? nickname.value,
+      avatarUrl: next.avatarUrl ?? avatarUrl.value,
+      heightCm: next.heightCm === undefined ? heightCm.value : next.heightCm
+    })
   }
 
   function resetProfile() {
@@ -203,8 +203,6 @@ export const useProfileStore = defineStore('profile', () => {
     nickname.value = 'LiftLog User'
     avatarUrl.value = ''
     heightCm.value = null
-    trainingGoal.value = ''
-    experienceLevel.value = ''
     currentWeightKg.value = null
     unit.value = 'kg'
     restSeconds.value = 60
@@ -219,7 +217,6 @@ export const useProfileStore = defineStore('profile', () => {
     uni.setStorageSync(TRAINING_PREFERENCES_KEY, defaultTrainingPreferences)
     totalSessions.value = 0
     totalVolumeKg.value = 0
-    currentStreakDays.value = 0
     clearCachedUserProfile()
   }
 
@@ -229,8 +226,6 @@ export const useProfileStore = defineStore('profile', () => {
     avatarUrl,
     avatarDisplayUrl,
     heightCm,
-    trainingGoal,
-    experienceLevel,
     currentWeightKg,
     notifications,
     darkMode,
@@ -246,10 +241,10 @@ export const useProfileStore = defineStore('profile', () => {
     restSound,
     totalSessions,
     totalVolumeKg,
-    currentStreakDays,
     refreshProfile,
     refreshSummary,
     saveProfile,
+    saveProfilePatch,
     saveSettings,
     saveTrainingPreferences,
     resetProfile

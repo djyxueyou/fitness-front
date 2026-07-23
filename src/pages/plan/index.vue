@@ -384,63 +384,53 @@ function systemPlanMeta(item: SystemPlanListItemResponse) {
 function openPlanActions(item: TrainingPlanListItemResponse) {
   sheetTargetPlan.value = item
   sheetTitle.value = item.name
-  sheetSubtitle.value = item.planType === 'SYSTEM' ? '系统计划可复制后编辑' : '我的计划'
-  sheetItems.value =
-    item.planType === 'SYSTEM'
+  sheetSubtitle.value = '我的计划'
+  sheetItems.value = [
+    {
+      key: 'detail',
+      label: '查看详情',
+      description: '查看和管理训练安排。',
+      primary: true
+    },
+    ...(!item.active
       ? [
           {
-            key: 'copy',
-            label: '复制到我的计划',
-            description: '复制后可以编辑训练日和计划名称。',
-            primary: true
+            key: 'edit',
+            label: '编辑计划',
+            description: '修改计划名称。'
+          },
+          {
+            key: 'add-day',
+            label: '新增训练日',
+            description: '为计划增加新的周训练安排。'
           }
         ]
-      : [
+      : []),
+    {
+      key: 'copy',
+      label: '复制计划',
+      description: '复制一份新的计划副本。'
+    },
+    ...(item.active
+      ? [
           {
-            key: 'detail',
-            label: '查看详情',
-            description: '查看和管理训练安排。',
-            primary: true
-          },
-          ...(!item.active
-            ? [
-                {
-                  key: 'edit',
-                  label: '编辑计划',
-                  description: '修改计划名称、目标和难度。'
-                },
-                {
-                  key: 'add-day',
-                  label: '新增训练日',
-                  description: '为计划增加新的周训练安排。'
-                }
-              ]
-            : []),
-          {
-            key: 'copy',
-            label: '复制计划',
-            description: '复制一份新的计划副本。'
-          },
-          ...(item.active
-            ? [
-                {
-                  key: 'manage-active',
-                  label: '管理当前计划',
-                  description: '前往当前安排保存副本或停用计划。'
-                }
-              ]
-            : []),
-          ...(!item.active
-            ? [
-                {
-                  key: 'delete',
-                  label: '删除计划',
-                  description: '仅删除计划编排，不删除已完成的训练记录。',
-                  danger: true
-                }
-              ]
-            : [])
+            key: 'manage-active',
+            label: '管理当前计划',
+            description: '前往当前安排查看或停用计划。'
+          }
         ]
+      : []),
+    ...(!item.active
+      ? [
+          {
+            key: 'delete',
+            label: '删除计划',
+            description: '仅删除计划编排，不删除已完成的训练记录。',
+            danger: true
+          }
+        ]
+      : [])
+  ]
   sheetVisible.value = true
 }
 
@@ -516,29 +506,6 @@ function activationErrorTitle(err: unknown) {
     }
   }
   return '启用失败'
-}
-
-function difficultyText(level?: string) {
-  const map: Record<string, string> = {
-    BEGINNER: '入门',
-    BEGINNER_INTERMEDIATE: '新手到进阶',
-    INTERMEDIATE: '进阶',
-    ADVANCED: '高阶'
-  }
-  return level ? map[level] || level : '通用'
-}
-
-function goalText(goal?: string) {
-  const map: Record<string, string> = {
-    STARTER: '入门体验',
-    FOUNDATION: '基础力量',
-    MUSCLE_GAIN: '增肌分化',
-    HOME_FITNESS: '居家训练',
-    STRENGTH: '力量提升',
-    FAT_LOSS: '减脂塑形',
-    GENERAL_FITNESS: '综合训练'
-  }
-  return goal ? map[goal] || goal : '综合训练'
 }
 
 function weekdayText(dayOfWeek?: number | null) {
@@ -753,10 +720,7 @@ async function openDraftFab() {
                   {{ item.cycleWeeks }} 周 ·
                   {{ systemPlanMeta(item as SystemPlanListItemResponse) }}
                 </template>
-                <template v-else>
-                  {{ item.cycleWeeks }} 周 · {{ difficultyText(item.difficultyLevel) }} ·
-                  {{ goalText(item.goal) }}
-                </template>
+                <template v-else> {{ item.cycleWeeks }} 周 · 自定义安排 </template>
               </view>
             </view>
             <view v-if="activeTab === 'system'" class="plan-page__actions">

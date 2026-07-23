@@ -7,7 +7,6 @@ export interface AnalyticsOverviewResponse {
   totalSessions: number
   totalVolumeKg: number
   totalDurationSeconds: number
-  currentStreakDays: number
   lastTrainingAt?: string
   prCount: number
   topMuscles: AnalyticsTopMuscleResponse[]
@@ -19,13 +18,11 @@ export interface AnalyticsDashboardResponse {
     totalSessions: number
     totalVolumeKg: number
     totalDurationSeconds: number
-    currentStreakDays?: number | null
   }
   previous: {
     totalSessions: number
     totalVolumeKg: number
     totalDurationSeconds: number
-    currentStreakDays?: number | null
   }
   delta: {
     sessions: number

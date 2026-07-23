@@ -50,3 +50,8 @@ export function restoreSuspendedWorkoutClock(
       Math.max(0, state.accumulatedSuspendedSeconds || 0) + suspendedSeconds
   }
 }
+
+export function includeSuspendedWorkoutClock(state: WorkoutClockState): WorkoutClockState {
+  if (state.suspendedAtMs == null) return state
+  return { ...state, suspendedAtMs: null }
+}

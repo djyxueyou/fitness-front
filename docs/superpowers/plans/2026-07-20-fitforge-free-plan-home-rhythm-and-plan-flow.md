@@ -1,5 +1,7 @@
 # FitForge Free Plan, Home Rhythm, and Plan Flow Implementation Plan
 
+> 历史实施记录：其中“系统计划存为我的计划”、`SYSTEM_COPY`、`savedDefinitionId` 和 `saveExecutionAsMyPlan` 任务已于 2026-07-22 取消并由同名设计规格的最新修订取代。当前实现为系统计划不可复制、启用使用 `clientRequestId` + MySQL 用户行锁 + 唯一索引防重。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让免费用户可靠地拥有 1 个“我的计划”，开放首页基础本周节奏，并修复系统计划保存/停用、计划中心跳转和模板写后刷新问题。

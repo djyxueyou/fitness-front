@@ -7,8 +7,6 @@ export interface UserProfileResponse {
   nickname: string
   avatarUrl?: string
   heightCm?: number
-  trainingGoal?: string
-  experienceLevel?: string
   currentWeightKg?: number
   weightUnit: 'kg' | 'lb' | string
   restSeconds: number
@@ -23,8 +21,6 @@ export interface UpdateUserProfileRequest {
   nickname?: string
   avatarUrl?: string
   heightCm?: number | null
-  trainingGoal?: string | null
-  experienceLevel?: string | null
 }
 
 export type BodyMetricType =
@@ -104,7 +100,6 @@ export interface UserSummaryResponse {
   totalSessions: number
   totalVolumeKg: number
   lastTrainingAt?: string
-  currentStreakDays: number
 }
 
 export function fetchUserProfile() {

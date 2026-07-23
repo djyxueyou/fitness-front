@@ -9,12 +9,13 @@ import MembershipRequiredModal from '@/components/membership-required-modal/inde
 import WorkoutDraftFab from '@/components/workout-draft-fab/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import { getToken } from '@/api/http'
+import { fetchExerciseFilterMetadata, type CreateCustomExerciseRequest } from '@/api/exercise'
 import { useExerciseStore } from '@/stores/exercise'
 import { useWorkoutStore } from '@/stores/workout'
 import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
-import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { ensureMembershipFeature, handleMembershipRequiredError } from '@/utils/membership-guard'
 import { offAuthChanged, onAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
 import type { ExerciseFilterState } from '@/utils/exercise-filters'
@@ -41,8 +42,11 @@ const filterSheetVisible = ref(false)
 const customDialogVisible = ref(false)
 const customDialogMode = ref<'create' | 'edit'>('create')
 const customDialogName = ref('')
+const customDialogCategoryCode = ref('')
+const customDialogEquipmentCode = ref('')
 const customDialogRecordType = ref<ExerciseRecordType>('BODYWEIGHT_REPS')
 const customDialogDifficultyCode = ref<ExerciseDifficultyCode>('BEGINNER')
+const customDialogRecordTypeLocked = ref(false)
 const editingCustomId = ref<number | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -68,33 +72,44 @@ const emptyDescription = computed(() =>
       ? '收藏常用动作后，可以在这里快速找到。'
       : '可以切换分类，或清空搜索关键词后再试。'
 )
-const equipmentOptions = [
+const filterMetadata = ref({
+  equipment: [
+    { label: '徒手', value: 'BODYWEIGHT' },
+    { label: '杠铃', value: 'BARBELL' },
+    { label: '哑铃', value: 'DUMBBELL' },
+    { label: '固定器械', value: 'MACHINE' },
+    { label: '绳索', value: 'CABLE' },
+    { label: '史密斯机', value: 'SMITH_MACHINE' },
+    { label: '单杠', value: 'PULL_UP_BAR' },
+    { label: '双杠', value: 'PARALLEL_BARS' },
+    { label: '弹力带', value: 'RESISTANCE_BAND' },
+    { label: '壶铃', value: 'KETTLEBELL' },
+    { label: '训练凳', value: 'BENCH' },
+    { label: '墙面', value: 'WALL' }
+  ],
+  difficulty: [
+    { label: '初级', value: 'BEGINNER' },
+    { label: '中级', value: 'INTERMEDIATE' },
+    { label: '高级', value: 'ADVANCED' }
+  ],
+  recordTypes: [
+    { label: '重量次数', value: 'WEIGHT_REPS' },
+    { label: '自重次数', value: 'BODYWEIGHT_REPS' },
+    { label: '计时', value: 'DURATION' }
+  ]
+})
+const equipmentOptions = computed(() => [
   { label: '全部器械', value: '' },
-  { label: '徒手', value: 'BODYWEIGHT' },
-  { label: '杠铃', value: 'BARBELL' },
-  { label: '哑铃', value: 'DUMBBELL' },
-  { label: '固定器械', value: 'MACHINE' },
-  { label: '绳索', value: 'CABLE' },
-  { label: '史密斯机', value: 'SMITH_MACHINE' },
-  { label: '单杠', value: 'PULL_UP_BAR' },
-  { label: '双杠', value: 'PARALLEL_BARS' },
-  { label: '弹力带', value: 'RESISTANCE_BAND' },
-  { label: '壶铃', value: 'KETTLEBELL' },
-  { label: '训练凳', value: 'BENCH' },
-  { label: '墙面', value: 'WALL' }
-]
-const difficultyOptions = [
+  ...filterMetadata.value.equipment
+])
+const difficultyOptions = computed(() => [
   { label: '全部难度', value: '' },
-  { label: '初级', value: 'BEGINNER' },
-  { label: '中级', value: 'INTERMEDIATE' },
-  { label: '高级', value: 'ADVANCED' }
-]
-const recordTypeOptions = [
+  ...filterMetadata.value.difficulty
+])
+const recordTypeOptions = computed(() => [
   { label: '全部类型', value: '' },
-  { label: '重量次数', value: 'WEIGHT_REPS' },
-  { label: '自重次数', value: 'BODYWEIGHT_REPS' },
-  { label: '计时', value: 'DURATION' }
-]
+  ...filterMetadata.value.recordTypes
+])
 const activeFilterCount = computed(
   () =>
     [activeEquipmentCode.value, activeDifficultyCode.value, activeRecordType.value].filter(Boolean)
@@ -129,9 +144,9 @@ const visibleExercises = computed(() => {
 })
 const filterSummary = computed(() =>
   [
-    `器械：${findOptionLabel(equipmentOptions, activeEquipmentCode.value)}`,
-    `难度：${findOptionLabel(difficultyOptions, activeDifficultyCode.value)}`,
-    `类型：${findOptionLabel(recordTypeOptions, activeRecordType.value)}`
+    `器械：${findOptionLabel(equipmentOptions.value, activeEquipmentCode.value)}`,
+    `难度：${findOptionLabel(difficultyOptions.value, activeDifficultyCode.value)}`,
+    `类型：${findOptionLabel(recordTypeOptions.value, activeRecordType.value)}`
   ].join(' · ')
 )
 const sharedFilterState = computed<ExerciseFilterState>(() => ({
@@ -140,15 +155,19 @@ const sharedFilterState = computed<ExerciseFilterState>(() => ({
   difficultyCode: activeDifficultyCode.value,
   recordType: activeRecordType.value
 }))
-const sharedFilterMetadata = computed(() => ({
-  equipment: equipmentOptions.filter((item) => item.value),
-  difficulty: difficultyOptions.filter((item) => item.value),
-  recordTypes: recordTypeOptions.filter((item) => item.value)
-}))
+const sharedFilterMetadata = computed(() => filterMetadata.value)
+
+async function loadFilterMetadata() {
+  try {
+    filterMetadata.value = await fetchExerciseFilterMetadata()
+  } catch (err) {
+    console.error('[exercise] filter metadata fetch failed', err)
+  }
+}
 
 onLoad(async () => {
   onAuthChanged(refreshAfterAuthChanged)
-  await exerciseStore.fetchCategories()
+  await Promise.all([exerciseStore.fetchCategories(), loadFilterMetadata()])
   await exerciseStore.fetchExercises({ reset: true, force: true })
 })
 
@@ -325,27 +344,37 @@ async function onFavorite(id: number) {
 }
 
 async function createCustomExercise() {
-  if (!(await ensureMembershipFeature('自定义动作'))) return
   const ok = await ensureFeatureAuth('自定义动作')
   if (!ok) return
   editingCustomId.value = null
   customDialogMode.value = 'create'
   customDialogName.value = searchText.value.trim()
+  customDialogCategoryCode.value = ''
+  customDialogEquipmentCode.value = ''
   customDialogRecordType.value = 'BODYWEIGHT_REPS'
   customDialogDifficultyCode.value = 'BEGINNER'
+  customDialogRecordTypeLocked.value = false
   customDialogVisible.value = true
 }
 
-async function renameCustomExercise(id: number) {
-  if (!(await ensureMembershipFeature('自定义动作'))) return
-  const target = exerciseStore.items.find((item) => item.id === id)
-  if (!target) return
-  editingCustomId.value = id
-  customDialogMode.value = 'edit'
-  customDialogName.value = target.name
-  customDialogRecordType.value = (target.recordType as ExerciseRecordType) || 'BODYWEIGHT_REPS'
-  customDialogDifficultyCode.value = (target.difficultyCode as ExerciseDifficultyCode) || 'BEGINNER'
-  customDialogVisible.value = true
+async function editCustomExercise(id: number) {
+  if (!(await ensureFeatureAuth('自定义动作'))) return
+  try {
+    const target = await exerciseStore.fetchDetail(id)
+    editingCustomId.value = id
+    customDialogMode.value = 'edit'
+    customDialogName.value = target.name
+    customDialogCategoryCode.value = target.categoryCode || 'custom'
+    customDialogEquipmentCode.value = target.equipmentCode || ''
+    customDialogRecordType.value = (target.recordType as ExerciseRecordType) || 'BODYWEIGHT_REPS'
+    customDialogDifficultyCode.value =
+      (target.difficultyCode as ExerciseDifficultyCode) || 'BEGINNER'
+    customDialogRecordTypeLocked.value = !!target.recordTypeLocked
+    customDialogVisible.value = true
+  } catch (err) {
+    uni.showToast({ title: '动作信息加载失败', icon: 'none' })
+    console.error('[exercise] custom detail fetch failed', err)
+  }
 }
 
 function closeCustomDialog() {
@@ -353,25 +382,30 @@ function closeCustomDialog() {
   editingCustomId.value = null
 }
 
-async function submitCustomExercise(payload: {
-  name: string
-  recordType: ExerciseRecordType
-  difficultyCode: ExerciseDifficultyCode
-  difficultyName: string
-}) {
+async function submitCustomExercise(payload: CreateCustomExerciseRequest) {
   try {
     if (customDialogMode.value === 'edit' && editingCustomId.value) {
       await exerciseStore.updateCustom(editingCustomId.value, payload)
-      uni.showToast({ title: '已更新自定义动作', icon: 'none' })
+      uni.showToast({
+        title: exerciseStore.listError ? '已更新，列表刷新失败' : '已更新自定义动作',
+        icon: 'none'
+      })
     } else {
       await exerciseStore.createCustom(payload)
       activeScope.value = 'CUSTOM'
       activeCategoryCode.value = ''
+      activeEquipmentCode.value = ''
+      activeDifficultyCode.value = ''
+      activeRecordType.value = ''
       searchText.value = ''
-      uni.showToast({ title: '已创建自定义动作', icon: 'none' })
+      uni.showToast({
+        title: exerciseStore.listError ? '已创建，列表刷新失败' : '已创建自定义动作',
+        icon: 'none'
+      })
     }
     closeCustomDialog()
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义动作')) return
     uni.showToast({
       title: customDialogMode.value === 'edit' ? '更新动作失败' : '新建动作失败',
       icon: 'none'
@@ -540,7 +574,7 @@ async function deleteCustomExercise(id: number) {
                 :custom-actions="activeScope === 'CUSTOM'"
                 @select="openDetail"
                 @favorite="onFavorite"
-                @rename="renameCustomExercise"
+                @edit="editCustomExercise"
                 @delete="deleteCustomExercise"
               />
             </view>
@@ -555,11 +589,17 @@ async function deleteCustomExercise(id: number) {
 
     <CustomExerciseDialog
       :visible="customDialogVisible"
+      :mode="customDialogMode"
       :title="customDialogMode === 'edit' ? '编辑自定义动作' : '新建自定义动作'"
       :confirm-text="customDialogMode === 'edit' ? '保存' : '创建'"
+      :category-options="exerciseStore.categoryOptions"
+      :equipment-options="filterMetadata.equipment"
       :initial-name="customDialogName"
+      :initial-category-code="customDialogCategoryCode"
+      :initial-equipment-code="customDialogEquipmentCode"
       :initial-record-type="customDialogRecordType"
       :initial-difficulty-code="customDialogDifficultyCode"
+      :record-type-locked="customDialogRecordTypeLocked"
       @close="closeCustomDialog"
       @submit="submitCustomExercise"
     />
@@ -567,7 +607,6 @@ async function deleteCustomExercise(id: number) {
       :visible="filterSheetVisible"
       :model-value="sharedFilterState"
       :metadata="sharedFilterMetadata"
-      :result-count="exerciseStore.total"
       @close="closeFilterSheet"
       @apply="applySharedFilters"
     />

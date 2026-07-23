@@ -12,7 +12,7 @@ import {
   type TrainingReportResponse
 } from '@/api/training'
 import { routes } from '@/utils/navigation'
-import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { ensureMembershipFeature, handleMembershipRequiredError } from '@/utils/membership-guard'
 import { formatSeconds } from '@/utils/format'
 import { formatWeight } from '@/utils/unit'
 import { useProfileStore } from '@/stores/profile'
@@ -91,12 +91,13 @@ const progressSub = computed(() => {
   return '保持连续记录，下一次训练后会有更清晰的对比。'
 })
 const sourceStatusText = computed(() => {
-  if (summary.value?.activePlanId && summary.value?.activePlanDayId) return '已完成计划训练'
+  if (summary.value?.activeExecutionId && summary.value?.activeExecutionDayId)
+    return '已完成计划训练'
   if (summary.value?.activeTemplateId) return '模板训练已保存'
   return '自由训练已保存'
 })
 const hasPlanContext = computed(() =>
-  Boolean(summary.value?.activePlanId && summary.value?.activePlanDayId)
+  Boolean(summary.value?.activeExecutionId && summary.value?.activeExecutionDayId)
 )
 
 onLoad((options) => {
@@ -134,7 +135,7 @@ function goDetail() {
 }
 
 function goActivePlan() {
-  if (!summary.value?.activePlanId) {
+  if (!summary.value?.activeExecutionId) {
     goHome()
     return
   }
@@ -156,6 +157,7 @@ async function saveAsTemplate() {
     await templateStore.saveFromPlan(`${current.trainingName} 模板`, plannedItems)
     uni.showToast({ title: '已保存到我的模板', icon: 'none' })
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义模板', 'custom_template')) return
     uni.showToast({ title: '保存模板失败', icon: 'none' })
     console.error('[template] save from plan failed', err)
   } finally {

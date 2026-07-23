@@ -1,5 +1,7 @@
 # FitForge Membership Entitlements Implementation Plan
 
+> 执行状态：已于 2026-07-19 落地会员方案 A、免费额度、Pro 权限和自动试用清理。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement membership scheme A with no automatic trial, Pro-only favorites and weekly statistics, one free custom exercise, one free custom training template, and unlimited core workout recording.

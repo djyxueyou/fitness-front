@@ -156,6 +156,8 @@ export interface SystemPlanCustomizationRequest {
   durationMinutes: 20 | 35 | 50
   restSecondsByExerciseId?: Record<number, number>
   restSecondsByOccurrence?: Record<string, number>
+  clientRequestId?: string
+  replaceCurrent?: boolean
 }
 
 export interface SystemPlanPreviewItemResponse {
@@ -238,7 +240,6 @@ export interface ActiveExecutionResponse {
   executionId: number
   definitionId: number
   sourceSystemPlanId?: number
-  savedDefinitionId?: number | null
   planName: string
   status: 'SCHEDULED' | 'ACTIVE' | 'FINISHING' | 'COMPLETED' | 'STOPPED' | 'REPLACED' | string
   currentWeek: number
@@ -260,8 +261,6 @@ export interface PlanWorkoutSnapshotResponse {
 
 export interface UpdateTrainingPlanRequest {
   name: string
-  goal?: string
-  difficultyLevel?: string
   cycleWeeks?: number
 }
 
@@ -451,14 +450,6 @@ function fetchActivePlanEndpoint() {
 
 export async function fetchActivePlanExecution() {
   return fetchActivePlanEndpoint()
-}
-
-export function savePlanExecutionAsMyPlan(executionId: number) {
-  return request<TrainingPlanDetailResponse>({
-    url: `/api/plan-executions/${executionId}/save-as-my-plan`,
-    method: 'POST',
-    timeoutMs: 30000
-  })
 }
 
 export function fetchActiveTrainingPlanSummary() {

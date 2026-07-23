@@ -1,5 +1,7 @@
 # FitForge Onboarding and Training Profile Removal Implementation Plan
 
+> 执行状态：已于 2026-07-19 落地，画像页面、API、Store、后端字段和数据库结构已删除。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the training-profile/onboarding product path completely and make login lead directly to plan selection without leaving frontend, backend, database, export, event, or documentation remnants.

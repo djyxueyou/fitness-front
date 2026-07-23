@@ -42,6 +42,7 @@ export interface ExerciseDetail extends ExerciseSummary {
   planningTagsJson?: string
   sourceReferenceUrl?: string
   contentReviewStatus?: 'DRAFT' | 'REVIEWED' | string
+  recordTypeLocked?: boolean
 }
 
 export interface ExerciseCategory {
@@ -81,8 +82,8 @@ export interface CreateCustomExerciseRequest {
   recordType?: 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
 }
 
-export interface CreateCustomExerciseResponse {
-  id: number
+export interface CreateCustomExerciseResponse extends ExerciseSummary {
+  recordTypeLocked: boolean
 }
 
 export interface UpdateCustomExerciseRequest extends CreateCustomExerciseRequest {}
@@ -178,7 +179,7 @@ export function createCustomExercise(payload: CreateCustomExerciseRequest) {
 }
 
 export function updateCustomExercise(id: number, payload: UpdateCustomExerciseRequest) {
-  return request<void>({
+  return request<CreateCustomExerciseResponse>({
     url: `/api/exercises/custom/${id}`,
     method: 'PUT',
     data: payload,

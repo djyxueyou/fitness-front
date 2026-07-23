@@ -23,6 +23,7 @@ export const routes = {
   exerciseDetail: '/pages/exercises/detail',
   profileHistory: '/pages/profile/history',
   profileEdit: '/pages/profile/edit',
+  profileEditField: '/pages/profile/edit-field',
   profileBodyMetrics: '/pages/profile/body-metrics',
   profileBodyMetricHistory: '/pages/profile/body-metric-history',
   profileBodyMetricTrend: '/pages/profile/body-metric-trend',
@@ -33,8 +34,6 @@ export const routes = {
   dataPrivacy: '/pages/profile/data-privacy',
   about: '/pages/profile/about',
   membership: '/pages/profile/membership',
-  onboarding: '/pages/onboarding/index',
-  recommendedPlan: '/pages/onboarding/recommended-plan',
   userAgreement: '/pages/agreement/user'
 } as const
 

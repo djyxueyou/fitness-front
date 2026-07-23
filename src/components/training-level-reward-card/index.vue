@@ -27,8 +27,18 @@ const gainedText = computed(() => {
   if (props.settlement) return `训练成长 +${props.settlement.expGained} XP`
   return '训练等级'
 })
+const rewardDetails = computed(() => {
+  const settlement = props.settlement
+  if (!settlement?.eligible) return []
+
+  return [
+    settlement.baseExp > 0 ? `有效训练 +${settlement.baseExp}` : '',
+    settlement.planBonusExp > 0 ? `计划日 +${settlement.planBonusExp}` : '',
+    settlement.prBonusExp > 0 ? `新 PR +${settlement.prBonusExp}` : ''
+  ].filter(Boolean)
+})
 const message = computed(() => {
-  if (props.loading) return '正在根据本次训练时长计算成长。'
+  if (props.loading) return '正在根据有效训练、计划和 PR 计算成长。'
   if (props.settlement?.message) return props.settlement.message
   if (!state.value) return '坚持有效训练，逐步提升等级。'
   return nextExp.value > 0 ? `还差 ${nextExp.value} XP 升到下一等级。` : '继续完成有效训练。'
@@ -52,6 +62,11 @@ const message = computed(() => {
       </view>
       <view class="training-level-card__track">
         <view class="training-level-card__bar" :style="{ width: `${progressPercent}%` }" />
+      </view>
+      <view v-if="rewardDetails.length" class="training-level-card__rewards">
+        <text v-for="item in rewardDetails" :key="item" class="training-level-card__reward">
+          {{ item }} XP
+        </text>
       </view>
       <view class="training-level-card__message">{{ message }}</view>
     </view>
@@ -107,6 +122,22 @@ const message = computed(() => {
     color: var(--app-text-muted);
     font-size: 22rpx;
     line-height: 1.45;
+  }
+
+  &__rewards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10rpx;
+    margin-top: 14rpx;
+  }
+
+  &__reward {
+    padding: 6rpx 12rpx;
+    border-radius: 999rpx;
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+    font-size: 20rpx;
+    font-weight: 800;
   }
 }
 </style>

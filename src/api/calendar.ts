@@ -22,12 +22,10 @@ export interface CalendarMonthResponse {
 export interface CalendarDateDetailResponse {
   date: string
   planDays: Array<{
-    sourceType?: 'MY_PLAN' | 'RECOMMENDED_EXECUTION' | string
-    userTrainingPlanId?: number | null
+    sourceType?: 'USER_PLAN_EXECUTION' | 'SYSTEM_PLAN_EXECUTION' | string
     executionId?: number
-    planId?: number | null
+    definitionId?: number | null
     planName: string
-    planDayId?: number
     executionDayId?: number
     title: string
     templateId?: number
@@ -53,7 +51,6 @@ export interface CalendarDateDetailResponse {
     durationSeconds: number
     totalSetCount: number
     totalVolumeKg: number
-    planDayId?: number
   }>
 }
 

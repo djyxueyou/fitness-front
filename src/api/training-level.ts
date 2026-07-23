@@ -15,7 +15,6 @@ export interface TrainingLevelStateResponse {
 }
 
 export interface TrainingLevelProfileResponse extends TrainingLevelStateResponse {
-  currentStreakDays: number
   rankingEnabled: boolean
 }
 
@@ -25,8 +24,9 @@ export interface TrainingLevelSettlementResponse {
   alreadySettled: boolean
   expGained: number
   baseExp: number
-  durationBonusExp: number
-  streakBonusExp: number
+  completedWorkingSets: number
+  planBonusExp: number
+  prBonusExp: number
   reason: string
   message: string
   upgraded: boolean

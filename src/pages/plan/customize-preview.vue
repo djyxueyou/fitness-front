@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
+import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import AppHeader from '@/components/app-header/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import PrimaryButton from '@/components/primary-button/index.vue'
@@ -11,6 +12,7 @@ import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
 import { planExerciseThumbnail } from '@/utils/plan-exercise-thumbnail'
+import { runSystemPlanActivation } from '@/utils/system-plan-activation'
 import type {
   SystemPlanDetailResponse,
   SystemPlanCustomizationRequest,
@@ -24,6 +26,8 @@ const intro = ref<SystemPlanDetailResponse | null>(null)
 const preview = ref<SystemPlanPreviewResponse | null>(null)
 const loading = ref(false)
 const activating = ref(false)
+const activationRequestId = ref('')
+const replacementConfirmVisible = ref(false)
 const selectedWeek = ref(1)
 const payload = ref<SystemPlanCustomizationRequest>({
   weeklyFrequency: 3,
@@ -34,6 +38,15 @@ const payload = ref<SystemPlanCustomizationRequest>({
 })
 type PreviewItem = SystemPlanPreviewResponse['days'][number]['items'][number]
 const restEditorItem = ref<{ item: PreviewItem; dayOfWeek: number } | null>(null)
+const replacementConfirmItems = [
+  {
+    key: 'confirm-replacement',
+    label: '确认替换',
+    description: '使用新计划继续安排训练，历史记录不会被删除',
+    primary: true
+  }
+]
+let resolveReplacementConfirmation: ((confirmed: boolean) => void) | null = null
 
 const previewWeeks = computed(() => {
   const total = intro.value?.cycleWeeks || 1
@@ -60,6 +73,7 @@ onLoad((options) => {
     durationMinutes: normalizeDuration(Number(options?.durationMinutes)),
     restSecondsByExerciseId: {}
   }
+  activationRequestId.value = `plan-activate-${Date.now()}-${Math.random().toString(16).slice(2)}`
 })
 
 onShow(async () => {
@@ -70,6 +84,8 @@ onShow(async () => {
   }
   await loadPreview()
 })
+
+onUnload(() => settleReplacementConfirmation(false))
 
 async function loadPreview() {
   if (!planId.value || loading.value || preview.value) return
@@ -94,9 +110,10 @@ async function activate() {
   if (!planId.value || activating.value) return
   activating.value = true
   try {
-    await planStore.activateSystem(planId.value, payload.value)
+    const activated = await runSystemPlanActivation(activateWithReplacement, confirmPlanReplacement)
+    if (!activated) return
     uni.showToast({ title: '已启用计划', icon: 'none' })
-    uni.redirectTo({ url: routes.planActive })
+    uni.reLaunch({ url: routes.planActive })
   } catch (err) {
     if (isStalePlanDetailError(err)) return
     uni.showToast({ title: '启用失败', icon: 'none' })
@@ -104,6 +121,33 @@ async function activate() {
   } finally {
     activating.value = false
   }
+}
+
+function activateWithReplacement(replaceCurrent: boolean) {
+  return planStore.activateSystem(planId.value!, {
+    ...payload.value,
+    clientRequestId: activationRequestId.value,
+    replaceCurrent
+  })
+}
+
+function confirmPlanReplacement() {
+  return new Promise<boolean>((resolve) => {
+    resolveReplacementConfirmation = resolve
+    replacementConfirmVisible.value = true
+  })
+}
+
+function settleReplacementConfirmation(confirmed: boolean) {
+  replacementConfirmVisible.value = false
+  const resolve = resolveReplacementConfirmation
+  resolveReplacementConfirmation = null
+  resolve?.(confirmed)
+}
+
+function handleReplacementConfirmation(item: { key: string }) {
+  if (item.key !== 'confirm-replacement') return
+  settleReplacementConfirmation(true)
 }
 
 function regenerate() {
@@ -305,6 +349,16 @@ function goBack() {
       </template>
     </view>
   </scroll-view>
+  <AppActionSheet
+    :class="themeStore.themeClass"
+    :visible="replacementConfirmVisible"
+    title="替换当前计划？"
+    subtitle="启用新计划后，当前计划会停止；已完成的训练记录和历史进度会保留。"
+    cancel-text="暂不替换"
+    :items="replacementConfirmItems"
+    @close="settleReplacementConfirmation(false)"
+    @select="handleReplacementConfirmation"
+  />
 </template>
 
 <style lang="scss" scoped>

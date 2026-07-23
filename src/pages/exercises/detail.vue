@@ -11,7 +11,7 @@ import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
-import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { ensureMembershipFeature, handleMembershipRequiredError } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { formatSeconds } from '@/utils/format'
 import { useVideoPlaybackCover } from '@/utils/video-playback-cover'
@@ -259,6 +259,7 @@ async function addToTemplate() {
     uni.showToast({ title: '已创建模板', icon: 'none' })
     uni.navigateTo({ url: `${routes.templateDetail}?id=${result.id}` })
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义模板', 'custom_template')) return
     uni.showToast({ title: '添加失败', icon: 'none' })
     console.error('[exercise-detail] add to template failed', err)
   }

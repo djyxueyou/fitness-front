@@ -10,6 +10,7 @@ const props = withDefaults(
     accentColor?: string
     size?: 'sm' | 'md' | 'lg'
     upgraded?: boolean
+    showLevel?: boolean
   }>(),
   {
     level: 1,
@@ -18,7 +19,8 @@ const props = withDefaults(
     themeColor: '#ff7a1a',
     accentColor: '#cd7f32',
     size: 'md',
-    upgraded: false
+    upgraded: false,
+    showLevel: true
   }
 )
 
@@ -26,7 +28,10 @@ const badgeClass = computed(() => [
   'training-level-badge',
   `training-level-badge--${props.size}`,
   `training-level-badge--${props.badgeCode.toLowerCase()}`,
-  { 'training-level-badge--upgraded': props.upgraded }
+  {
+    'training-level-badge--upgraded': props.upgraded,
+    'training-level-badge--name-only': !props.showLevel
+  }
 ])
 
 const badgeStyle = computed(() => ({
@@ -38,7 +43,7 @@ const badgeStyle = computed(() => ({
 <template>
   <view :class="badgeClass" :style="badgeStyle">
     <view class="training-level-badge__shine" />
-    <view class="training-level-badge__level">Lv.{{ level }}</view>
+    <view v-if="showLevel" class="training-level-badge__level">Lv.{{ level }}</view>
     <view class="training-level-badge__name">{{ badgeName }}</view>
   </view>
 </template>
@@ -78,6 +83,11 @@ const badgeStyle = computed(() => ({
 
   &--upgraded {
     animation: badge-pop 0.7s ease-out both;
+  }
+
+  &--name-only &__name {
+    margin-top: 0;
+    font-size: 23rpx;
   }
 
   &__shine {

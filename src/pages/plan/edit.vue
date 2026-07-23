@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import AppHeader from '@/components/app-header/index.vue'
 import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
@@ -11,36 +11,11 @@ import { ensureMembershipFeature } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { showPlanWriteError } from '@/utils/plan-write-feedback'
 
-const goalOptions = [
-  { label: '增肌', value: '增肌' },
-  { label: '减脂', value: '减脂' },
-  { label: '力量', value: '力量' },
-  { label: '塑形', value: '塑形' },
-  { label: '健康', value: '健康' },
-  { label: '综合', value: '综合训练' }
-]
-
-const difficultyOptions = [
-  { label: '入门', value: 'BEGINNER' },
-  { label: '进阶', value: 'INTERMEDIATE' },
-  { label: '高阶', value: 'ADVANCED' }
-]
-
 const planStore = usePlanStore()
 const themeStore = useThemeStore()
 const planId = ref<number | null>(null)
 const name = ref('')
-const goal = ref('')
-const difficultyLevel = ref('BEGINNER')
 const saving = ref(false)
-
-const visibleGoalOptions = computed(() => {
-  const currentGoal = goal.value.trim()
-  if (!currentGoal || goalOptions.some((item) => item.value === currentGoal)) {
-    return goalOptions
-  }
-  return [{ label: currentGoal, value: currentGoal }, ...goalOptions]
-})
 
 onLoad((options) => {
   const id = Number(options?.id)
@@ -62,8 +37,6 @@ onShow(async () => {
       return
     }
     name.value = detail.name
-    goal.value = detail.goal || '综合训练'
-    difficultyLevel.value = detail.difficultyLevel || 'BEGINNER'
   } catch (err) {
     if (isStalePlanDetailError(err)) return
     uni.showToast({ title: '计划加载失败', icon: 'none' })
@@ -73,14 +46,6 @@ onShow(async () => {
 
 function goBack() {
   uni.navigateBack()
-}
-
-function chooseGoal(value: string) {
-  goal.value = value
-}
-
-function chooseDifficulty(value: string) {
-  difficultyLevel.value = value
 }
 
 async function savePlan() {
@@ -94,9 +59,7 @@ async function savePlan() {
   saving.value = true
   try {
     await planStore.updatePlan(planId.value, {
-      name: nextName,
-      goal: goal.value.trim() || undefined,
-      difficultyLevel: difficultyLevel.value.trim() || undefined
+      name: nextName
     })
     uni.showToast({ title: '已保存计划', icon: 'none' })
     uni.navigateBack()
@@ -112,42 +75,12 @@ async function savePlan() {
 <template>
   <scroll-view scroll-y class="page-scroll" :class="themeStore.themeClass">
     <view class="page-shell plan-edit operation-page safe-bottom" :class="themeStore.themeClass">
-      <AppHeader title="编辑计划" subtitle="只支持编辑复制到我的计划" show-back @back="goBack" />
+      <AppHeader title="编辑计划" subtitle="修改我的计划名称" show-back @back="goBack" />
 
       <view class="glass-card plan-edit__form">
         <view class="plan-edit__field">
           <view class="plan-edit__label">计划名称</view>
           <input v-model="name" class="plan-edit__input" placeholder="输入计划名称" />
-        </view>
-
-        <view class="plan-edit__field">
-          <view class="plan-edit__label">训练目标</view>
-          <view class="plan-edit__chips">
-            <view
-              v-for="item in visibleGoalOptions"
-              :key="item.value"
-              class="plan-edit__chip btn-press"
-              :class="{ 'plan-edit__chip--active': goal === item.value }"
-              @tap="chooseGoal(item.value)"
-            >
-              {{ item.label }}
-            </view>
-          </view>
-        </view>
-
-        <view class="plan-edit__field">
-          <view class="plan-edit__label">难度</view>
-          <view class="plan-edit__chips">
-            <view
-              v-for="item in difficultyOptions"
-              :key="item.value"
-              class="plan-edit__chip btn-press"
-              :class="{ 'plan-edit__chip--active': difficultyLevel === item.value }"
-              @tap="chooseDifficulty(item.value)"
-            >
-              {{ item.label }}
-            </view>
-          </view>
         </view>
       </view>
 

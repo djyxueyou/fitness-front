@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import ShareCardSheet from '@/components/share-card-sheet/index.vue'
 import { fetchWeeklyReviewSharePreview, type SharePreviewResponse } from '@/api/share'
 import { fetchWeeklyReview, type WeeklyReviewResponse } from '@/api/weekly-review'
@@ -8,6 +9,7 @@ import { skipActiveTrainingPlanDay } from '@/api/plan'
 import { routes } from '@/utils/navigation'
 import { useThemeStore } from '@/stores/theme'
 import { formatCompactWeight } from '@/utils/unit'
+import { ensureMembershipFeature } from '@/utils/membership-guard'
 
 const themeStore = useThemeStore()
 const review = ref<WeeklyReviewResponse | null>(null)
@@ -30,6 +32,7 @@ onLoad(() => {
 })
 
 async function loadReview() {
+  if (!(await ensureMembershipFeature('周统计', 'advanced_analytics'))) return
   loading.value = true
   try {
     review.value = await fetchWeeklyReview()
@@ -200,6 +203,7 @@ function copyShareText() {
     @close="closeShareCard"
     @copy="copyShareText"
   />
+  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

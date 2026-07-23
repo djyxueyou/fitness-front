@@ -17,9 +17,9 @@ export const useMembershipStore = defineStore('membership', () => {
   const active = computed(() => !!status.value?.active)
   const statusText = computed(() => {
     if (!status.value) return '会员状态加载中'
-    if (status.value.trial) return `试用剩余 ${status.value.remainingDays} 天`
     if (status.value.active) return `会员剩余 ${status.value.remainingDays} 天`
-    return '会员已过期'
+    if (status.value.expired) return '会员已过期'
+    return '当前为免费版'
   })
 
   async function refreshStatus() {

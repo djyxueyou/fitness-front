@@ -19,6 +19,7 @@ import { emitTrainingChanged } from '@/utils/training-events'
 import { buildWarmupCandidates, type WarmupCandidate } from '@/utils/warmup'
 import { shouldPromptForEffort } from '@/utils/effort-prompt'
 import { workoutHeaderActions } from '@/utils/workout-header-actions'
+import { findNextIncompleteExerciseIndex } from '@/utils/workout-exercise-navigation'
 import { useProfileStore } from '@/stores/profile'
 import { useTrainingStore } from '@/stores/training'
 import { useTemplateStore } from '@/stores/template'
@@ -63,6 +64,9 @@ const restEditorIndex = ref<number | null>(null)
 const setTypeTarget = ref<{ exerciseIndex: number; setIndex: number } | null>(null)
 const unit = computed<WeightUnit>(() => profileStore.unit)
 const headerActions = computed(() => workoutHeaderActions(submitting.value, workoutStore.isPaused))
+const unfinishedExerciseCount = computed(
+  () => workoutStore.activeExercises.filter((exercise) => !exercise.ended).length
+)
 let timer: ReturnType<typeof setInterval> | null = null
 let restTimer: ReturnType<typeof setInterval> | null = null
 let stepTimer: ReturnType<typeof setInterval> | null = null
@@ -86,7 +90,8 @@ function persistRestClock() {
     uni.removeStorageSync(REST_DRAFT_KEY)
     return
   }
-  const paused = workoutStore.isPaused || workoutStore.isSavedDraft
+  const paused =
+    workoutStore.isPaused || workoutStore.isSavedDraft || workoutStore.isRecoveryPending
   const state: PersistedRestClock = {
     title: restTitle.value,
     endsAtMs: paused ? null : restStartedAt + restDurationSeconds * 1000,
@@ -101,7 +106,7 @@ function restorePersistedRestClock() {
   if (!stored || (!stored.endsAtMs && stored.remainingWhenPaused == null)) return
   restTitle.value = stored.title || '组间休息'
   restFocusIndex.value = stored.focusIndex ?? null
-  if (workoutStore.isPaused) {
+  if (workoutStore.isPaused || workoutStore.isRecoveryPending) {
     const remaining =
       stored.remainingWhenPaused ??
       Math.max(0, Math.ceil(((stored.endsAtMs || Date.now()) - Date.now()) / 1000))
@@ -306,6 +311,30 @@ function cancelExit() {
   showExitConfirm.value = false
 }
 
+function recoveryGapText(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 1) return '不到1分钟'
+  if (minutes < 60) return `${minutes}分钟`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes ? `${hours}小时${remainingMinutes}分钟` : `${hours}小时`
+}
+
+function continueRecoveredWorkout() {
+  workoutStore.resolveColdLaunchRecovery(false)
+}
+
+function includeRecoveryGap() {
+  workoutStore.resolveColdLaunchRecovery(true)
+}
+
+function saveRecoveredDraftAndExit() {
+  workoutStore.saveDraftAndStop()
+  persistRestClock()
+  clearTimers()
+  uni.navigateBack()
+}
+
 async function confirmExit() {
   showExitConfirm.value = false
   await workoutStore.reportAllRecommendationOverrides()
@@ -472,8 +501,6 @@ async function initializeWorkout() {
   }
 
   const templateId = workoutStore.pendingStartTemplateId
-  const planId = workoutStore.pendingStartPlanId
-  const planDayId = workoutStore.pendingStartPlanDayId
   const executionId = workoutStore.pendingStartExecutionId
   const executionDayId = workoutStore.pendingStartExecutionDayId
   const executionDayTitle = workoutStore.pendingStartExecutionDayTitle
@@ -481,8 +508,6 @@ async function initializeWorkout() {
   startupLoading.value = true
   try {
     await workoutStore.startWorkout(templateId, {
-      planId,
-      planDayId,
       executionId,
       executionDayId,
       executionDayTitle,
@@ -1047,14 +1072,21 @@ function finishExerciseEarly() {
     return
   }
 
-  const nextIndex = findNextExerciseIndex(currentExerciseIndex.value)
+  const allSetsDone = exercise.sets.every((set) => set.done)
+  if (restRemaining.value > 0) {
+    skipRest()
+  }
+  workoutStore.endExercise(currentExerciseIndex.value)
+  const nextIndex = findNextIncompleteExerciseIndex(
+    workoutStore.activeExercises.map((item) => Boolean(item.ended)),
+    currentExerciseIndex.value
+  )
   if (nextIndex !== null) {
-    const allSetsDone = exercise.sets.every((set) => set.done)
-    if (restRemaining.value > 0) {
-      skipRest()
-    }
-    workoutStore.endExercise(currentExerciseIndex.value)
     void focusWorkoutExercise(nextIndex)
+    uni.showToast({
+      title: `已完成当前动作，还有 ${unfinishedExerciseCount.value} 个动作待完成`,
+      icon: 'none'
+    })
     if (!allSetsDone) {
       startRest(
         `${exercise.name} 已完成 · 下一项 ${workoutStore.activeExercises[nextIndex]?.name || ''}`
@@ -1075,13 +1107,6 @@ function openExerciseDetail(exerciseId: number) {
   workoutStore.persistDraft()
   menuExerciseIndex.value = null
   uni.navigateTo({ url: `${routes.exerciseDetail}?id=${exerciseId}` })
-}
-
-function findNextExerciseIndex(fromIndex: number) {
-  const nextIndex = workoutStore.activeExercises.findIndex(
-    (exercise, index) => index > fromIndex && !isExerciseCompleted(exercise)
-  )
-  return nextIndex >= 0 ? nextIndex : null
 }
 
 function findAdjacentActiveExerciseIndex(fromIndex: number, delta: number) {
@@ -1199,8 +1224,6 @@ async function confirmFinish() {
   submitting.value = true
   const payload: SaveTrainingRequest = {
     templateId: workoutStore.activeTemplateId,
-    planId: workoutStore.activePlanId,
-    planDayId: workoutStore.activePlanDayId,
     executionId: workoutStore.activeExecutionId,
     executionDayId: workoutStore.activeExecutionDayId,
     sourceType:
@@ -1213,6 +1236,7 @@ async function confirmFinish() {
     endedAt: toLocalDateTimeString(endedAt),
     durationSeconds: workoutStore.elapsedSeconds,
     pausedSeconds: workoutStore.accumulatedPausedSeconds,
+    suspendedSeconds: workoutStore.accumulatedSuspendedSeconds,
     items
   }
   let result: Awaited<ReturnType<typeof saveTraining>>
@@ -1237,8 +1261,6 @@ async function confirmFinish() {
     startedAt,
     endedAt,
     activeTemplateId: workoutStore.activeTemplateId,
-    activePlanId: workoutStore.activePlanId,
-    activePlanDayId: workoutStore.activePlanDayId,
     activeExecutionId: workoutStore.activeExecutionId,
     activeExecutionDayId: workoutStore.activeExecutionDayId,
     activeExecutionDayTitle: workoutStore.activeExecutionDayTitle,
@@ -1251,7 +1273,7 @@ async function confirmFinish() {
   workoutStore.finishWorkout()
   trainingStore.invalidateCache()
   emitTrainingChanged()
-  uni.redirectTo({ url: `${routes.historyDetail}?id=${result.trainingId}&settleLevel=1` })
+  uni.redirectTo({ url: `${routes.historyDetail}?id=${result.trainingId}` })
 }
 
 async function retrySaveFailedDraft() {
@@ -1266,8 +1288,6 @@ async function retrySaveFailedDraft() {
       startedAt: workoutStore.lastSubmitPayload.startedAt,
       endedAt: workoutStore.lastSubmitPayload.endedAt,
       activeTemplateId: workoutStore.lastSubmitPayload.templateId,
-      activePlanId: workoutStore.lastSubmitPayload.planId,
-      activePlanDayId: workoutStore.lastSubmitPayload.planDayId,
       activeExecutionId: workoutStore.lastSubmitPayload.executionId,
       activeExecutionDayId: workoutStore.lastSubmitPayload.executionDayId,
       activeExecutionDayTitle: workoutStore.activeExecutionDayTitle,
@@ -1280,7 +1300,7 @@ async function retrySaveFailedDraft() {
     workoutStore.finishWorkout()
     trainingStore.invalidateCache()
     emitTrainingChanged()
-    uni.redirectTo({ url: `${routes.historyDetail}?id=${result.trainingId}&settleLevel=1` })
+    uni.redirectTo({ url: `${routes.historyDetail}?id=${result.trainingId}` })
   } catch (err) {
     console.error('[training] retry failed save failed', err)
     uni.showToast({ title: '重新提交失败，请稍后再试', icon: 'none' })
@@ -1311,7 +1331,7 @@ onHide(() => {
 onShow(() => {
   workoutStore.resumeSavedDraft()
   workoutStore.syncElapsed()
-  if (!workoutStore.isPaused) {
+  if (!workoutStore.isPaused && !workoutStore.isRecoveryPending) {
     if (restRemaining.value > 0) restoreRestFromClock()
     else restorePersistedRestClock()
   }
@@ -1779,22 +1799,70 @@ onUnmounted(() => {
       </view>
     </view>
 
+    <view v-if="workoutStore.isRecoveryPending" class="workout-active__overlay">
+      <view class="workout-active__sheet workout-active__sheet--confirm" @tap.stop>
+        <view class="workout-active__sheet-handle" />
+        <view class="workout-active__confirm-title">上次训练意外中断</view>
+        <view class="muted workout-active__confirm-desc">
+          已记录训练 {{ formatSeconds(workoutStore.elapsedSeconds) }}，离开了
+          {{ recoveryGapText(workoutStore.recoveryGapSeconds) }}。
+        </view>
+        <view class="workout-active__confirm-hint">默认不把离开时间计入有效训练时长。</view>
+        <view
+          class="gradient-fire workout-active__sheet-btn btn-press"
+          @tap="continueRecoveredWorkout"
+        >
+          继续训练
+        </view>
+        <view class="glass-card workout-active__sheet-btn btn-press" @tap="includeRecoveryGap">
+          计入离开时间
+        </view>
+        <view class="workout-active__confirm-danger btn-press" @tap="saveRecoveredDraftAndExit">
+          保存草稿并退出
+        </view>
+      </view>
+    </view>
+
     <view v-if="showFinish" class="workout-active__overlay" @tap="showFinish = false">
       <view class="workout-active__sheet" @tap.stop>
         <view class="workout-active__sheet-handle" />
-        <view class="title-lg">完成训练？</view>
-        <view class="muted workout-active__sheet-sub">
+        <view class="title-lg">
+          {{ unfinishedExerciseCount ? `${unfinishedExerciseCount} 个动作未完成` : '完成训练？' }}
+        </view>
+        <view v-if="unfinishedExerciseCount" class="muted workout-active__sheet-sub">
+          已完成的训练组仍会正常保存。
+        </view>
+        <view v-else class="muted workout-active__sheet-sub">
           已完成 {{ workoutStore.doneSets }}/{{ workoutStore.totalSets }} 组，训练时长
           {{ formatSeconds(workoutStore.elapsedSeconds) }}
         </view>
         <view
+          v-if="!unfinishedExerciseCount"
           class="gradient-fire workout-active__sheet-btn btn-press"
           :class="{ 'workout-active__sheet-btn--disabled': submitting }"
           @tap="confirmFinish"
         >
           {{ submitting ? '保存中...' : '保存并完成' }}
         </view>
-        <view class="glass-card workout-active__sheet-btn btn-press" @tap="showFinish = false">
+        <view
+          v-if="unfinishedExerciseCount"
+          class="gradient-fire workout-active__sheet-btn btn-press"
+          @tap="showFinish = false"
+        >
+          返回继续训练
+        </view>
+        <view
+          v-if="unfinishedExerciseCount"
+          class="glass-card workout-active__sheet-btn btn-press"
+          :class="{ 'workout-active__sheet-btn--disabled': submitting }"
+          @tap="confirmFinish"
+          >{{ submitting ? '保存中...' : '仍然结束训练' }}</view
+        >
+        <view
+          v-else
+          class="glass-card workout-active__sheet-btn btn-press"
+          @tap="showFinish = false"
+        >
           继续训练
         </view>
       </view>

@@ -7,14 +7,16 @@ import ShareCardSheet from '@/components/share-card-sheet/index.vue'
 import TrainingLevelRewardCard from '@/components/training-level-reward-card/index.vue'
 import TrainingLevelUpgradeModal from '@/components/training-level-upgrade-modal/index.vue'
 import { fetchWorkoutSharePreview, type SharePreviewResponse } from '@/api/share'
-import { settleTrainingLevel, type TrainingLevelSettlementResponse } from '@/api/training-level'
+import type { TrainingLevelSettlementResponse } from '@/api/training-level'
 import { useTrainingStore } from '@/stores/training'
 import { useProfileStore } from '@/stores/profile'
 import { useThemeStore } from '@/stores/theme'
+import { useWorkoutStore } from '@/stores/workout'
 import { formatSeconds } from '@/utils/format'
 import { formatWeight } from '@/utils/unit'
 
 const trainingStore = useTrainingStore()
+const workoutStore = useWorkoutStore()
 const profileStore = useProfileStore()
 const themeStore = useThemeStore()
 const trainingId = ref<number | null>(null)
@@ -24,7 +26,6 @@ const shareVisible = ref(false)
 const shareLoading = ref(false)
 const sharePreview = ref<SharePreviewResponse | null>(null)
 const levelSettlement = ref<TrainingLevelSettlementResponse | null>(null)
-const levelSettlementLoading = ref(false)
 const showLevelUpgrade = ref(false)
 const unit = computed(() => profileStore.unit)
 
@@ -78,8 +79,9 @@ onLoad(async (query = {}) => {
 
     if (trainingId.value) {
       detail.value = await trainingStore.fetchDetail(trainingId.value)
-      if (query.settleLevel === '1') {
-        await settleLevelGrowth(trainingId.value)
+      if (workoutStore.completedSummary?.trainingId === trainingId.value) {
+        levelSettlement.value = workoutStore.completedSummary?.levelSettlement || null
+        showLevelUpgrade.value = Boolean(levelSettlement.value?.upgraded)
       }
     }
   } finally {
@@ -111,19 +113,6 @@ async function openShareCard() {
 
 function closeShareCard() {
   shareVisible.value = false
-}
-
-async function settleLevelGrowth(id: number) {
-  levelSettlementLoading.value = true
-  try {
-    levelSettlement.value = await settleTrainingLevel(id)
-    showLevelUpgrade.value = Boolean(levelSettlement.value?.upgraded)
-  } catch (err) {
-    levelSettlement.value = null
-    console.error('[training-level] settlement failed', err)
-  } finally {
-    levelSettlementLoading.value = false
-  }
 }
 
 function closeLevelUpgrade() {
@@ -252,11 +241,7 @@ function comparisonClass(value?: number | null) {
           </view>
         </view>
 
-        <TrainingLevelRewardCard
-          v-if="levelSettlement || levelSettlementLoading"
-          :settlement="levelSettlement"
-          :loading="levelSettlementLoading"
-        />
+        <TrainingLevelRewardCard v-if="levelSettlement" :settlement="levelSettlement" />
 
         <view class="glass-card history-detail__insight">
           <view class="history-detail__insight-label">训练复盘</view>

@@ -15,6 +15,7 @@ import {
 } from '@/api/exercise'
 import { getToken } from '@/api/http'
 import type { Exercise, ExerciseDetail } from '@/types/exercise'
+import { upsertCustomExercise } from '@/utils/custom-exercise-feedback'
 
 const PAGE_SIZE = 12
 type ExerciseListScope = 'ALL' | 'SYSTEM' | 'CUSTOM'
@@ -45,6 +46,7 @@ function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exerc
   return {
     id: item.id,
     name: item.name,
+    categoryCode: item.categoryCode,
     category: item.categoryName,
     muscle: item.primaryMuscleName || '-',
     primaryMuscleCode: item.primaryMuscleCode,
@@ -61,6 +63,7 @@ function normalizeSummary(item: import('@/api/exercise').ExerciseSummary): Exerc
     difficultyName,
     recordType: item.recordType || 'WEIGHT_REPS',
     exerciseType: item.exerciseType || 'SYSTEM',
+    recordTypeLocked: 'recordTypeLocked' in item ? !!item.recordTypeLocked : false,
     thumbnailUrl: item.thumbnailUrl || item.thumbnailPath,
     isVariant: item.isVariant,
     variantOfExerciseId: item.variantOfExerciseId,
@@ -415,17 +418,46 @@ export const useExerciseStore = defineStore('exercise', () => {
 
   async function createCustom(payload: CreateCustomExerciseRequest) {
     const result = await createCustomExercise(payload)
+    const optimistic = {
+      ...normalizeSummary(result),
+      favorited: favoriteIds.value.has(result.id)
+    }
+    items.value = upsertCustomExercise(items.value, optimistic, true)
     clearListCache()
     detailCache.value = {}
-    await fetchExercises({ reset: true, force: true, scope: 'CUSTOM' })
+    await fetchExercises({
+      reset: true,
+      force: true,
+      scope: 'CUSTOM',
+      categoryCode: '',
+      keyword: '',
+      equipmentCode: '',
+      difficultyCode: '',
+      recordType: ''
+    })
+    if (listError.value) {
+      items.value = upsertCustomExercise(items.value, optimistic, true)
+    }
     return result
   }
 
   async function updateCustom(id: number, payload: UpdateCustomExerciseRequest) {
-    await updateCustomExercise(id, payload)
+    const result = await updateCustomExercise(id, payload)
+    const optimistic = {
+      ...normalizeSummary(result),
+      favorited: favoriteIds.value.has(result.id)
+    }
+    items.value = upsertCustomExercise(items.value, optimistic, false)
+    if (favoriteIds.value.has(result.id)) {
+      favoriteItems.value = upsertCustomExercise(favoriteItems.value, optimistic, false)
+    }
     clearListCache()
     detailCache.value = {}
     await fetchExercises({ reset: true, force: true, scope: 'CUSTOM' })
+    if (listError.value) {
+      items.value = upsertCustomExercise(items.value, optimistic, false)
+    }
+    return result
   }
 
   async function deleteCustom(id: number) {

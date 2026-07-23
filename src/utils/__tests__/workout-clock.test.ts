@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  includeSuspendedWorkoutClock,
   effectiveElapsedSeconds,
   pauseWorkoutClock,
   resumeWorkoutClock,
@@ -54,5 +55,24 @@ describe('workout clock', () => {
     expect(restored.accumulatedPausedSeconds).toBe(0)
     expect(restored.accumulatedSuspendedSeconds).toBe(20)
     expect(effectiveElapsedSeconds(restored, 41_000)).toBe(20)
+  })
+
+  it('can include a cold-start gap when the user confirms it was training time', () => {
+    const suspended = suspendWorkoutClock(
+      {
+        startedAtMs: 1_000,
+        pausedAtMs: null,
+        accumulatedPausedSeconds: 0,
+        suspendedAtMs: null,
+        accumulatedSuspendedSeconds: 0
+      },
+      11_000
+    )
+
+    const included = includeSuspendedWorkoutClock(suspended)
+
+    expect(included.suspendedAtMs).toBeNull()
+    expect(included.accumulatedSuspendedSeconds).toBe(0)
+    expect(effectiveElapsedSeconds(included, 31_000)).toBe(30)
   })
 })

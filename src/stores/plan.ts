@@ -17,7 +17,6 @@ import {
   fetchTrainingPlanDetail,
   fetchTrainingPlans,
   previewSystemPlan,
-  savePlanExecutionAsMyPlan,
   updateTrainingPlan,
   updateTrainingPlanDay,
   type ActiveExecutionResponse,
@@ -392,22 +391,6 @@ export const usePlanStore = defineStore('plan', () => {
     operation.assertCurrent()
   }
 
-  async function saveActiveToMyPlans(executionId: number) {
-    const mutationSessionEpoch = sessionEpoch
-    const detail = await savePlanExecutionAsMyPlan(executionId)
-    if (mutationSessionEpoch !== sessionEpoch) return detail
-    invalidatePendingRequests()
-    if (activeExecution.value?.executionId === executionId) {
-      activeExecution.value = {
-        ...activeExecution.value,
-        savedDefinitionId: detail.id
-      }
-    }
-    commitPersonalDetail(detail.id, detail)
-    await fetchPlans({ force: true })
-    return detail
-  }
-
   async function duplicate(id: number) {
     const mutationSessionEpoch = sessionEpoch
     const detail = await copyTrainingPlan(id)
@@ -521,7 +504,6 @@ export const usePlanStore = defineStore('plan', () => {
     loadActiveExecution,
     activate,
     createPlan,
-    saveActiveToMyPlans,
     deactivateActive,
     duplicate,
     updatePlan,

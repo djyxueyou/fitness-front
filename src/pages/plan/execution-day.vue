@@ -11,29 +11,37 @@ import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { useThemeStore } from '@/stores/theme'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { routes } from '@/utils/navigation'
+import { fetchPlanDayWorkout, type ActiveExecutionDayResponse } from '@/api/plan'
 
 const planStore = usePlanStore()
 const workoutStore = useWorkoutStore()
 const draftPromptStore = useWorkoutDraftPromptStore()
 const themeStore = useThemeStore()
 const dayId = ref<number | null>(null)
+const planId = ref<number | null>(null)
+const savedDay = ref<ActiveExecutionDayResponse | null>(null)
 const loading = ref(false)
 
 const execution = computed(() => planStore.activeExecution)
 const day = computed(() => {
+  if (savedDay.value) return savedDay.value
   const days = execution.value?.days || []
   if (dayId.value) return days.find((item) => item.id === dayId.value) || null
   return days.find((item) => item.status === 'PENDING') || days[0] || null
 })
 const title = computed(() => day.value?.title || '训练日')
 const meta = computed(() => {
-  if (!execution.value || !day.value) return ''
-  return `${execution.value.planName} · 第 ${day.value.weekIndex} 周`
+  if (!day.value) return ''
+  const planName =
+    execution.value?.planName || planStore.items.find((item) => item.id === planId.value)?.name
+  return `${planName || '我的计划'} · 第 ${day.value.weekIndex} 周`
 })
 
 onLoad((options) => {
   const id = Number(options?.dayId)
   dayId.value = Number.isFinite(id) && id > 0 ? id : null
+  const definitionId = Number(options?.planId)
+  planId.value = Number.isFinite(definitionId) && definitionId > 0 ? definitionId : null
 })
 
 onShow(async () => {
@@ -49,6 +57,19 @@ async function loadExecution() {
   if (loading.value) return
   loading.value = true
   try {
+    if (planId.value && dayId.value) {
+      const snapshot = await fetchPlanDayWorkout(planId.value, dayId.value)
+      savedDay.value = {
+        id: snapshot.definitionDayId,
+        weekIndex: snapshot.weekIndex,
+        dayOfWeek: snapshot.dayOfWeek,
+        plannedDate: '',
+        title: snapshot.title,
+        status: 'PREVIEW',
+        items: snapshot.items
+      }
+      return
+    }
     await planStore.loadActiveExecution()
   } catch (err) {
     console.error('[plan] active execution day failed', err)
@@ -139,7 +160,9 @@ function goBack() {
           </view>
         </view>
 
-        <PrimaryButton class="execution-day__submit" @tap="startWorkout">开始训练</PrimaryButton>
+        <PrimaryButton v-if="execution" class="execution-day__submit" @tap="startWorkout">
+          开始训练
+        </PrimaryButton>
       </template>
     </view>
   </scroll-view>

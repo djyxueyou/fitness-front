@@ -1,5 +1,7 @@
 # FitForge 我的页与训练信息架构设计
 
+> 训练画像和等级连续训练部分已于 2026-07-19 被 `2026-07-19-fitforge-product-scope-membership-level-redesign.md` 替代。当前“我的”页不含画像入口，等级采用 XP V2。
+
 ## 目标
 
 将“我的”Tab 重构为简洁、接近 iOS inset grouped list 的个人中心，同时明确计划、模板、训练日历和历史记录的归属。实现以用户选定的视觉方案 1 为基准，并沿用现有橙色品牌色与四项 Tab Bar。原“计划”Tab 更名为“训练”，用于承载完整的训练闭环。

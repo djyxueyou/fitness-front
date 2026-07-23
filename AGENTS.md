@@ -129,7 +129,7 @@ lint 命令：未确认。存在 `eslint.config.js`，但 `package.json` 中没�
 - 后端响应预期为 `{ code, message, data }`。
 - token 存储 key 为 `LIFTLOG_TOKEN`。
 - token 请求头为 `satoken`。
-- `src/api/http.ts` 会在 HTTP 401/403 或后端业务码 `40100` 时清理登录态。
+- `src/api/http.ts` 只在 HTTP 401 或后端业务码 `40100` 时清理登录态；HTTP 403（包括会员权限码 `40311`）保留登录态并由业务页面处理。
 
 修改 API 调用前，先核对后端 controller、DTO、鉴权要求和响应结构。
 

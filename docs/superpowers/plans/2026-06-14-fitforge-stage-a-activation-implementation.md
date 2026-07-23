@@ -1,5 +1,7 @@
 # FitForge Stage A Activation Implementation Plan
 
+> 已停止执行：训练画像与画像推荐已于 2026-07-19 从产品和代码中删除。请勿继续按本文恢复相关功能。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让未启用计划的用户通过四步画像获得可解释的系统计划推荐，顺利完成首训，同时移除基础训练保存的会员阻断并补齐数据管理入口。
@@ -221,4 +223,3 @@ npm run build:app-plus
 
 - [ ] Manually verify: new user onboarding, recommendation activation, first workout completion, repeated free saves, export, training deletion and account deletion confirmation.
 - [ ] Confirm metrics can calculate onboarding completion and 24-hour first-workout completion.
-

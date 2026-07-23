@@ -21,9 +21,9 @@ const actionSheetVisible = ref(false)
 
 const customActionItems: ActionSheetItem[] = [
   {
-    key: 'rename',
-    label: '重命名',
-    description: '修改动作名称和记录类型',
+    key: 'edit',
+    label: '编辑动作',
+    description: '修改名称、训练部位、器械和难度',
     primary: true
   },
   {
@@ -37,7 +37,7 @@ const customActionItems: ActionSheetItem[] = [
 const emit = defineEmits<{
   select: [number]
   favorite: [number]
-  rename: [number]
+  edit: [number]
   delete: [number]
 }>()
 
@@ -53,7 +53,7 @@ function openCustomActions() {
 
 function handleCustomAction(item: ActionSheetItem) {
   actionSheetVisible.value = false
-  if (item.key === 'rename') emit('rename', props.exercise.id)
+  if (item.key === 'edit') emit('edit', props.exercise.id)
   if (item.key === 'delete') emit('delete', props.exercise.id)
 }
 </script>

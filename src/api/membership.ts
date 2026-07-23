@@ -2,10 +2,8 @@ import { request } from '@/api/http'
 
 export interface MembershipStatusResponse {
   active: boolean
-  trial: boolean
   expired: boolean
-  planCode: string
-  trialEndsAt?: string
+  planCode?: string
   membershipExpiresAt?: string
   remainingDays: number
 }

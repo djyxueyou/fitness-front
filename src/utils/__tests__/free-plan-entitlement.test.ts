@@ -63,10 +63,6 @@ describe('free plan entitlement contract', () => {
       [
         'src/pages/plan/day-edit.vue',
         /catch \(err\) \{\s*showPlanWriteError\(err, '训练日保存失败，请重试'\)/
-      ],
-      [
-        'src/pages/plan/active.vue',
-        /catch \(err\) \{\s*showPlanWriteError\(err, '保存到我的计划失败，请重试'\)/
       ]
     ]
 
@@ -96,8 +92,7 @@ describe('free plan entitlement contract', () => {
       'src/pages/plan/index.vue',
       'src/pages/plan/detail.vue',
       'src/pages/plan/edit.vue',
-      'src/pages/plan/day-edit.vue',
-      'src/pages/plan/active.vue'
+      'src/pages/plan/day-edit.vue'
     ]
 
     paths.forEach((path) => {
@@ -109,21 +104,15 @@ describe('free plan entitlement contract', () => {
     })
   })
 
-  it('hydrates and resets the server-owned saved execution state', () => {
+  it('does not expose a system execution copy path', () => {
     const apiSource = readSource('src/api/plan.ts')
     const storeSource = readSource('src/stores/plan.ts')
     const activeSource = readSource('src/pages/plan/active.vue')
 
-    expect(apiSource).toMatch(
-      /export interface ActiveExecutionResponse \{[\s\S]*?savedDefinitionId\?: number \| null[\s\S]*?\n\}/
-    )
-    expect(activeSource).toContain(
-      'const savedDefinitionId = computed(() => execution.value?.savedDefinitionId ?? null)'
-    )
-    expect(activeSource).toContain('!savedDefinitionId.value')
-    expect(storeSource).toMatch(
-      /if \(activeExecution\.value\?\.executionId === executionId\) \{[\s\S]*?savedDefinitionId: detail\.id/
-    )
+    expect(apiSource).not.toContain('savedDefinitionId')
+    expect(apiSource).not.toContain('save-as-my-plan')
+    expect(storeSource).not.toContain('saveActiveToMyPlans')
+    expect(activeSource).not.toContain('存为我的计划')
   })
 
   it('keeps plan deletion available without a membership pre-check', () => {

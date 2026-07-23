@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
   effectiveElapsedSeconds,
+  includeSuspendedWorkoutClock,
   pauseWorkoutClock,
   resumeWorkoutClock,
   restoreSuspendedWorkoutClock,
@@ -24,7 +25,7 @@ import {
 } from '@/api/progression'
 
 const WORKOUT_DRAFT_KEY = 'LIFTLOG_WORKOUT_DRAFT'
-const WORKOUT_DRAFT_VERSION = 4
+const WORKOUT_DRAFT_VERSION = 5
 const WORKOUT_DRAFT_TTL_MS = 48 * 60 * 60 * 1000
 
 export type WorkoutRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION' | string
@@ -74,8 +75,6 @@ export type CompletedWorkoutSummary = SaveTrainingResponse & {
   startedAt: string
   endedAt: string
   activeTemplateId?: number | null
-  activePlanId?: number | null
-  activePlanDayId?: number | null
   activeExecutionId?: number | null
   activeExecutionDayId?: number | null
   activeExecutionDayTitle?: string | null
@@ -98,8 +97,6 @@ type WorkoutDraft = {
   savedAt: string
   status?: 'ACTIVE' | 'EXPIRED' | 'SAVE_FAILED'
   activeTemplateId: number | null
-  activePlanId?: number | null
-  activePlanDayId?: number | null
   activeExecutionId?: number | null
   activeExecutionDayId?: number | null
   activeExecutionDayTitle?: string | null
@@ -109,9 +106,10 @@ type WorkoutDraft = {
   elapsedSeconds: number
   pausedAtMs?: number | null
   accumulatedPausedSeconds?: number
-  sessionState?: 'RUNNING' | 'SAVED_DRAFT'
+  sessionState?: 'RUNNING' | 'PAUSED' | 'SAVED_DRAFT' | 'RECOVERY_PENDING'
   suspendedAtMs?: number | null
   accumulatedSuspendedSeconds?: number
+  lastCheckpointAt?: string
   activeExercises: WorkoutExercise[]
   lastActiveExerciseId?: number | null
   lastActiveExerciseIndex?: number | null
@@ -226,6 +224,9 @@ function readWorkoutDraft() {
     if (draft.version === 2) {
       return migrateDraftV2(draft)
     }
+    if (draft.version === 3 || draft.version === 4) {
+      return migrateDraftV2(draft)
+    }
     if (draft.version !== WORKOUT_DRAFT_VERSION) {
       uni.removeStorageSync(WORKOUT_DRAFT_KEY)
       return null
@@ -312,8 +313,6 @@ function sameAppliedSnapshot(
 export const useWorkoutStore = defineStore('workout', () => {
   const initialDraft = readWorkoutDraft()
   const activeTemplateId = ref<number | null>(null)
-  const activePlanId = ref<number | null>(null)
-  const activePlanDayId = ref<number | null>(null)
   const activeExecutionId = ref<number | null>(null)
   const activeExecutionDayId = ref<number | null>(null)
   const activeExecutionDayTitle = ref<string | null>(null)
@@ -323,7 +322,9 @@ export const useWorkoutStore = defineStore('workout', () => {
   const elapsedSeconds = ref(0)
   const pausedAtMs = ref<number | null>(null)
   const accumulatedPausedSeconds = ref(0)
-  const sessionState = ref<'RUNNING' | 'SAVED_DRAFT'>(initialDraft?.sessionState || 'SAVED_DRAFT')
+  const sessionState = ref<'RUNNING' | 'PAUSED' | 'SAVED_DRAFT' | 'RECOVERY_PENDING'>(
+    initialDraft?.sessionState || 'SAVED_DRAFT'
+  )
   const suspendedAtMs = ref<number | null>(initialDraft?.suspendedAtMs ?? null)
   const accumulatedSuspendedSeconds = ref(initialDraft?.accumulatedSuspendedSeconds ?? 0)
   const activeExercises = ref<WorkoutExercise[]>(createEmptyWorkout())
@@ -336,8 +337,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   const appliedRecommendationSnapshots = ref<Record<number, AppliedRecommendationSnapshot>>({})
   const hasPendingStart = ref(false)
   const pendingStartTemplateId = ref<number | null>(null)
-  const pendingStartPlanId = ref<number | null>(null)
-  const pendingStartPlanDayId = ref<number | null>(null)
   const pendingStartExecutionId = ref<number | null>(null)
   const pendingStartExecutionDayId = ref<number | null>(null)
   const pendingStartExecutionDayTitle = ref<string | null>(null)
@@ -348,6 +347,7 @@ export const useWorkoutStore = defineStore('workout', () => {
   const draftStatus = ref<WorkoutDraft['status']>(initialDraft?.status || 'ACTIVE')
   const lastSubmitPayload = ref<SaveTrainingRequest | null>(initialDraft?.lastSubmitPayload || null)
   const workoutDirty = ref(false)
+  const coldLaunchRecoveryPending = ref(false)
 
   const totalSets = computed(() =>
     activeExercises.value.reduce(
@@ -380,6 +380,12 @@ export const useWorkoutStore = defineStore('workout', () => {
   const hasActiveWorkout = computed(() => Boolean(startedAt.value && activeExercises.value.length))
   const isPaused = computed(() => pausedAtMs.value !== null)
   const isSavedDraft = computed(() => sessionState.value === 'SAVED_DRAFT')
+  const isRecoveryPending = computed(() => sessionState.value === 'RECOVERY_PENDING')
+  const recoveryGapSeconds = computed(() =>
+    suspendedAtMs.value == null
+      ? 0
+      : Math.max(0, Math.floor((Date.now() - suspendedAtMs.value) / 1000))
+  )
   const hasMeaningfulDraft = computed(() =>
     Boolean(workoutDirty.value && startedAt.value && activeExercises.value.length)
   )
@@ -419,10 +425,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     state: draftSource.value?.sessionState || 'SAVED_DRAFT'
   }))
   const sourceType = computed<'PLAN' | 'TEMPLATE' | 'FREE'>(() => {
-    if (
-      (activePlanId.value && activePlanDayId.value) ||
-      (activeExecutionId.value && activeExecutionDayId.value)
-    ) {
+    if (activeExecutionId.value && activeExecutionDayId.value) {
       return 'PLAN'
     }
     if (activeTemplateId.value) return 'TEMPLATE'
@@ -431,8 +434,6 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   function startFreeWorkout() {
     activeTemplateId.value = null
-    activePlanId.value = null
-    activePlanDayId.value = null
     activeExecutionId.value = null
     activeExecutionDayId.value = null
     activeExecutionDayTitle.value = null
@@ -465,8 +466,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   async function startWorkout(
     templateId: number | null,
     context?: {
-      planId?: number | null
-      planDayId?: number | null
       executionId?: number | null
       executionDayId?: number | null
       executionDayTitle?: string | null
@@ -476,8 +475,6 @@ export const useWorkoutStore = defineStore('workout', () => {
     const templateStore = useTemplateStore()
     const profileStore = useProfileStore()
     activeTemplateId.value = templateId
-    activePlanId.value = context?.planId ?? null
-    activePlanDayId.value = context?.planDayId ?? null
     activeExecutionId.value = context?.executionId ?? null
     activeExecutionDayId.value = context?.executionDayId ?? null
     activeExecutionDayTitle.value = context?.executionDayTitle ?? null
@@ -554,8 +551,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   function queueStartWorkout(
     templateId: number | null,
     context?: {
-      planId?: number | null
-      planDayId?: number | null
       executionId?: number | null
       executionDayId?: number | null
       executionDayTitle?: string | null
@@ -564,8 +559,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   ) {
     hasPendingStart.value = true
     pendingStartTemplateId.value = templateId
-    pendingStartPlanId.value = context?.planId ?? null
-    pendingStartPlanDayId.value = context?.planDayId ?? null
     pendingStartExecutionId.value = context?.executionId ?? null
     pendingStartExecutionDayId.value = context?.executionDayId ?? null
     pendingStartExecutionDayTitle.value = context?.executionDayTitle ?? null
@@ -575,8 +568,6 @@ export const useWorkoutStore = defineStore('workout', () => {
   function clearPendingStart() {
     hasPendingStart.value = false
     pendingStartTemplateId.value = null
-    pendingStartPlanId.value = null
-    pendingStartPlanDayId.value = null
     pendingStartExecutionId.value = null
     pendingStartExecutionDayId.value = null
     pendingStartExecutionDayTitle.value = null
@@ -734,6 +725,7 @@ export const useWorkoutStore = defineStore('workout', () => {
     if (!startedAt.value) return
     const next = pauseWorkoutClock(clockState(), nowMs)
     pausedAtMs.value = next.pausedAtMs
+    sessionState.value = 'PAUSED'
     syncElapsed(nowMs)
     markWorkoutDirty()
     persistDraft()
@@ -744,6 +736,28 @@ export const useWorkoutStore = defineStore('workout', () => {
     const next = resumeWorkoutClock(clockState(), nowMs)
     pausedAtMs.value = next.pausedAtMs
     accumulatedPausedSeconds.value = next.accumulatedPausedSeconds
+    sessionState.value = 'RUNNING'
+    syncElapsed(nowMs)
+    markWorkoutDirty()
+    persistDraft()
+  }
+
+  function markColdLaunchRecovery() {
+    const draft = readWorkoutDraft()
+    coldLaunchRecoveryPending.value = Boolean(
+      draft && draft.status !== 'EXPIRED' && draft.sessionState === 'RUNNING'
+    )
+  }
+
+  function resolveColdLaunchRecovery(includeGap: boolean, nowMs = Date.now()) {
+    if (!isRecoveryPending.value) return
+    const next = includeGap
+      ? includeSuspendedWorkoutClock(clockState())
+      : restoreSuspendedWorkoutClock(clockState(), nowMs)
+    suspendedAtMs.value = next.suspendedAtMs ?? null
+    accumulatedSuspendedSeconds.value = next.accumulatedSuspendedSeconds || 0
+    sessionState.value = 'RUNNING'
+    coldLaunchRecoveryPending.value = false
     syncElapsed(nowMs)
     markWorkoutDirty()
     persistDraft()
@@ -1311,8 +1325,6 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   function finishWorkout() {
     activeTemplateId.value = null
-    activePlanId.value = null
-    activePlanDayId.value = null
     activeExecutionId.value = null
     activeExecutionDayId.value = null
     activeExecutionDayTitle.value = null
@@ -1359,13 +1371,12 @@ export const useWorkoutStore = defineStore('workout', () => {
       clearDraft()
       return
     }
+    const checkpointAt = new Date().toISOString()
     const draft: WorkoutDraft = {
       version: WORKOUT_DRAFT_VERSION,
-      savedAt: new Date().toISOString(),
+      savedAt: checkpointAt,
       status: draftStatus.value || 'ACTIVE',
       activeTemplateId: activeTemplateId.value,
-      activePlanId: activePlanId.value,
-      activePlanDayId: activePlanDayId.value,
       activeExecutionId: activeExecutionId.value,
       activeExecutionDayId: activeExecutionDayId.value,
       activeExecutionDayTitle: activeExecutionDayTitle.value,
@@ -1378,6 +1389,7 @@ export const useWorkoutStore = defineStore('workout', () => {
       sessionState: sessionState.value,
       suspendedAtMs: suspendedAtMs.value,
       accumulatedSuspendedSeconds: accumulatedSuspendedSeconds.value,
+      lastCheckpointAt: checkpointAt,
       activeExercises: activeExercises.value,
       lastActiveExerciseId: lastActiveExerciseId.value,
       lastActiveExerciseIndex: lastActiveExerciseIndex.value,
@@ -1418,8 +1430,6 @@ export const useWorkoutStore = defineStore('workout', () => {
       return false
     }
     activeTemplateId.value = draft.activeTemplateId
-    activePlanId.value = draft.activePlanId ?? null
-    activePlanDayId.value = draft.activePlanDayId ?? null
     activeExecutionId.value = draft.activeExecutionId ?? null
     activeExecutionDayId.value = draft.activeExecutionDayId ?? null
     activeExecutionDayTitle.value = draft.activeExecutionDayTitle ?? null
@@ -1429,10 +1439,13 @@ export const useWorkoutStore = defineStore('workout', () => {
     elapsedSeconds.value = draft.elapsedSeconds || 0
     pausedAtMs.value = draft.pausedAtMs ?? null
     accumulatedPausedSeconds.value = draft.accumulatedPausedSeconds ?? 0
-    sessionState.value = draft.sessionState || 'SAVED_DRAFT'
-    suspendedAtMs.value =
-      draft.suspendedAtMs ??
-      (sessionState.value === 'SAVED_DRAFT' ? new Date(draft.savedAt).getTime() : null)
+    const requiresRecovery =
+      coldLaunchRecoveryPending.value && (draft.sessionState || 'RUNNING') === 'RUNNING'
+    sessionState.value = requiresRecovery ? 'RECOVERY_PENDING' : draft.sessionState || 'SAVED_DRAFT'
+    suspendedAtMs.value = requiresRecovery
+      ? new Date(draft.lastCheckpointAt || draft.savedAt).getTime()
+      : (draft.suspendedAtMs ??
+        (sessionState.value === 'SAVED_DRAFT' ? new Date(draft.savedAt).getTime() : null))
     accumulatedSuspendedSeconds.value = draft.accumulatedSuspendedSeconds ?? 0
     workoutDirty.value = true
     lastActiveExerciseId.value = draft.lastActiveExerciseId ?? null
@@ -1466,8 +1479,6 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   function discardWorkout() {
     activeTemplateId.value = null
-    activePlanId.value = null
-    activePlanDayId.value = null
     activeExecutionId.value = null
     activeExecutionDayId.value = null
     activeExecutionDayTitle.value = null
@@ -1504,8 +1515,6 @@ export const useWorkoutStore = defineStore('workout', () => {
 
   return {
     activeTemplateId,
-    activePlanId,
-    activePlanDayId,
     activeExecutionId,
     activeExecutionDayId,
     activeExecutionDayTitle,
@@ -1520,6 +1529,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     accumulatedSuspendedSeconds,
     isPaused,
     isSavedDraft,
+    isRecoveryPending,
+    recoveryGapSeconds,
     activeExercises,
     completedSummary,
     lastPerformanceMap,
@@ -1529,8 +1540,6 @@ export const useWorkoutStore = defineStore('workout', () => {
     lastActiveSetIndex,
     hasPendingStart,
     pendingStartTemplateId,
-    pendingStartPlanId,
-    pendingStartPlanDayId,
     pendingStartExecutionId,
     pendingStartExecutionDayId,
     pendingStartExecutionDayTitle,
@@ -1569,6 +1578,8 @@ export const useWorkoutStore = defineStore('workout', () => {
     syncElapsed,
     pauseWorkout,
     resumeWorkout,
+    markColdLaunchRecovery,
+    resolveColdLaunchRecovery,
     minimizeWorkout,
     saveDraftAndStop,
     resumeSavedDraft,

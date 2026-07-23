@@ -1,5 +1,7 @@
 # FitForge Training Level XP V2 Implementation Plan
 
+> 执行状态：已于 2026-07-19 落地有效训练、计划/PR 奖励、每日累计上限和训练修改/删除回滚。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace duration/streak-based XP with server-authoritative rewards for effective training, completed plan days, and PRs, capped at 26 XP per day with deletion rollback.

@@ -217,6 +217,15 @@
       }
     },
     {
+      "path": "pages/profile/edit-field",
+      "style": {
+        "navigationStyle": "custom",
+        "backgroundColor": "#F3F6F9",
+        "backgroundColorTop": "#F3F6F9",
+        "backgroundColorBottom": "#F3F6F9"
+      }
+    },
+    {
       "path": "pages/profile/body-metrics",
       "style": {
         "navigationStyle": "custom",
@@ -299,24 +308,6 @@
     },
     {
       "path": "pages/profile/membership",
-      "style": {
-        "navigationStyle": "custom",
-        "backgroundColor": "#F3F6F9",
-        "backgroundColorTop": "#F3F6F9",
-        "backgroundColorBottom": "#F3F6F9"
-      }
-    },
-    {
-      "path": "pages/onboarding/index",
-      "style": {
-        "navigationStyle": "custom",
-        "backgroundColor": "#F3F6F9",
-        "backgroundColorTop": "#F3F6F9",
-        "backgroundColorBottom": "#F3F6F9"
-      }
-    },
-    {
-      "path": "pages/onboarding/recommended-plan",
       "style": {
         "navigationStyle": "custom",
         "backgroundColor": "#F3F6F9",

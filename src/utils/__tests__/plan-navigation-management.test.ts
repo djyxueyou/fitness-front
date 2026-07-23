@@ -46,7 +46,7 @@ describe('plan navigation and management contract', () => {
     expect(home).not.toContain("requestPlanTab(planStore.userPlans.length ? 'mine' : 'system')")
     expect(plan).toContain('浏览系统计划')
     expect(active).toContain('停用当前计划')
-    expect(active).toContain('savedDefinitionId')
+    expect(active).not.toContain('存为我的计划')
   })
 
   it('consumes a requested plan subtab once without changing direct tab entry', () => {
@@ -177,17 +177,14 @@ describe('plan navigation and management contract', () => {
     ).toBeGreaterThanOrEqual(5)
   })
 
-  it('derives saved state from the active execution and updates it in the store', () => {
+  it('keeps system executions separate from user-owned plans', () => {
     const store = readSource('src/stores/plan.ts')
     const active = readSource('src/pages/plan/active.vue')
+    const api = readSource('src/api/plan.ts')
 
-    expect(active).toContain(
-      'const savedDefinitionId = computed(() => execution.value?.savedDefinitionId ?? null)'
-    )
-    expect(active).not.toContain('const savedDefinitionId = ref')
-    expect(store).toMatch(
-      /if \(activeExecution\.value\?\.executionId === executionId\) \{[\s\S]*?savedDefinitionId: detail\.id/
-    )
+    expect(active).not.toContain('saveToMyPlans')
+    expect(store).not.toContain('saveActiveToMyPlans')
+    expect(api).not.toContain('save-as-my-plan')
   })
 
   it('confirms deactivation, prevents repeat submissions, and reports accurate errors', () => {
@@ -226,5 +223,16 @@ describe('plan navigation and management contract', () => {
     expect(customize).toContain('getSystemPlanDetail')
     expect(preview).toContain('previewSystem')
     expect(preview).toContain('activateSystem')
+    expect(preview).toContain('clientRequestId')
+    expect(preview).toContain('replaceCurrent')
+    expect(preview).toContain('uni.reLaunch({ url: routes.planActive })')
+    expect(preview).toContain('runSystemPlanActivation')
+    expect(preview).toContain('<AppActionSheet')
+    expect(preview).toContain('cancel-text="暂不替换"')
+    expect(preview).toContain("key: 'confirm-replacement'")
+    expect(preview).not.toContain('uni.showModal')
+    expect(readSource('src/pages/plan/active.vue')).toMatch(
+      /function goBack\(\) \{\s*uni\.switchTab\(\{ url: routes\.planIndex \}\)\s*\}/
+    )
   })
 })

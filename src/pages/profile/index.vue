@@ -13,6 +13,7 @@ import { useWorkoutDraftPromptStore } from '@/stores/workout-draft-prompt'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
 import { emitAuthChanged } from '@/utils/auth-events'
 import { routes } from '@/utils/navigation'
+import { TRAINING_BADGE_PREVIEWS } from '@/utils/training-level-presentation'
 import { formatCompactWeight } from '@/utils/unit'
 
 const profileStore = useProfileStore()
@@ -51,32 +52,23 @@ const levelThemeStyle = computed(() => ({
 }))
 const levelSummaryItems = computed(() => [
   { label: '当前 XP', value: levelProgressText.value },
-  { label: '连续训练', value: `${levelState.value?.currentStreakDays || 0} 天` },
+  { label: '距升级', value: `${levelNextExp.value} XP` },
   { label: '总 XP', value: `${levelState.value?.totalExp || 0}` }
 ])
 const levelRuleItems = [
-  { title: '有效训练', desc: '训练满 30 分钟才会增加 XP' },
-  { title: '每日结算', desc: '每天最多结算一次训练 XP' },
-  { title: '额外加成', desc: '满 60 分钟和连续训练有少量加成' }
+  { title: '有效训练', desc: '完成 3 个正式组，或训练满 15 分钟并完成 1 个正式组，获得 20 XP' },
+  { title: '计划训练', desc: '完成并验证计划日 +4 XP' },
+  { title: '个人纪录', desc: '本次训练产生新 PR +2 XP；每天最多 26 XP' }
 ]
 
-const badgePreviewItems = [
-  { badgeCode: 'BRONZE', badgeName: '青铜', range: 'Lv.1-5', accentColor: '#cd7f32' },
-  { badgeCode: 'SILVER', badgeName: '白银', range: 'Lv.6-10', accentColor: '#b8c0cc' },
-  { badgeCode: 'GOLD', badgeName: '黄金', range: 'Lv.11-20', accentColor: '#d6a63a' },
-  { badgeCode: 'PLATINUM', badgeName: '铂金', range: 'Lv.21-35', accentColor: '#94a3b8' },
-  { badgeCode: 'DIAMOND', badgeName: '钻石', range: 'Lv.36-55', accentColor: '#60a5fa' },
-  { badgeCode: 'STELLAR', badgeName: '星耀', range: 'Lv.56-80', accentColor: '#8b5cf6' },
-  { badgeCode: 'GLORY', badgeName: '荣耀', range: 'Lv.81+', accentColor: '#f59e0b' }
-]
 const currentBadgeIndex = computed(() => {
-  const index = badgePreviewItems.findIndex(
+  const index = TRAINING_BADGE_PREVIEWS.findIndex(
     (item) => item.badgeCode === levelState.value?.badgeCode
   )
   return index >= 0 ? index : 0
 })
 const profileStats = computed(() => [
-  { value: `${profileStore.currentStreakDays} 天`, label: '连续训练' },
+  { value: `Lv.${levelState.value?.level || 1}`, label: '训练等级' },
   { value: `${profileStore.totalSessions} 次`, label: '累计训练' },
   {
     value: `${formatCompactWeight(profileStore.totalVolumeKg, weightUnit.value)} ${weightUnit.value}`,
@@ -96,13 +88,13 @@ const healthItems = [
 const accountItems = [
   {
     label: '会员中心',
-    sub: '查看试用期、套餐和会员权益',
+    sub: '查看免费额度、套餐和会员权益',
     path: routes.membership,
     icon: '/static/profile/sparkles.svg'
   },
   {
     label: '设置',
-    sub: '单位、休息与应用偏好',
+    sub: '训练、单位与应用偏好',
     path: routes.settings,
     icon: '/static/profile/cog-6-tooth.svg'
   },
@@ -151,19 +143,21 @@ function openPage(path: string) {
 
 function openLevelDetail() {
   showLevelDetail.value = true
+  uni.hideTabBar({ animation: true })
 }
 
 function closeLevelDetail() {
   showLevelDetail.value = false
+  uni.showTabBar({ animation: true })
 }
 
 function goTrainFromLevel() {
-  showLevelDetail.value = false
+  closeLevelDetail()
   uni.switchTab({ url: routes.home })
 }
 
 function goAnalysisFromLevel() {
-  showLevelDetail.value = false
+  closeLevelDetail()
   uni.navigateTo({ url: routes.volumeTrend })
 }
 
@@ -216,11 +210,23 @@ function logout() {
             />
             <view class="profile__info">
               <view class="title-lg">{{ profileStore.nickname }}</view>
-              <view class="profile__identity-sub btn-press" @tap.stop="openLevelDetail">
-                {{ levelTitle }}
+              <view class="profile__level-pill btn-press" @tap.stop="openLevelDetail">
+                <view class="profile__level-pill-dot" />
+                <text>{{ levelTitle }}</text>
               </view>
             </view>
-            <view class="profile__chevron">›</view>
+            <view class="profile__action-label">编辑资料</view>
+            <image class="profile__chevron" src="/static/icons/chevron-down.svg" mode="aspectFit" />
+          </view>
+
+          <view class="profile__level-progress" aria-label="等级升级进度">
+            <view class="profile__level-progress-copy">
+              <text>距离升级还差 {{ levelNextExp }} XP</text>
+              <text>{{ levelProgressPercent }}%</text>
+            </view>
+            <view class="profile__level-track profile__level-track--entry">
+              <view class="profile__level-bar" :style="levelProgressStyle" />
+            </view>
           </view>
 
           <view class="profile__stats">
@@ -241,8 +247,9 @@ function logout() {
             <image class="profile__row-icon" :src="item.icon" mode="aspectFit" />
             <view class="profile__row-body">
               <view class="profile__row-title">{{ item.label }}</view>
+              <view class="profile__row-sub">{{ item.sub }}</view>
             </view>
-            <view class="profile__chevron">›</view>
+            <image class="profile__chevron" src="/static/icons/chevron-down.svg" mode="aspectFit" />
           </view>
         </view>
 
@@ -259,7 +266,13 @@ function logout() {
           <view class="profile__sheet-heading">训练等级详解</view>
           <view class="profile__sheet-sub">用长期有效训练记录体现成长。</view>
         </view>
-        <view class="profile__sheet-close btn-press" @tap="closeLevelDetail">×</view>
+        <view class="profile__sheet-close btn-press" @tap="closeLevelDetail">
+          <image
+            class="profile__sheet-close-icon"
+            src="/static/icons/x-mark.svg"
+            mode="aspectFit"
+          />
+        </view>
       </view>
 
       <scroll-view scroll-y class="profile__sheet-content" :show-scrollbar="false">
@@ -299,11 +312,14 @@ function logout() {
           </view>
         </view>
 
-        <view class="profile__sheet-section-title">等级路线</view>
+        <view class="profile__sheet-section-head">
+          <view class="profile__sheet-section-title">等级路线</view>
+          <view class="profile__sheet-section-hint">左右滑动查看</view>
+        </view>
         <scroll-view scroll-x class="profile__badge-list" :show-scrollbar="false">
           <view class="profile__badge-list-inner">
             <view
-              v-for="(item, index) in badgePreviewItems"
+              v-for="(item, index) in TRAINING_BADGE_PREVIEWS"
               :key="item.badgeCode"
               class="profile__badge-item"
               :class="{
@@ -313,15 +329,28 @@ function logout() {
             >
               <TrainingLevelBadge
                 size="sm"
-                :level="index + 1"
+                :show-level="false"
                 :badge-name="item.badgeName"
                 :badge-code="item.badgeCode"
                 theme-color="#ff7a1a"
                 :accent-color="item.accentColor"
                 :upgraded="item.badgeCode === levelState?.badgeCode"
               />
-              <view class="profile__badge-name">{{ item.badgeName }}</view>
               <view class="profile__badge-range">{{ item.range }}</view>
+              <view
+                class="profile__badge-status"
+                :class="{
+                  'profile__badge-status--current': item.badgeCode === levelState?.badgeCode
+                }"
+              >
+                {{
+                  item.badgeCode === levelState?.badgeCode
+                    ? '当前'
+                    : index > currentBadgeIndex
+                      ? '未解锁'
+                      : '已解锁'
+                }}
+              </view>
             </view>
           </view>
         </scroll-view>
@@ -337,7 +366,7 @@ function logout() {
 
       <view class="profile__level-actions">
         <view class="gradient-fire profile__level-action btn-press" @tap="goTrainFromLevel"
-          >去训练</view
+          >去完成有效训练</view
         >
         <view class="glass-card profile__level-action btn-press" @tap="goAnalysisFromLevel"
           >查看训练分析</view
@@ -580,16 +609,14 @@ function logout() {
   }
 
   &__logout {
-    height: 84rpx;
-    margin: 30rpx 0 20rpx;
-    border-radius: 28rpx;
-    background: rgba(255, 80, 80, 0.1);
+    min-height: 72rpx;
+    margin: 26rpx 0 14rpx;
     color: var(--app-danger);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 26rpx;
-    font-weight: 900;
+    font-size: 24rpx;
+    font-weight: 700;
   }
 
   &__page-title {
@@ -632,18 +659,59 @@ function logout() {
     background: var(--app-bg);
   }
 
-  &__identity-sub {
-    margin-top: 6rpx;
-    color: var(--app-text-muted);
+  &__action-label {
+    flex-shrink: 0;
+    color: var(--app-text-secondary);
     font-size: 22rpx;
+    font-weight: 800;
   }
 
   &__chevron {
-    margin-left: auto;
+    width: 28rpx;
+    height: 28rpx;
     flex-shrink: 0;
+    transform: rotate(-90deg);
+    opacity: 0.72;
+  }
+
+  &__level-pill {
+    width: fit-content;
+    min-height: 44rpx;
+    margin-top: 10rpx;
+    padding: 0 16rpx 0 12rpx;
+    border: 1rpx solid rgba(205, 127, 50, 0.34);
+    border-radius: 999rpx;
+    display: flex;
+    align-items: center;
+    gap: 9rpx;
+    color: #9a541d;
+    background: rgba(205, 127, 50, 0.12);
+    font-size: 21rpx;
+    font-weight: 900;
+  }
+
+  &__level-pill-dot {
+    width: 12rpx;
+    height: 12rpx;
+    border-radius: 999rpx;
+    background: var(--level-accent);
+  }
+
+  &__level-progress {
+    padding: 0 26rpx 22rpx;
+  }
+
+  &__level-progress-copy {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     color: var(--app-text-muted);
-    font-size: 40rpx;
-    font-weight: 500;
+    font-size: 20rpx;
+  }
+
+  &__level-track--entry {
+    height: 10rpx;
+    margin-top: 12rpx;
   }
 
   &__level-card {
@@ -708,7 +776,7 @@ function logout() {
 
   &__row {
     position: relative;
-    min-height: 96rpx;
+    min-height: 108rpx;
     padding: 18rpx 26rpx;
     display: flex;
     align-items: center;
@@ -761,7 +829,7 @@ function logout() {
 
   &__level-sheet {
     width: 100%;
-    height: 82vh;
+    height: 90vh;
     padding: 14rpx 32rpx 0;
     border-radius: 40rpx 40rpx 0 0;
     background: #f3f6fb;
@@ -812,10 +880,13 @@ function logout() {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--app-text-muted);
-    font-size: 34rpx;
-    font-weight: 900;
     flex-shrink: 0;
+  }
+
+  &__sheet-close-icon {
+    width: 32rpx;
+    height: 32rpx;
+    opacity: 0.58;
   }
 
   &__sheet-content {
@@ -825,11 +896,27 @@ function logout() {
     background: #f3f6fb;
   }
 
-  &__sheet-section-title {
+  &__sheet-section-head {
     margin: 28rpx 0 14rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+  }
+
+  &__sheet-section-title {
     color: var(--app-text);
     font-size: 26rpx;
     font-weight: 950;
+  }
+
+  &__sheet-content > &__sheet-section-title {
+    margin: 28rpx 0 14rpx;
+  }
+
+  &__sheet-section-hint {
+    color: var(--app-text-muted);
+    font-size: 19rpx;
   }
 
   &__level-detail-card {
@@ -906,11 +993,11 @@ function logout() {
   &__badge-list-inner {
     display: inline-flex;
     gap: 16rpx;
-    padding-bottom: 6rpx;
+    padding: 0 24rpx 8rpx 0;
   }
 
   &__badge-item {
-    width: 138rpx;
+    width: 144rpx;
     padding: 18rpx 14rpx;
     border-radius: 26rpx;
     background: #ffffff;
@@ -930,15 +1017,20 @@ function logout() {
     opacity: 0.45;
   }
 
-  &__badge-name {
-    color: var(--app-text);
-    font-size: 22rpx;
-    font-weight: 900;
+  &__badge-range {
+    color: var(--app-text-secondary);
+    font-size: 19rpx;
+    font-weight: 800;
   }
 
-  &__badge-range {
+  &__badge-status {
     color: var(--app-text-muted);
-    font-size: 18rpx;
+    font-size: 17rpx;
+  }
+
+  &__badge-status--current {
+    color: var(--app-accent);
+    font-weight: 900;
   }
 
   &__level-rules {

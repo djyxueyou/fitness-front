@@ -11,6 +11,7 @@ const TOKEN_KEY = 'LIFTLOG_TOKEN'
 const USER_PROFILE_KEY = 'LIFTLOG_USER_PROFILE'
 const API_DEBUG = String(import.meta.env.VITE_API_DEBUG || 'false').toLowerCase() === 'true'
 const UNAUTHORIZED_CODE = 40100
+const PLAN_REPLACE_CONFIRM_REQUIRED_CODE = 40910
 
 export const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || 'http://127.0.0.1:8080'
@@ -20,6 +21,24 @@ export class AuthExpiredError extends Error {
     super(message)
     this.name = 'AuthExpiredError'
   }
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly code: number,
+    public readonly statusCode: number
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+export function hasApiErrorCode(error: unknown, expectedCode: number) {
+  if (!error || typeof error !== 'object') return false
+  const code = (error as { code?: unknown }).code
+  return (typeof code === 'number' || typeof code === 'string') && Number(code) === expectedCode
 }
 
 interface RequestOptions {
@@ -42,7 +61,7 @@ function stringifyPayload(payload: unknown, maxLength = 500) {
 }
 
 function isUnauthorized(statusCode: number, body: ApiResponse<unknown> | null, rawText: string) {
-  if (statusCode === 401 || statusCode === 403) return true
+  if (statusCode === 401) return true
   if (body?.code === UNAUTHORIZED_CODE) return true
   const message = (body?.message || rawText || '').toLowerCase()
   return (
@@ -138,7 +157,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
         response: stringifyPayload(body || rawText)
       })
     }
-    throw new Error(message)
+    throw new ApiError(message, body?.code ?? response.statusCode, response.statusCode)
   }
 
   if (!body || typeof body.code !== 'number') {
@@ -159,15 +178,24 @@ export async function request<T>(options: RequestOptions): Promise<T> {
     }
 
     if (API_DEBUG) {
-      console.error('[api][error]', requestKey, {
+      const details = {
         elapsedMs: Date.now() - startAt,
         statusCode: response.statusCode,
         code: body.code,
         message: body.message,
         response: stringifyPayload(body.data)
-      })
+      }
+      if (body.code === PLAN_REPLACE_CONFIRM_REQUIRED_CODE) {
+        console.log('[api][confirmation-required]', requestKey, details)
+      } else {
+        console.error('[api][error]', requestKey, details)
+      }
     }
-    throw new Error(body.message || `Request failed with code ${body.code}`)
+    throw new ApiError(
+      body.message || `Request failed with code ${body.code}`,
+      body.code,
+      response.statusCode
+    )
   }
 
   if (API_DEBUG) {

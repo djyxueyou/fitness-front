@@ -12,7 +12,7 @@ import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import { fetchTemplateSharePreview, type SharePreviewResponse } from '@/api/share'
 import type { TemplateDetailResponse } from '@/api/template'
 import { ensureFeatureAuth } from '@/utils/auth-guard'
-import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { ensureMembershipFeature, handleMembershipRequiredError } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import { useTemplateStore } from '@/stores/template'
 import { useWorkoutStore } from '@/stores/workout'
@@ -158,6 +158,7 @@ async function renameTemplate() {
     await loadDetail(true)
     uni.showToast({ title: '已重命名', icon: 'none' })
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义模板', 'custom_template')) return
     uni.showToast({ title: '重命名失败', icon: 'none' })
     console.error('[template] rename failed', err)
   } finally {
@@ -294,6 +295,7 @@ async function copyTemplate() {
     await templateStore.duplicate(templateId.value)
     uni.showToast({ title: '已复制到我的模板', icon: 'none' })
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义模板', 'custom_template')) return
     uni.showToast({ title: '复制失败', icon: 'none' })
     console.error('[template] copy failed', err)
   } finally {

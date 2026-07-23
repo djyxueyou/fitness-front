@@ -25,7 +25,6 @@ interface DashboardSummary {
   totalSessions: number
   totalVolumeKg: number
   totalDurationSeconds: number
-  currentStreakDays?: number | null
 }
 
 interface DashboardDelta {
@@ -82,24 +81,26 @@ async function loadAnalysis() {
   loadError.value = ''
   membershipChecked.value = false
   try {
-    const [dashboardResult, planResult, bodyResult, membershipStatus] = await Promise.all([
+    const membershipStatus = await membershipStore.refreshStatus()
+    membershipChecked.value = true
+    if (!membershipStatus.active) {
+      dashboard.value = null
+      activePlan.value = null
+      bodySummary.value = null
+      advancedSummary.value = null
+      weeklyVolumeData.value = []
+      muscleDistribution.value = []
+      return
+    }
+    const [dashboardResult, planResult, bodyResult] = await Promise.all([
       fetchAnalyticsDashboard('week'),
       fetchActiveTrainingPlanSummary(),
-      fetchBodyMetricSummary(),
-      membershipStore.refreshStatus()
+      fetchBodyMetricSummary()
     ])
     dashboard.value = dashboardResult
     activePlan.value = planResult
     bodySummary.value = bodyResult
-    membershipChecked.value = true
-
-    if (membershipStatus.active) {
-      await loadProAnalysis()
-    } else {
-      advancedSummary.value = null
-      weeklyVolumeData.value = []
-      muscleDistribution.value = []
-    }
+    await loadProAnalysis()
   } catch (err) {
     loadError.value = '训练分析加载失败，请稍后重试。'
     dashboard.value = null
@@ -159,8 +160,8 @@ function openBodyMetrics() {
 }
 
 function openPlan() {
-  if (activePlan.value?.planId) {
-    uni.navigateTo({ url: `${routes.planDetail}?id=${activePlan.value.planId}` })
+  if (activePlan.value?.executionId) {
+    uni.navigateTo({ url: routes.planActive })
     return
   }
   uni.switchTab({ url: routes.planIndex })
@@ -216,11 +217,14 @@ function muscleSignal(pct: number) {
       <AppHeader title="训练分析" subtitle="复盘训练、计划和身体变化" show-back @back="goBack" />
 
       <view v-if="loadError" class="glass-card analysis__empty">{{ loadError }}</view>
-      <view v-else-if="!loading && !hasAnalysisData" class="glass-card analysis__empty">
+      <view
+        v-else-if="membershipStore.active && !loading && !hasAnalysisData"
+        class="glass-card analysis__empty"
+      >
         完成 2 周训练后可看到周趋势；记录身体指标后可看到身体变化。
       </view>
 
-      <view class="glass-card analysis__hero">
+      <view v-if="membershipStore.active" class="glass-card analysis__hero">
         <view class="analysis__hero-label">本周复盘</view>
         <view class="analysis__hero-title">{{ dashboardInsight }}</view>
         <view class="analysis__stat-grid">
@@ -298,7 +302,7 @@ function muscleSignal(pct: number) {
         </view>
       </GlassCard>
 
-      <GlassCard>
+      <GlassCard v-if="membershipStore.active">
         <view class="analysis__section">
           <view class="space-between">
             <view>
@@ -381,7 +385,7 @@ function muscleSignal(pct: number) {
         </view>
       </GlassCard>
 
-      <GlassCard>
+      <GlassCard v-if="membershipStore.active">
         <view class="analysis__section">
           <view class="space-between">
             <view>

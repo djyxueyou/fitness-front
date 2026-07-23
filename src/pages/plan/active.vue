@@ -5,7 +5,6 @@ import AppHeader from '@/components/app-header/index.vue'
 import AppActionSheet from '@/components/app-action-sheet/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 import ExerciseThumbnail from '@/components/exercise-thumbnail/index.vue'
-import MembershipRequiredModal from '@/components/membership-required-modal/index.vue'
 import WorkoutDraftPrompt from '@/components/workout-draft-prompt/index.vue'
 import {
   skipActiveTrainingPlanDay,
@@ -70,7 +69,6 @@ const themeStore = useThemeStore()
 const workoutStore = useWorkoutStore()
 const skipConfirmVisible = ref(false)
 const skipSubmitting = ref(false)
-const savingToMyPlans = ref(false)
 const manageVisible = ref(false)
 const deactivateConfirmVisible = ref(false)
 const deactivating = ref(false)
@@ -86,15 +84,7 @@ const previewItems = ref<PreviewItem[]>([])
 
 const summary = computed(() => planStore.currentPlanSummary)
 const execution = computed(() => planStore.activeExecution)
-const savedDefinitionId = computed(() => execution.value?.savedDefinitionId ?? null)
-const canSaveSystemPlan = computed(
-  () =>
-    summary.value?.sourceType === 'SYSTEM_PLAN_EXECUTION' && Boolean(execution.value?.executionId)
-)
 const manageItems = computed(() => [
-  ...(canSaveSystemPlan.value && !savedDefinitionId.value
-    ? [{ key: 'save', label: '存为我的计划', description: '生成可独立编辑的副本' }]
-    : []),
   {
     key: 'deactivate',
     label: '停用当前计划',
@@ -507,27 +497,7 @@ function goPlans() {
 }
 
 function goBack() {
-  if (getCurrentPages().length > 1) {
-    uni.navigateBack()
-    return
-  }
   uni.switchTab({ url: routes.planIndex })
-}
-
-async function saveToMyPlans() {
-  const executionId = execution.value?.executionId
-  if (!executionId || !canSaveSystemPlan.value || savingToMyPlans.value || savedDefinitionId.value)
-    return
-  savingToMyPlans.value = true
-  try {
-    await planStore.saveActiveToMyPlans(executionId)
-    uni.showToast({ title: '已保存独立副本', icon: 'none' })
-  } catch (err) {
-    showPlanWriteError(err, '保存到我的计划失败，请重试')
-    console.error('[plan] save execution as my plan failed', err)
-  } finally {
-    savingToMyPlans.value = false
-  }
 }
 
 function openManagePlan() {
@@ -537,10 +507,6 @@ function openManagePlan() {
 
 async function handleManageAction(item: ActionSheetItem) {
   manageVisible.value = false
-  if (item.key === 'save') {
-    await saveToMyPlans()
-    return
-  }
   if (item.key === 'deactivate') {
     deactivateConfirmVisible.value = true
   }
@@ -771,7 +737,7 @@ async function confirmDeactivate() {
   <AppActionSheet
     :visible="manageVisible"
     title="管理计划"
-    subtitle="保存副本或结束当前训练安排"
+    subtitle="结束当前训练安排"
     :items="manageItems"
     @close="manageVisible = false"
     @select="handleManageAction"
@@ -785,7 +751,7 @@ async function confirmDeactivate() {
       {
         key: 'confirm',
         label: deactivating ? '正在停用...' : '确认停用',
-        description: '我的计划副本不会被删除',
+        description: '已完成的训练记录和历史进度会保留',
         danger: true
       }
     ]"
@@ -809,7 +775,6 @@ async function confirmDeactivate() {
     @select="confirmSkipSelectedDay"
   />
   <WorkoutDraftPrompt />
-  <MembershipRequiredModal />
 </template>
 
 <style lang="scss" scoped>

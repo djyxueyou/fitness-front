@@ -1,6 +1,7 @@
 export interface Exercise {
   id: number
   name: string
+  categoryCode?: string
   category: string
   muscle: string
   primaryMuscleCode?: string
@@ -15,6 +16,7 @@ export interface Exercise {
   difficultyName?: string
   recordType?: string
   exerciseType?: string
+  recordTypeLocked?: boolean
   thumbnailUrl?: string
   isVariant?: number
   variantOfExerciseId?: number

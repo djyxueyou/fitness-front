@@ -139,14 +139,6 @@ function openRecord(id?: number) {
   if (id) uni.navigateTo({ url: `${routes.historyDetail}?id=${id}` })
 }
 
-function openPlan(id: number) {
-  uni.navigateTo({ url: `${routes.planDetail}?id=${id}` })
-}
-
-function openTemplate(id?: number) {
-  if (id) uni.navigateTo({ url: `${routes.templateDetail}?id=${id}` })
-}
-
 function goBack() {
   uni.navigateBack()
 }
@@ -160,16 +152,8 @@ function openPlanDay(item: CalendarDateDetailResponse['planDays'][number]) {
     openRecord(item.completedTrainingId)
     return
   }
-  if (item.sourceType === 'RECOMMENDED_EXECUTION' && item.executionDayId) {
+  if (item.executionDayId) {
     uni.navigateTo({ url: `${routes.planExecutionDay}?dayId=${item.executionDayId}` })
-    return
-  }
-  if (item.templateId) {
-    openTemplate(item.templateId)
-    return
-  }
-  if (item.planId) {
-    openPlan(item.planId)
   }
 }
 
@@ -337,7 +321,7 @@ function toDateString(date: Date) {
         <template v-else>
           <view
             v-for="item in dateDetail?.planDays || []"
-            :key="`p-${item.sourceType || 'MY_PLAN'}-${item.userTrainingPlanId || item.executionId}-${item.planDayId || item.executionDayId}`"
+            :key="`p-${item.sourceType || 'PLAN_EXECUTION'}-${item.executionId}-${item.executionDayId}`"
             class="detail-card btn-press"
             @tap="openPlanDay(item)"
           >

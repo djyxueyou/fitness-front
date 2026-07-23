@@ -10,13 +10,15 @@ import {
   fetchExerciseFilterMetadata,
   fetchExerciseList,
   fetchFavoriteExercises,
+  type CreateCustomExerciseRequest,
   type ExerciseCategory,
   type ExerciseSummary
 } from '@/api/exercise'
 import { getToken } from '@/api/http'
 import { useExerciseStore } from '@/stores/exercise'
 import { useThemeStore } from '@/stores/theme'
-import { ensureMembershipFeature } from '@/utils/membership-guard'
+import { ensureFeatureAuth } from '@/utils/auth-guard'
+import { ensureMembershipFeature, handleMembershipRequiredError } from '@/utils/membership-guard'
 import { routes } from '@/utils/navigation'
 import {
   activeFilterChips,
@@ -25,6 +27,10 @@ import {
 } from '@/utils/exercise-filters'
 import { pickerCopy, type ExercisePickerContext } from '@/utils/exercise-picker-context'
 import { setPendingExerciseSelection } from '@/utils/exercise-selection-session'
+import {
+  mergeCustomExerciseSelection,
+  upsertCustomExercise
+} from '@/utils/custom-exercise-feedback'
 
 type ExerciseRecordType = 'WEIGHT_REPS' | 'BODYWEIGHT_REPS' | 'DURATION'
 
@@ -69,6 +75,7 @@ const customSaving = ref(false)
 const customDialogVisible = ref(false)
 const customDialogName = ref('')
 const customDialogRecordType = ref<ExerciseRecordType>('BODYWEIGHT_REPS')
+const recentlyCreatedExercise = ref<ExerciseSummary | null>(null)
 const pendingExercises = ref<ExerciseSummary[]>([])
 const filterSheetVisible = ref(false)
 const filterMetadata = ref<ExerciseFilterMetadata>({
@@ -97,6 +104,13 @@ const filterState = computed(() => ({
 }))
 const filterChips = computed(() => activeFilterChips(filterState.value, filterMetadata.value))
 const advancedFilterCount = computed(() => countAdvancedFilters(filterState.value))
+const displayExerciseItems = computed(() => {
+  const created = recentlyCreatedExercise.value
+  if (!created || exerciseItems.value.some((item) => item.id === created.id)) {
+    return exerciseItems.value
+  }
+  return [created, ...exerciseItems.value]
+})
 
 function readRecentExercises() {
   try {
@@ -120,6 +134,7 @@ watch(
   async (visible) => {
     if (!visible) return
     pendingExercises.value = []
+    recentlyCreatedExercise.value = null
     if (categoryOptions.value.length <= 1) {
       await Promise.all([loadCategories(), loadFilterMetadata()])
     }
@@ -177,26 +192,26 @@ async function loadCategories() {
   }
 }
 
-async function loadExercises(reset = false) {
-  if (exerciseLoading.value) return
+async function loadExercises(reset = false): Promise<boolean> {
+  if (exerciseLoading.value) return false
   if (quickFilter.value === 'recent') {
     const recentItems = filterLocalExercises(readRecentExercises())
     exerciseItems.value = recentItems
     exercisePageNo.value = 1
     exerciseTotal.value = recentItems.length
-    return
+    return true
   }
   if (quickFilter.value === 'favorite') {
     if (!(await ensureMembershipFeature('收藏动作'))) {
       exerciseItems.value = []
       exerciseTotal.value = 0
-      return
+      return false
     }
     await loadFavoriteExercises()
-    return
+    return true
   }
   if (!reset && exerciseItems.value.length >= exerciseTotal.value && exerciseTotal.value > 0) {
-    return
+    return true
   }
 
   exerciseLoading.value = true
@@ -214,9 +229,11 @@ async function loadExercises(reset = false) {
     exercisePageNo.value = page.pageNo
     exerciseTotal.value = page.total
     exerciseItems.value = reset ? page.list : [...exerciseItems.value, ...page.list]
+    return true
   } catch (err) {
     uni.showToast({ title: '动作加载失败', icon: 'none' })
     console.error('[exercise-picker] exercises fetch failed', err)
+    return false
   } finally {
     exerciseLoading.value = false
   }
@@ -317,7 +334,7 @@ function confirmSelection() {
 }
 
 async function createCustomFromKeyword() {
-  if (!(await ensureMembershipFeature('自定义动作'))) return
+  if (!(await ensureFeatureAuth('自定义动作'))) return
   customDialogName.value = trimmedKeyword.value
   customDialogRecordType.value = 'BODYWEIGHT_REPS'
   customDialogVisible.value = true
@@ -327,7 +344,7 @@ function closeCustomDialog() {
   customDialogVisible.value = false
 }
 
-async function submitCustomExercise(payload: { name: string; recordType: ExerciseRecordType }) {
+async function submitCustomExercise(payload: CreateCustomExerciseRequest) {
   if (customSaving.value) return
   if (customExists.value && payload.name === trimmedKeyword.value) {
     uni.showToast({ title: '已存在同名动作', icon: 'none' })
@@ -338,26 +355,27 @@ async function submitCustomExercise(payload: { name: string; recordType: Exercis
   try {
     const created = await createCustomExercise(payload)
     exerciseStore.clearListCache()
-    const exercise: ExerciseSummary = {
-      id: created.id,
-      name: payload.name,
-      categoryCode: 'custom',
-      categoryName: '自定义',
-      primaryMuscle: '',
-      equipment: '',
-      difficultyLevel: 'BEGINNER',
-      difficultyCode: 'BEGINNER',
-      difficultyName: '初级',
-      recordType: payload.recordType,
-      exerciseType: 'USER'
-    }
+    const exercise: ExerciseSummary = created
+    recentlyCreatedExercise.value = exercise
+    exerciseItems.value = upsertCustomExercise(exerciseItems.value, exercise, true)
+    pendingExercises.value = mergeCustomExerciseSelection(pendingExercises.value, exercise)
     closeCustomDialog()
-    selectExercise(exercise)
+    if (props.mode === 'SINGLE_REPLACE') {
+      selectExercise(exercise)
+    } else {
+      writeRecentExercise(exercise)
+    }
     uni.showToast({
       title: props.mode === 'SINGLE_REPLACE' ? '已创建' : '已创建并选中',
       icon: 'none'
     })
+    const refreshed = await loadExercises(true)
+    if (!refreshed) {
+      exerciseItems.value = upsertCustomExercise(exerciseItems.value, exercise, true)
+      uni.showToast({ title: '已创建，列表刷新失败', icon: 'none' })
+    }
   } catch (err) {
+    if (handleMembershipRequiredError(err, '自定义动作')) return
     uni.showToast({ title: '新建动作失败', icon: 'none' })
     console.error('[exercise-picker] create custom exercise failed', err)
   } finally {
@@ -443,8 +461,14 @@ function openExerciseDetail(exerciseId: number) {
       </scroll-view>
 
       <view class="exercise-picker__advanced">
-        <view class="exercise-picker__advanced-item btn-press" @tap="filterSheetVisible = true">
-          筛选{{ advancedFilterCount ? `（${advancedFilterCount}）` : '' }}
+        <view class="exercise-picker__advanced-entry btn-press" @tap="filterSheetVisible = true">
+          <view>
+            <view class="exercise-picker__advanced-title">
+              更多筛选{{ advancedFilterCount ? `（${advancedFilterCount}）` : '' }}
+            </view>
+            <view class="exercise-picker__advanced-sub">器械、难度、记录方式</view>
+          </view>
+          <view class="exercise-picker__advanced-arrow">›</view>
         </view>
         <view
           v-for="chip in filterChips"
@@ -472,7 +496,7 @@ function openExerciseDetail(exerciseId: number) {
         </view>
 
         <view
-          v-for="exercise in exerciseItems"
+          v-for="exercise in displayExerciseItems"
           :key="exercise.id"
           class="glass-card exercise-picker__item"
           @tap="selectExercise(exercise)"
@@ -531,8 +555,11 @@ function openExerciseDetail(exerciseId: number) {
 
     <CustomExerciseDialog
       :visible="customDialogVisible"
+      mode="create"
       title="新建自定义动作"
       confirm-text="创建并添加"
+      :category-options="categoryOptions"
+      :equipment-options="filterMetadata.equipment"
       :initial-name="customDialogName"
       :initial-record-type="customDialogRecordType"
       @close="closeCustomDialog"
@@ -542,7 +569,6 @@ function openExerciseDetail(exerciseId: number) {
       :visible="filterSheetVisible"
       :model-value="filterState"
       :metadata="filterMetadata"
-      :result-count="exerciseTotal"
       @close="filterSheetVisible = false"
       @apply="applyAdvancedFilters"
     />
@@ -650,8 +676,38 @@ function openExerciseDetail(exerciseId: number) {
 
   &__advanced {
     display: flex;
+    flex-wrap: wrap;
     gap: 12rpx;
     margin: -6rpx 0 12rpx;
+  }
+
+  &__advanced-entry {
+    width: 100%;
+    min-height: 88rpx;
+    padding: 14rpx 20rpx;
+    border: 1rpx solid var(--app-border);
+    border-radius: 22rpx;
+    background: var(--app-surface-soft);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__advanced-title {
+    color: var(--app-text);
+    font-size: 24rpx;
+    font-weight: 800;
+  }
+
+  &__advanced-sub {
+    margin-top: 4rpx;
+    color: var(--app-text-muted);
+    font-size: 20rpx;
+  }
+
+  &__advanced-arrow {
+    color: var(--app-accent);
+    font-size: 42rpx;
   }
 
   &__advanced-item {
